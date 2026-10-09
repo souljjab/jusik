@@ -1,4 +1,5 @@
 import type { DayTradeCandidate, Plan } from "./daytrade";
+import type { Evaluation } from "./dayEval";
 import type { PaperAccount } from "./paper";
 import type { Regime } from "./regime";
 import type { Market } from "./types";
@@ -78,4 +79,17 @@ export interface ServerState {
   latestScan: ScanResult | null;
   paper: { KRW: PaperAccount; USD: PaperAccount };
   counts: { journal: number; history: number };
+}
+
+/** 과거 일봉 재현 결과(규칙 점검) */
+export interface ReplayRun {
+  at: string;
+  markets: Market[];
+  /** 재현한 종목 수 */
+  codesTested: number;
+  tradeCount: number;
+  /** 일봉 몇 개(약 몇 거래일)로 재현했는지 */
+  candleCount: number;
+  evaluation: Evaluation;
+  errors: string[];
 }

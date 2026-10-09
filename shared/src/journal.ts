@@ -14,6 +14,18 @@ export interface JournalEntry {
   review?: string;
   /** 기록 출처. 자동(모의)은 앱이 모의매매하며 남긴 기록 */
   source?: "수동" | "자동(모의)";
+  /** 자동 매수 시점의 신호 특성(규칙 점검용) */
+  meta?: TradeFeatures;
+}
+
+/** 진입 시점의 신호 특성. 어떤 조건의 신호가 실제로 잘 맞았는지 나눠 보는 데 쓴다 */
+export interface TradeFeatures {
+  score: number;
+  volumeRatio: number;
+  changePct: number;
+  stopPct: number;
+  market: string;
+  regime: string | null;
 }
 
 export interface ClosedTrade {

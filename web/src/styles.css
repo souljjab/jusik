@@ -132,3 +132,10 @@ footer { margin-top: 16px; font-size: 12px; color: var(--muted); text-align: cen
 details > summary { cursor: pointer; }
 .table-wrap.tall { max-height: 520px; }
 .form.compact label span { margin-top: 2px; }
+
+/* --- 규칙 점검 --- */
+.suggest { margin: 10px 0; padding: 10px 12px; border-radius: 8px; background: var(--bg); }
+.suggest.on { background: var(--warn-bg); }
+.small-btn { padding: 4px 10px; font-size: 12px; }
+.eval-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 0 16px; }
+.trades tr.hl td { background: var(--warn-bg); }

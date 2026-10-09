@@ -1,4 +1,4 @@
-import { analyze, type Analysis, type Candle, type Fundamentals, type JournalEntry, type Market, type Quote, type ServerState, type Settings, type StockInfo } from "@jusik/shared";
+import { analyze, type Analysis, type Candle, type Evaluation, type Fundamentals, type JournalEntry, type Market, type Quote, type ReplayRun, type ServerState, type Settings, type StockInfo } from "@jusik/shared";
 
 /** 배포(APK 등)에서는 VITE_API_BASE 로 서버 주소를 지정한다. 개발 중에는 vite 프록시를 쓴다. */
 const BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
@@ -77,3 +77,8 @@ export const excelUrl = `${BASE}/api/export/excel`;
 export const getJournal = () => getJson<{ entries: JournalEntry[] }>("/api/journal").then((r) => r.entries);
 export const addJournal = (e: Pick<JournalEntry, "code" | "side" | "price" | "qty" | "date"> & Partial<JournalEntry>) => getJson<{ entry: JournalEntry }>("/api/journal", send("POST", e));
 export const deleteJournal = (id: string) => getJson<unknown>(`/api/journal/${id}`, send("DELETE"));
+
+// ---- 규칙 점검 ----
+export const getPaperEval = () => getJson<{ evaluation: Evaluation; tradeCount: number }>("/api/evaluate/paper");
+export const getReplay = () => getJson<{ run: ReplayRun | null; running: boolean }>("/api/evaluate/replay");
+export const runReplay = (body: { markets: Market[]; count: number }) => getJson<{ run: ReplayRun }>("/api/evaluate/replay", send("POST", body));

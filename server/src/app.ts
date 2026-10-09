@@ -5,6 +5,7 @@ import { isValidCode, type JournalEntry, type Market } from "@jusik/shared";
 import { TtlCache } from "./cache";
 import type { Exporter } from "./exporter";
 import type { MarketDataProvider } from "./provider";
+import { evaluatePaper, runReplay } from "./evaluate";
 import { syncPaperWithDeposit } from "./scanner";
 import type { Scheduler } from "./scheduler";
 import { sanitizeSettings, type Store } from "./state";
@@ -87,6 +88,23 @@ export function buildApp({ provider, store, exporter, scheduler }: AppDeps) {
     store.save();
     exporter.request();
     return { paper: store.state.paper };
+  });
+
+  // ---- 규칙 점검 ----
+  let replaying = false;
+  app.get("/api/evaluate/paper", async () => evaluatePaper({ store }));
+  app.get("/api/evaluate/replay", async () => ({ run: store.state.lastReplay, running: replaying }));
+  app.post<{ Body: { markets?: Market[]; count?: number } }>("/api/evaluate/replay", async (req, reply) => {
+    if (replaying) return reply.code(409).send({ error: "이미 재현 중이에요." });
+    const markets = (req.body?.markets ?? []).filter((m) => MARKETS.includes(m));
+    replaying = true;
+    try {
+      const run = await runReplay({ provider, store }, { markets, count: Number(req.body?.count) || undefined });
+      exporter.request();
+      return { run };
+    } finally {
+      replaying = false;
+    }
   });
 
   // ---- 매매일지 ----

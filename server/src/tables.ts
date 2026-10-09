@@ -1,4 +1,4 @@
-import { currencyOfRegion, expectancy, paperEquity, regionOfCode, summarizeJournal, type Currency } from "@jusik/shared";
+import { currencyOfRegion, evaluateTrades, expectancy, paperEquity, paperTradesFromJournal, regionOfCode, summarizeJournal, type Currency, type Evaluation, type Stats } from "@jusik/shared";
 import type { AppState } from "./state";
 
 export type Cell = string | number;
@@ -93,6 +93,19 @@ export function buildTables(state: AppState, meta: { provider: string; sample: b
     perf.push([cur, sm.closed.length, sm.winRate == null ? "" : r2(sm.winRate * 100), sm.avgWinPct == null ? "" : r2(sm.avgWinPct), sm.avgLossPct == null ? "" : r2(sm.avgLossPct), ev ? r2(ev.expectancyPct) : "", r2(sm.totalPnl)]);
   }
   tables.push({ name: "성과", headers: ["통화", "청산 거래", "승률(%)", "평균 이익(%)", "평균 손실(%)", "거래당 기대값(%)", "실현손익(수수료·세금 제외)"], rows: perf });
+
+  // 7) 규칙 점검: 모의매매 실적 + 과거 재현
+  const evalRows: Cell[][] = [];
+  const st = (x: Stats) => [x.n, x.winRate == null ? "" : r2(x.winRate * 100), x.expectancyPct == null ? "" : r2(x.expectancyPct), x.lowerBoundPct == null ? "" : r2(x.lowerBoundPct), x.profitFactor == null ? "" : r2(x.profitFactor), x.reliable ? "" : "표본 부족"];
+  const dump = (source: string, ev: Evaluation) => {
+    evalRows.push([source, "전체", `${ev.from ?? "-"}~${ev.to ?? "-"}`, ...st(ev.overall)]);
+    for (const g of ev.groups) for (const b of g.buckets) evalRows.push([source, g.title, b.label, ...st(b.stats)]);
+    for (const t of ev.thresholds) evalRows.push([source, "최소 점수(전체/앞/뒤 기대값)", `${t.minScore}점 이상`, ...st(t.all), `${t.firstHalf.expectancyPct == null ? "-" : r2(t.firstHalf.expectancyPct)} / ${t.secondHalf.expectancyPct == null ? "-" : r2(t.secondHalf.expectancyPct)}`]);
+    evalRows.push([source, "제안", ev.suggestion.minScore == null ? "변경 없음" : `${ev.suggestion.minScore}점`, "", "", "", "", "", "", ev.suggestion.reason]);
+  };
+  dump("모의매매", evaluateTrades(paperTradesFromJournal(journal), s.minScore));
+  if (state.lastReplay) dump(`과거 재현(${fmtKst(state.lastReplay.at)}, ${state.lastReplay.codesTested}종목)`, state.lastReplay.evaluation);
+  tables.push({ name: "규칙점검", headers: ["출처", "구분", "조건", "거래 수", "승률(%)", "기대값(%)", "기대값 하한(%)", "손익비(PF)", "비고"], rows: evalRows });
 
   return tables;
 }

@@ -7,6 +7,7 @@ import { ChartPanel } from "./ChartPanel";
 import { DayTradeView } from "./DayTradeView";
 import { FundamentalsTab } from "./FundamentalsTab";
 import { JournalView } from "./JournalView";
+import { RuleCheckView } from "./RuleCheckView";
 import { SearchBox } from "./SearchBox";
 import { Watchlist } from "./Watchlist";
 import { moneyByCode, num, pct, tone } from "./format";
@@ -14,9 +15,9 @@ import { loadWatchlist, saveWatchlist } from "./storage";
 import { useServerState } from "./useServerState";
 import { useStock } from "./useStock";
 
-type View = "daytrade" | "analysis" | "journal";
+type View = "daytrade" | "analysis" | "journal" | "rules";
 type Tab = "signal" | "fundamentals" | "backtest";
-const VIEWS: [View, string][] = [["daytrade", "단타 추천"], ["analysis", "종목 분석"], ["journal", "매매일지"]];
+const VIEWS: [View, string][] = [["daytrade", "단타 추천"], ["analysis", "종목 분석"], ["journal", "매매일지"], ["rules", "규칙 점검"]];
 const TABS: [Tab, string][] = [["signal", "차트·신호"], ["fundamentals", "재무·스크리닝"], ["backtest", "백테스트"]];
 
 export default function App() {
@@ -78,6 +79,8 @@ export default function App() {
       {view === "daytrade" && <DayTradeView st={server.state} error={server.error} refresh={server.refresh} onOpen={openStock} />}
 
       {view === "journal" && <JournalView entries={journal} defaultCode={code} onChanged={() => { reloadJournal(); server.refresh(); }} />}
+
+      {view === "rules" && <RuleCheckView currentMin={server.state?.settings.minScore ?? 55} refresh={server.refresh} />}
 
       {view === "analysis" && (
         <div className="body">

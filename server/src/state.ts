@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { newPaperAccount, type HistoryRow, type JournalEntry, type PaperAccount, type ScanResult, type Settings } from "@jusik/shared";
+import { newPaperAccount, type HistoryRow, type JournalEntry, type PaperAccount, type ReplayRun, type ScanResult, type Settings } from "@jusik/shared";
 
 export type { HistoryRow, ScanResult, Settings };
 
@@ -48,6 +48,8 @@ export interface AppState {
   latestScan: ScanResult | null;
   history: HistoryRow[];
   journal: JournalEntry[];
+  /** 마지막 과거 재현(규칙 점검) 결과 */
+  lastReplay: ReplayRun | null;
 }
 
 export const HISTORY_LIMIT = 3000;
@@ -59,6 +61,7 @@ function fresh(): AppState {
     latestScan: null,
     history: [],
     journal: [],
+    lastReplay: null,
   };
 }
 
@@ -77,6 +80,7 @@ export class Store {
           latestScan: raw.latestScan ?? null,
           history: Array.isArray(raw.history) ? raw.history : [],
           journal: Array.isArray(raw.journal) ? raw.journal : [],
+          lastReplay: raw.lastReplay ?? null,
         };
       } catch (e) {
         // 파일이 깨졌으면 덮어쓰지 않고 백업해 둔다

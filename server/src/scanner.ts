@@ -138,7 +138,7 @@ async function autoTrade(deps: Deps, scan: ScanResult, at: Date) {
       const plan = buildPlans(store, scan.candidates)[cur]!;
       scan.plans[cur] = plan; // 진입 시점의 계획을 그대로 남긴다(실행된 종목은 executed로 표시)
       for (const item of plan.items) {
-        const o = paperOpen(acct, item, at, clock, PAPER_COSTS[region]);
+        const o = paperOpen(acct, item, at, clock, PAPER_COSTS[region], scan.regimes[item.candidate.market] ?? null);
         if (o) {
           acct = o.acct;
           entries.push(o.entry);

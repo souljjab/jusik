@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { buildApp } from "../src/app";
 import { Exporter } from "../src/exporter";
 import { monitorPositions, runScan, syncPaperWithDeposit } from "../src/scanner";
+import { evaluatePaper, runReplay } from "../src/evaluate";
 import { Scheduler } from "../src/scheduler";
 import { syncSheets } from "../src/sheets";
 import { sanitizeSettings, Store } from "../src/state";
@@ -164,7 +165,7 @@ describe("export", () => {
     await writeExcel(tables, file);
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.readFile(file);
-    expect(wb.worksheets.map((w) => w.name)).toEqual(["요약", "추천(최신)", "추천이력", "모의포지션", "매매일지", "성과"]);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(["요약", "추천(최신)", "추천이력", "모의포지션", "매매일지", "성과", "규칙점검"]);
     const rec = wb.getWorksheet("추천(최신)")!;
     expect(rec.rowCount).toBe(1 + store.state.latestScan!.candidates.length);
     expect(rec.getRow(1).getCell(4).value).toBe("종목명");
@@ -212,7 +213,7 @@ describe("export", () => {
     }) as typeof fetch;
     const r = await syncSheets(tables, { spreadsheetId: "SID", getToken: async () => "TOKEN", fetchImpl });
     const add = calls.find((c) => c.url.endsWith(":batchUpdate"))!;
-    expect(add.body.requests.map((x: any) => x.addSheet.properties.title)).toEqual(["추천(최신)", "추천이력", "모의포지션", "매매일지", "성과"]);
+    expect(add.body.requests.map((x: any) => x.addSheet.properties.title)).toEqual(["추천(최신)", "추천이력", "모의포지션", "매매일지", "성과", "규칙점검"]);
     expect(calls.filter((c) => c.url.includes(":clear"))).toHaveLength(tables.length);
     const puts = calls.filter((c) => c.method === "PUT");
     expect(puts).toHaveLength(tables.length);
@@ -325,5 +326,66 @@ describe("Scheduler", () => {
     expect(provider.universeCalls).toBe(calls + 3);
     expect(sch.status().marketOpen).toEqual({ KR: false, US: false });
     expect(store.state.latestScan).not.toBeNull();
+  });
+});
+
+describe("rule check (2단계)", () => {
+  it("auto paper buys carry signal features, and closed paper trades feed the evaluation", async () => {
+    const { store, provider, deps, setNow } = setup();
+    await runScan(deps);
+    const buy = store.state.journal.find((e) => e.side === "BUY")!;
+    expect(buy.meta).toMatchObject({ market: "KOSPI", regime: "BULL" });
+    expect(buy.meta!.score).toBeGreaterThanOrEqual(55);
+    const pos = store.state.paper.KRW.positions[0]!;
+    provider.prices[pos.code] = pos.target + 1;
+    setNow(new Date("2024-03-18T02:00:00Z"));
+    await monitorPositions(deps);
+    const r = evaluatePaper({ store });
+    expect(r.tradeCount).toBe(1);
+    expect(r.evaluation.overall.n).toBe(1);
+    expect(r.evaluation.overall.expectancyPct!).toBeGreaterThan(0);
+    expect(r.evaluation.suggestion.minScore).toBeNull(); // 1건으로는 제안하지 않는다
+  });
+
+  it("replays the rules over past candles per market, stores the run, and reports errors per stock", async () => {
+    const { store, provider, deps } = setup();
+    const orig = provider.getCandles.bind(provider);
+    provider.getCandles = async (code: string, count: number) => {
+      if (code === "005930") throw new Error("차단됨");
+      // 돌파 후 다음 날부터 상승 → 목표 도달
+      const cs = await orig(code, count);
+      const last = cs[cs.length - 1]!;
+      const ext = [1.0, 1.04, 1.09, 1.1].map((m, k) => ({ ...last, date: `2024-03-${String(19 + k).padStart(2, "0")}`, open: last.close * (k ? m - 0.02 : 1), high: last.close * m * 1.002, low: last.close * (k ? m - 0.03 : 0.999), close: last.close * m, volume: 1500 }));
+      return [...cs, ...ext];
+    };
+    const run = await runReplay(deps, { markets: ["KOSPI"] });
+    expect(run.markets).toEqual(["KOSPI"]);
+    expect(run.codesTested).toBeGreaterThan(10);
+    expect(run.tradeCount).toBeGreaterThan(0);
+    expect(run.errors.join()).toContain("005930");
+    expect(run.evaluation.overall.n).toBe(run.tradeCount);
+    expect(store.state.lastReplay?.at).toBe(run.at);
+    const tables = buildTables(store.state, { provider: "stub", sample: true, now: new Date() });
+    const rc = tables.find((t) => t.name === "규칙점검")!;
+    expect(rc.rows.some((r) => String(r[0]).startsWith("과거 재현"))).toBe(true);
+    expect(rc.rows.some((r) => r[1] === "제안")).toBe(true);
+  });
+
+  it("serves evaluation endpoints and blocks concurrent replays", async () => {
+    const s = setup({ paperEnabled: false });
+    const exporter = new Exporter({ excelPath: join(s.dir, "j.xlsx"), sheets: null, debounceMs: 1, build: () => buildTables(s.store.state, { provider: "stub", sample: true, now: new Date() }) });
+    const app = buildApp({ provider: s.provider, store: s.store, exporter, scheduler: new Scheduler(s.deps) });
+    expect((await app.inject("/api/evaluate/paper")).json()).toMatchObject({ tradeCount: 0 });
+    let release!: () => void;
+    s.provider.gate = new Promise<void>((r) => (release = r));
+    const orig = s.provider.getIndexCandles.bind(s.provider);
+    s.provider.getIndexCandles = async (m, c) => { await s.provider.gate; return orig(m, c); };
+    const first = app.inject({ method: "POST", url: "/api/evaluate/replay", payload: { markets: ["US"] } });
+    await new Promise((r) => setTimeout(r, 10));
+    expect((await app.inject({ method: "POST", url: "/api/evaluate/replay", payload: {} })).statusCode).toBe(409);
+    release();
+    const done = (await first).json();
+    expect(done.run.markets).toEqual(["US"]);
+    expect((await app.inject("/api/evaluate/replay")).json().run.at).toBe(done.run.at);
   });
 });

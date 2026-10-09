@@ -1,4 +1,4 @@
-import type { JournalEntry } from "./journal";
+import type { JournalEntry, TradeFeatures } from "./journal";
 import type { PlanItem } from "./daytrade";
 import type { Region } from "./types";
 import type { MarketClock } from "./sessions";
@@ -60,7 +60,7 @@ export function weekdaysBetween(from: string, to: string): number {
 const uuid = () => globalThis.crypto.randomUUID();
 
 /** 모의 매수. 예수금이 모자라면 null */
-export function paperOpen(acct: PaperAccount, item: PlanItem, now: Date, clock: MarketClock, costs: PaperCosts): { acct: PaperAccount; entry: JournalEntry } | null {
+export function paperOpen(acct: PaperAccount, item: PlanItem, now: Date, clock: MarketClock, costs: PaperCosts, regime: string | null = null): { acct: PaperAccount; entry: JournalEntry } | null {
   const c = item.candidate;
   const fill = Number((c.entry * (1 + costs.slippage)).toFixed(costs.decimals));
   const cost = item.qty * fill * (1 + costs.feeRate);
@@ -75,6 +75,7 @@ export function paperOpen(acct: PaperAccount, item: PlanItem, now: Date, clock: 
     entry: {
       id: uuid(), code: c.code, name: c.name, date: pos.entryDate, side: "BUY", price: fill, qty: item.qty, stop: c.stop,
       reason, review: `계획: 손절 ${c.stop.toLocaleString()} / 목표 ${c.target.toLocaleString()} / 최대 ${c.maxHoldDays}일 보유`, source: "자동(모의)",
+      meta: { score: c.score, volumeRatio: c.volumeRatio, changePct: c.changePct, stopPct: c.stopPct, market: c.market, regime } satisfies TradeFeatures,
     },
   };
 }

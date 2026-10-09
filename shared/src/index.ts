@@ -12,6 +12,7 @@ export * from "./journal";
 export * from "./daytrade";
 export * from "./paper";
 export * from "./sessions";
+export * from "./dayEval";
 export * from "./analyze";
 export * from "./backtest";
 export * from "./stageBacktest";
