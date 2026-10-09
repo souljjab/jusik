@@ -5,3 +5,6 @@ dist/
 !.env.example
 .kis-token.json
 *.log
+data/
+*.corrupt-*
+*service-account*.json

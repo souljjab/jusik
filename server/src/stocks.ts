@@ -44,6 +44,27 @@ export const STOCKS: StockInfo[] = [
   { code: "066970", name: "엘앤에프", market: "KOSDAQ" },
   { code: "086900", name: "메디톡스", market: "KOSDAQ" },
   { code: "078340", name: "컴투스", market: "KOSDAQ" },
+  // 미국(대표 종목 + 단타 후보로 자주 오르내리는 종목). 전체 종목은 야후 검색/스크리너로 보완된다
+  { code: "AAPL", name: "Apple", market: "US" },
+  { code: "MSFT", name: "Microsoft", market: "US" },
+  { code: "NVDA", name: "NVIDIA", market: "US" },
+  { code: "TSLA", name: "Tesla", market: "US" },
+  { code: "AMZN", name: "Amazon", market: "US" },
+  { code: "GOOGL", name: "Alphabet", market: "US" },
+  { code: "META", name: "Meta Platforms", market: "US" },
+  { code: "AMD", name: "Advanced Micro Devices", market: "US" },
+  { code: "NFLX", name: "Netflix", market: "US" },
+  { code: "AVGO", name: "Broadcom", market: "US" },
+  { code: "PLTR", name: "Palantir", market: "US" },
+  { code: "COIN", name: "Coinbase", market: "US" },
+  { code: "SMCI", name: "Super Micro Computer", market: "US" },
+  { code: "INTC", name: "Intel", market: "US" },
+  { code: "SOFI", name: "SoFi Technologies", market: "US" },
+  { code: "MARA", name: "MARA Holdings", market: "US" },
+  { code: "RIVN", name: "Rivian", market: "US" },
+  { code: "UBER", name: "Uber", market: "US" },
+  { code: "SHOP", name: "Shopify", market: "US" },
+  { code: "CRWD", name: "CrowdStrike", market: "US" },
 ];
 
 export function findStock(code: string): StockInfo | undefined {
@@ -53,5 +74,5 @@ export function findStock(code: string): StockInfo | undefined {
 export function searchStocks(q: string, limit = 10): StockInfo[] {
   const query = q.trim().toLowerCase();
   if (!query) return [];
-  return STOCKS.filter((s) => s.code.startsWith(query) || s.name.toLowerCase().includes(query)).slice(0, limit);
+  return STOCKS.filter((s) => s.code.toLowerCase().startsWith(query) || s.name.toLowerCase().includes(query)).slice(0, limit);
 }

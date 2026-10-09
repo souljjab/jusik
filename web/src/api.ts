@@ -1,10 +1,10 @@
-import { analyze, type Analysis, type Candle, type Fundamentals, type Market, type Quote, type StockInfo } from "@jusik/shared";
+import { analyze, type Analysis, type Candle, type Fundamentals, type JournalEntry, type Market, type Quote, type ServerState, type Settings, type StockInfo } from "@jusik/shared";
 
 /** 배포(APK 등)에서는 VITE_API_BASE 로 서버 주소를 지정한다. 개발 중에는 vite 프록시를 쓴다. */
 const BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
 
-async function getJson<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`);
+async function getJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, init);
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error((body as { error?: string }).error ?? `요청 실패 (${res.status})`);
   return body as T;
@@ -64,3 +64,16 @@ export function loadStock(code: string): Promise<StockData> {
   p.catch(() => cache.delete(code));
   return p;
 }
+
+// ---- 서버(스캔·설정·모의계좌·일지·내보내기) ----
+const send = (method: string, body?: unknown): RequestInit => ({ method, headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+
+export const getState = () => getJson<ServerState>("/api/state");
+export const saveSettings = (s: Partial<Settings>) => getJson<{ settings: Settings }>("/api/settings", send("PUT", s));
+export const startScan = () => getJson<{ started: boolean; message: string }>("/api/scan", send("POST")).catch((e: Error) => ({ started: false, message: e.message }));
+export const resetPaper = () => getJson<unknown>("/api/paper/reset", send("POST"));
+export const syncExport = () => getJson<unknown>("/api/export/sync", send("POST"));
+export const excelUrl = `${BASE}/api/export/excel`;
+export const getJournal = () => getJson<{ entries: JournalEntry[] }>("/api/journal").then((r) => r.entries);
+export const addJournal = (e: Pick<JournalEntry, "code" | "side" | "price" | "qty" | "date"> & Partial<JournalEntry>) => getJson<{ entry: JournalEntry }>("/api/journal", send("POST", e));
+export const deleteJournal = (id: string) => getJson<unknown>(`/api/journal/${id}`, send("DELETE"));

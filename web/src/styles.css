@@ -120,3 +120,15 @@ footer { margin-top: 16px; font-size: 12px; color: var(--muted); text-align: cen
 .link { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; text-decoration: underline; padding: 0; }
 .link:disabled { color: var(--muted); cursor: default; text-decoration: none; }
 .trades .left, .trades th.left { text-align: left; white-space: normal; }
+
+/* --- 단타 추천 화면 --- */
+.views { margin-top: 0; }
+.statusbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.warn-banner { background: var(--warn-bg); color: var(--warn); }
+.checks { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 10px 0; }
+.check { display: inline-flex; align-items: center; gap: 6px; }
+.check.strong { font-weight: 700; }
+.linkbtn { display: inline-block; text-decoration: none; }
+details > summary { cursor: pointer; }
+.table-wrap.tall { max-height: 520px; }
+.form.compact label span { margin-top: 2px; }

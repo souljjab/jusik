@@ -12,6 +12,8 @@ export interface JournalEntry {
   reason: string;
   /** 복기 메모: 계획대로 했는지, 감정은 어땠는지 */
   review?: string;
+  /** 기록 출처. 자동(모의)은 앱이 모의매매하며 남긴 기록 */
+  source?: "수동" | "자동(모의)";
 }
 
 export interface ClosedTrade {

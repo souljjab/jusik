@@ -8,7 +8,15 @@ export interface Candle {
   volume: number;
 }
 
-export type Market = "KOSPI" | "KOSDAQ";
+export type Market = "KOSPI" | "KOSDAQ" | "US";
+export type Region = "KR" | "US";
+export type Currency = "KRW" | "USD";
+
+export const regionOf = (m: Market): Region => (m === "US" ? "US" : "KR");
+export const currencyOfRegion = (r: Region): Currency => (r === "US" ? "USD" : "KRW");
+/** 종목코드 형식으로 지역 판별: 한국은 6자리 숫자, 그 외는 미국 티커 */
+export const regionOfCode = (code: string): Region => (/^\d{6}$/.test(code) ? "KR" : "US");
+export const isValidCode = (code: string) => /^\d{6}$/.test(code) || /^[A-Z][A-Z0-9.\-]{0,9}$/.test(code);
 
 export interface StockInfo {
   code: string;

@@ -256,3 +256,162 @@ describe("stage backtest", () => {
     expect(runStageBacktest(fromWeeks(ramp(100, 110, 20)))).toBeNull();
   });
 });
+
+import {
+  DAYTRADE_BY_REGION, marketClock, newPaperAccount, PAPER_COSTS, paperCheckExits, paperEquity, paperOpen,
+  planWithCash, regionOfCode, scoreDayTrade, isValidCode, type DayTradeCandidate,
+} from "../src";
+
+/** 평일 일봉 n개(오래된 순). 끝 직전까지 횡보(RSI≈50) + 마지막 날 거래량 폭증 돌파 봉 */
+function breakoutCandles(n = 60, { lastVol = 5000, lastClose = 1.05, base = 10_000 }: { lastVol?: number; lastClose?: number; base?: number } = {}): Candle[] {
+  const out: Candle[] = [];
+  let t = Date.UTC(2024, 0, 1);
+  let px = base;
+  for (let i = 0; i < n; i++) {
+    while ([0, 6].includes(new Date(t).getUTCDay())) t += 86_400_000;
+    const last = i === n - 1;
+    const close = last ? px * lastClose : px * (1 + 0.004 * (i % 2 ? 1 : -1));
+    const open = last ? px * 1.005 : px;
+    out.push({
+      date: new Date(t).toISOString().slice(0, 10), open, high: last ? close * 1.003 : Math.max(open, close) * 1.004,
+      low: Math.min(open, close) * 0.996, close, volume: last ? lastVol : 1000,
+    });
+    px = close;
+    t += 86_400_000;
+  }
+  return out;
+}
+
+const ref = { code: "005930", name: "삼성전자", market: "KOSPI" as const };
+const kr = { ...DAYTRADE_BY_REGION.KR, minTradeValue: 1 };
+
+describe("region helpers and clocks", () => {
+  it("detects region from code", () => {
+    expect(regionOfCode("005930")).toBe("KR");
+    expect(regionOfCode("AAPL")).toBe("US");
+    expect(isValidCode("BRK.B")).toBe(true);
+    expect(isValidCode("aapl")).toBe(false);
+    expect(isValidCode("12345")).toBe(false);
+  });
+  it("KR and US sessions, including US daylight time", () => {
+    // 2024-07-01(월) 00:30 UTC = 09:30 KST = 20:30 EDT(전날)
+    const t = new Date("2024-07-01T00:30:00Z");
+    expect(marketClock("KR", t)).toMatchObject({ date: "2024-07-01", isOpen: true, inEntryWindow: true });
+    expect(marketClock("US", t)).toMatchObject({ date: "2024-06-30", isOpen: false });
+    // 2024-07-01 13:45 UTC = 09:45 EDT(여름) → 미국 장중. 겨울(2024-01-02 14:45 UTC=09:45 EST)도 장중
+    expect(marketClock("US", new Date("2024-07-01T13:45:00Z"))).toMatchObject({ date: "2024-07-01", isOpen: true, inEntryWindow: true });
+    expect(marketClock("US", new Date("2024-01-02T14:45:00Z")).isOpen).toBe(true);
+    expect(marketClock("US", new Date("2024-01-02T14:15:00Z")).isOpen).toBe(false); // 09:15 EST: 개장 전
+    expect(marketClock("KR", new Date("2024-06-29T02:00:00Z")).isOpen).toBe(false); // 토요일
+  });
+});
+
+describe("day-trade scoring", () => {
+  it("accepts a volume breakout and builds a plan with net R/R", () => {
+    const r = scoreDayTrade(ref, breakoutCandles(), null, kr);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const c = r.candidate;
+    expect(c.volumeRatio).toBeGreaterThan(4);
+    expect(c.stop).toBeLessThan(c.entry);
+    expect(c.target).toBeGreaterThan(c.entry);
+    expect(c.stopPct).toBeGreaterThanOrEqual(2 - 1e-9);
+    expect(c.stopPct).toBeLessThanOrEqual(5 + 1e-9);
+    expect(c.netRR).toBeLessThan(kr.targetR); // 비용 때문에 명목 손익비보다 낮다
+    expect(c.notes.some((n) => n.text.includes("돌파"))).toBe(true);
+  });
+  it("rejects weak volume, limit-up chasing, illiquid, and bear market gets a penalty", () => {
+    expect(scoreDayTrade(ref, breakoutCandles(60, { lastVol: 1100 }), null, kr)).toMatchObject({ ok: false, reason: "거래량 증가 없음" });
+    expect(scoreDayTrade(ref, breakoutCandles(60, { lastClose: 1.28 }), null, kr)).toMatchObject({ ok: false, reason: "상한가 근처 추격 위험" });
+    expect(scoreDayTrade(ref, breakoutCandles(), null, { ...kr, minTradeValue: 1e15 })).toMatchObject({ ok: false, reason: "거래대금 부족" });
+    expect(scoreDayTrade(ref, breakoutCandles(10), null, kr)).toMatchObject({ ok: false, reason: "데이터 부족" });
+    const base = scoreDayTrade(ref, breakoutCandles(), null, kr);
+    const bear = scoreDayTrade(ref, breakoutCandles(), "BEAR", kr);
+    if (base.ok && bear.ok) expect(bear.candidate.score).toBeLessThan(base.candidate.score);
+  });
+  it("US uses 2-decimal prices and dollar thresholds", () => {
+    const us = DAYTRADE_BY_REGION.US;
+    expect(us.decimals).toBe(2);
+    const r = scoreDayTrade({ code: "NVDA", name: "NVIDIA", market: "US" }, breakoutCandles(60, { base: 120.37, lastVol: 5_000_000 }), null, { ...us, minTradeValue: 1 });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(Number.isInteger(r.candidate.stop * 100 + 1e-6) || Math.abs(r.candidate.stop * 100 - Math.round(r.candidate.stop * 100)) < 1e-6).toBe(true);
+  });
+});
+
+describe("cash plan", () => {
+  const mk = (code: string, score: number, entry: number, stop: number): DayTradeCandidate => ({
+    code, name: code, market: "KOSPI", asOf: "2024-01-01", price: entry, changePct: 5, volume: 1, tradeValue: 1, volumeRatio: 3, score,
+    entry, stop, target: entry + 2 * (entry - stop), stopPct: ((entry - stop) / entry) * 100, targetPct: 0, netRR: 1.5, maxHoldDays: 3, notes: [],
+  });
+  const params = { cash: 10_000_000, riskPct: 1, maxWeightPct: 30, maxPositions: 3, reservePct: 10 };
+  it("sizes by stop distance, honors weight cap, reserve and slot limits", () => {
+    const plan = planWithCash([mk("A", 80, 10_000, 9_700), mk("B", 70, 50_000, 48_000), mk("C", 65, 20_000, 19_500), mk("D", 60, 30_000, 29_000)], params);
+    expect(plan.items.map((i) => i.candidate.code)).toEqual(["A", "B", "C"]);
+    expect(plan.skipped.map((s) => s.candidate.code)).toEqual(["D"]);
+    for (const i of plan.items) expect(i.weightPct).toBeLessThanOrEqual(30 + 1e-9);
+    expect(plan.used).toBeLessThanOrEqual(plan.spendable + 1e-6);
+    expect(plan.remainingCash).toBeGreaterThanOrEqual(1_000_000 - 1e-6); // 예비 현금 10%
+    expect(plan.items[0]!.riskAmount).toBeLessThanOrEqual(100_000 + 1e-6); // 1% 손실 한도
+  });
+  it("skips what cash cannot afford and already-held stocks", () => {
+    const p = planWithCash([mk("E", 90, 5_000_000, 4_900_000), mk("F", 80, 10_000, 9_700)], { ...params, heldCodes: ["F"] });
+    expect(p.items).toHaveLength(0);
+    expect(p.skipped.map((s) => s.reason)).toEqual(expect.arrayContaining(["이미 보유 중"]));
+  });
+  it("counts held positions against the slot limit", () => {
+    const p = planWithCash([mk("A", 80, 10_000, 9_700)], { ...params, heldCount: 3 });
+    expect(p.items).toHaveLength(0);
+  });
+});
+
+describe("paper trading", () => {
+  const cand: DayTradeCandidate = {
+    code: "005930", name: "삼성전자", market: "KOSPI", asOf: "2024-01-02", price: 10_000, changePct: 5, volume: 1, tradeValue: 1, volumeRatio: 3, score: 80,
+    entry: 10_000, stop: 9_700, target: 10_600, stopPct: 3, targetPct: 6, netRR: 1.7, maxHoldDays: 3, notes: [{ tone: "good", text: "거래량 폭증" }],
+  };
+  const item = { candidate: cand, qty: 100, amount: 1_000_000, riskAmount: 30_000, weightPct: 10 };
+  const mon = new Date("2024-01-08T01:30:00Z"); // 월 10:30 KST
+  const costs = PAPER_COSTS.KR;
+
+  it("opens at a slipped price, deducts cash with fee, and journals", () => {
+    const r = paperOpen(newPaperAccount(2_000_000), item, mon, marketClock("KR", mon), costs)!;
+    expect(r.acct.positions[0]!.entryPrice).toBe(10_010);
+    expect(r.acct.cash).toBeCloseTo(2_000_000 - 100 * 10_010 * 1.00015);
+    expect(r.entry).toMatchObject({ side: "BUY", source: "자동(모의)", qty: 100, date: "2024-01-08" });
+    expect(paperOpen(r.acct, item, mon, marketClock("KR", mon), costs)).toBeNull(); // 같은 종목 중복 매수 금지
+    expect(paperOpen(newPaperAccount(100_000), item, mon, marketClock("KR", mon), costs)).toBeNull(); // 예수금 부족
+  });
+  const open = () => paperOpen(newPaperAccount(2_000_000), item, mon, marketClock("KR", mon), costs)!.acct;
+  it("exits on stop, target, and time; books net P&L", () => {
+    const stop = paperCheckExits(open(), { "005930": 9_650 }, marketClock("KR", new Date("2024-01-08T02:00:00Z")), costs);
+    expect(stop.entries[0]).toMatchObject({ side: "SELL", price: 9_640 });
+    expect(stop.entries[0]!.reason).toContain("손절");
+    expect(stop.acct.positions).toHaveLength(0);
+    expect(stop.acct.realizedPnl).toBeLessThan(0);
+    expect(stop.acct.wins).toBe(0);
+
+    const tp = paperCheckExits(open(), { "005930": 10_700 }, marketClock("KR", new Date("2024-01-08T03:00:00Z")), costs);
+    expect(tp.entries[0]!.reason).toContain("목표");
+    expect(tp.acct.wins).toBe(1);
+    expect(tp.acct.realizedPnl).toBeGreaterThan(0);
+    // 순손익 = 매도대금(수수료·세금 차감) - 매수원가
+    const fill = Math.round(10_700 * 0.999);
+    expect(tp.acct.realizedPnl).toBeCloseTo(100 * fill * (1 - 0.00015 - 0.0018) - 100 * 10_010 * 1.00015);
+
+    // 보유 중 가격이 손절·목표 사이면 유지하고 평가가만 갱신
+    const hold = paperCheckExits(open(), { "005930": 10_100 }, marketClock("KR", new Date("2024-01-08T03:00:00Z")), costs);
+    expect(hold.entries).toHaveLength(0);
+    expect(hold.acct.positions[0]!.lastPrice).toBe(10_100);
+    expect(paperEquity(hold.acct)).toBeCloseTo(hold.acct.cash + 100 * 10_100);
+
+    // 월요일 진입, 3거래일 후 목요일 마감 임박 → 시간 청산. 목요일 장중(마감 전)에는 유지
+    expect(paperCheckExits(open(), { "005930": 10_100 }, marketClock("KR", new Date("2024-01-11T02:00:00Z")), costs).entries).toHaveLength(0);
+    const timed = paperCheckExits(open(), { "005930": 10_100 }, marketClock("KR", new Date("2024-01-11T06:10:00Z")), costs);
+    expect(timed.entries[0]!.reason).toContain("시간 청산");
+  });
+  it("ignores positions without a fresh price", () => {
+    const r = paperCheckExits(open(), {}, marketClock("KR", mon), costs);
+    expect(r.entries).toHaveLength(0);
+    expect(r.acct.positions).toHaveLength(1);
+  });
+});

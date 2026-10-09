@@ -1,8 +1,7 @@
-import { useMemo, useState } from "react";
-import { ACTION_LABEL, expectancy, positionSize, REGIME_LABEL, STAGE_LABEL, summarizeJournal, type Action, type Analysis, type JournalEntry } from "@jusik/shared";
+import { useMemo } from "react";
+import { ACTION_LABEL, expectancy, positionSize, REGIME_LABEL, regionOfCode, STAGE_LABEL, summarizeJournal, type Action, type Analysis, type JournalEntry, type Region, type Settings } from "@jusik/shared";
 import { NoteList } from "./NoteList";
-import { num, won } from "./format";
-import { loadSettings, saveSettings, type Settings } from "./storage";
+import { money, num } from "./format";
 
 export function ActionBadge({ action }: { action: Action }) {
   return <span className={`badge ${action}`}>{ACTION_LABEL[action]}</span>;
@@ -27,19 +26,15 @@ const ACTION_HINT: Record<Action, string> = {
   STRONG_SELL: "신규 매수 금지 · 보유 중이면 청산을 검토하세요",
 };
 
-export function AnalysisCard({ a, journal }: { a: Analysis | null; journal: JournalEntry[] }) {
-  const [settings, setSettings] = useState<Settings>(loadSettings);
-  const patch = (p: Partial<Settings>) => {
-    const next = { ...settings, ...p };
-    setSettings(next);
-    saveSettings(next);
-  };
+export function AnalysisCard({ a, journal, region, settings }: { a: Analysis | null; journal: JournalEntry[]; region: Region; settings: Settings | null }) {
+  const capital = settings ? (region === "US" ? settings.depositUSD : settings.depositKRW) : 0;
+  const won = (n: number) => money(n, region);
 
   const size = useMemo(
-    () => (a ? positionSize({ capital: settings.capital, entry: a.price, stop: a.timing.stopLoss, riskPct: settings.riskPct, maxWeightPct: settings.maxWeightPct }) : null),
-    [a, settings],
+    () => (a && settings && capital > 0 ? positionSize({ capital, entry: a.price, stop: a.timing.stopLoss, riskPct: settings.riskPct, maxWeightPct: settings.maxWeightPct, feeRate: region === "US" ? 0.0025 : 0.00015 }) : null),
+    [a, settings, capital, region],
   );
-  const mine = useMemo(() => summarizeJournal(journal), [journal]);
+  const mine = useMemo(() => summarizeJournal(journal.filter((e) => regionOfCode(e.code) === region)), [journal, region]);
   const myEv = useMemo(
     () => (mine.closed.length >= 5 && mine.winRate != null && mine.avgWinPct != null && mine.avgLossPct != null ? expectancy({ winRate: mine.winRate, avgWinPct: mine.avgWinPct, avgLossPct: mine.avgLossPct }) : null),
     [mine],
@@ -106,26 +101,24 @@ export function AnalysisCard({ a, journal }: { a: Analysis | null; journal: Jour
         </Step>
 
         <Step n={4} title="리스크·비중">
-          <div className="form compact">
-            <label>투자 원금(원)<input type="number" min={100000} step={1000000} value={settings.capital} onChange={(e) => patch({ capital: Math.max(100000, +e.target.value || 0) })} /></label>
-            <label>1회 손절 허용 손실(%)<input type="number" min={0.1} max={10} step={0.1} value={settings.riskPct} onChange={(e) => patch({ riskPct: Math.min(10, Math.max(0.1, +e.target.value || 1)) })} /></label>
-            <label>한 종목 최대 비중(%)<input type="number" min={1} max={100} value={settings.maxWeightPct} onChange={(e) => patch({ maxWeightPct: Math.min(100, Math.max(1, +e.target.value || 25)) })} /></label>
-          </div>
+          <p className="muted small">
+            예수금 {won(capital)} · 1회 손절 허용 {settings?.riskPct ?? "-"}% · 종목당 최대 {settings?.maxWeightPct ?? "-"}% (「단타 추천」 화면의 설정에서 바꿔요)
+          </p>
           {size && size.shares > 0 ? (
             <ul className="notes">
               {a.action !== "BUY" && a.action !== "STRONG_BUY" && <li className="note-warn">⚠ 지금은 매수 신호가 아니에요. 아래는 매수한다고 가정했을 때의 계산이에요</li>}
               <li className="note-info">참고 매수 수량 <b>{size.shares.toLocaleString()}주</b> ({won(size.amount)}, 비중 {num(size.weightPct, 1)}%)</li>
-              <li className="note-info">손절가({won(a.timing.stopLoss)})까지 가면 약 {won(size.riskAmount)} 손실 (자본의 {num((size.riskAmount / settings.capital) * 100, 2)}%)</li>
+              <li className="note-info">손절가({won(a.timing.stopLoss)})까지 가면 약 {won(size.riskAmount)} 손실 (자본의 {num((size.riskAmount / capital) * 100, 2)}%)</li>
               {size.cappedByWeight && <li className="note-warn">⚠ 손절폭은 더 사도 되지만 비중 상한 때문에 수량을 줄였어요</li>}
               {size.riskPerSharePct > 15 && <li className="note-warn">⚠ 손절폭이 {num(size.riskPerSharePct, 0)}%로 커요. 손절가를 더 가깝게 잡을 수 있는지 보세요</li>}
             </ul>
           ) : (
-            <p className="muted small">현재가가 손절가보다 낮거나 같아서 수량을 계산할 수 없어요.</p>
+            <p className="muted small">{capital > 0 ? "현재가가 손절가보다 낮거나 같아서 수량을 계산할 수 없어요." : "예수금이 0이라 수량을 계산할 수 없어요. 설정에서 예수금을 입력하세요."}</p>
           )}
           {myEv ? (
             <p className="small">내 매매일지 기준({mine.closed.length}회) 기대값 <b className={myEv.expectancyPct >= 0 ? "up" : "down"}>{myEv.expectancyPct >= 0 ? "+" : ""}{num(myEv.expectancyPct, 2)}%</b>/회 · 켈리 {num(myEv.kellyPct, 0)}% (절반 {num(myEv.halfKellyPct, 0)}%)</p>
           ) : (
-            <p className="muted small">매매일지에 청산 거래가 5회 이상 쌓이면 내 승률로 기대값을 계산해 줘요.</p>
+            <p className="muted small">매매일지에 이 시장의 청산 거래가 5회 이상 쌓이면 내 승률로 기대값을 계산해 줘요.</p>
           )}
           <p className="muted small">올인보다 손절폭 기준 비중을 기본으로 해요. 한 종목에 몰아넣는 전략은 확신과 손실 감내가 있을 때만 상한을 직접 올리세요.</p>
         </Step>

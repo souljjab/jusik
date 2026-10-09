@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ColorType, createChart, type Time } from "lightweight-charts";
-import { DEFAULT_BACKTEST, expectancy, runBacktest, runStageBacktest, type BacktestResult, type Candle } from "@jusik/shared";
-import { num, pct, tone, won } from "./format";
+import { DEFAULT_BACKTEST, expectancy, runBacktest, runStageBacktest, type BacktestResult, type Candle, type Region } from "@jusik/shared";
+import { money, num, pct, tone } from "./format";
 import { useChartColors } from "./theme";
 
 function Metric({ label, value, cls }: { label: string; value: string; cls?: string }) {
@@ -15,10 +15,11 @@ function Metric({ label, value, cls }: { label: string; value: string; cls?: str
 
 type Strategy = "stage" | "score";
 
-export function BacktestTab({ candles, indexCandles }: { candles: Candle[]; indexCandles: Candle[] | null }) {
+export function BacktestTab({ candles, indexCandles, region }: { candles: Candle[]; indexCandles: Candle[] | null; region: Region }) {
+  const won = (n: number) => money(n, region);
   const colors = useChartColors();
   const [strategy, setStrategy] = useState<Strategy>("stage");
-  const [initialCash, setCash] = useState(DEFAULT_BACKTEST.initialCash);
+  const [initialCash, setCash] = useState(region === "US" ? 10_000 : DEFAULT_BACKTEST.initialCash);
   const [useRegime, setUseRegime] = useState(true);
   const [buy, setBuy] = useState(DEFAULT_BACKTEST.buyThreshold);
   const [sell, setSell] = useState(DEFAULT_BACKTEST.sellThreshold);
@@ -78,7 +79,7 @@ export function BacktestTab({ candles, indexCandles }: { candles: Candle[]; inde
         재무 지표는 과거 시점 데이터가 없어 백테스트에 포함하지 않아요.
       </p>
       <div className="form">
-        <label>투자금(원)<input type="number" min={100000} step={1000000} value={initialCash} onChange={(e) => setCash(Math.max(100000, +e.target.value || 0))} /></label>
+        <label>투자금({region === "US" ? "달러" : "원"})<input type="number" min={1000} step={region === "US" ? 1000 : 1000000} value={initialCash} onChange={(e) => setCash(Math.max(1000, +e.target.value || 0))} /></label>
         {strategy === "stage" ? (
           <label className="check">
             <input type="checkbox" checked={useRegime} disabled={!indexCandles} onChange={(e) => setUseRegime(e.target.checked)} />
@@ -96,7 +97,7 @@ export function BacktestTab({ candles, indexCandles }: { candles: Candle[]; inde
         <p className="muted">데이터가 부족해서 백테스트를 할 수 없어요.</p>
       ) : (
         <>
-          <p className="muted small">수수료 0.015%(매수·매도) + 매도 거래세 0.18% 가정 · {result.equity[0]!.date} ~ {result.equity.at(-1)!.date}</p>
+          <p className="muted small">한국 기준 수수료 0.015%(매수·매도) + 매도 거래세 0.18% 가정(미국 종목도 같은 비용으로 계산해요 — 실제 미국 수수료는 더 높을 수 있어요) · {result.equity[0]!.date} ~ {result.equity.at(-1)!.date}</p>
           <div className="metrics">
             <Metric label="전략 수익률" value={pct(result.totalReturnPct)} cls={tone(result.totalReturnPct)} />
             <Metric label="단순 보유 수익률" value={pct(result.buyHoldReturnPct)} cls={tone(result.buyHoldReturnPct)} />

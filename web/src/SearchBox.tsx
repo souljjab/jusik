@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { StockInfo } from "@jusik/shared";
+import { isValidCode, type StockInfo } from "@jusik/shared";
 import { searchStocks } from "./api";
 
 export function SearchBox({ onPick }: { onPick: (code: string) => void }) {
@@ -37,13 +37,13 @@ export function SearchBox({ onPick }: { onPick: (code: string) => void }) {
   const submit = () => {
     const hit = results[active];
     if (hit) pick(hit.code);
-    else if (/^\d{6}$/.test(q.trim())) pick(q.trim());
+    else if (isValidCode(q.trim().toUpperCase())) pick(q.trim().toUpperCase());
   };
 
   return (
     <div className="search" ref={wrap}>
       <input
-        placeholder="종목명 또는 6자리 코드 (예: 삼성전자, 005930)"
+        placeholder="종목명·코드·티커 (예: 삼성전자, 005930, AAPL)"
         value={q}
         onChange={(e) => (setQ(e.target.value), setOpen(true))}
         onFocus={() => setOpen(true)}

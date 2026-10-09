@@ -1,6 +1,6 @@
-import type { Candle, Fundamentals, Market, Quote, StockInfo } from "@jusik/shared";
-import type { MarketDataProvider } from "./provider";
-import { findStock, searchStocks } from "./stocks";
+import { regionOfCode, type Candle, type Fundamentals, type Market, type Quote, type StockInfo } from "@jusik/shared";
+import type { MarketDataProvider, UniverseRow } from "./provider";
+import { findStock, searchStocks, STOCKS } from "./stocks";
 
 function hash(s: string): number {
   let h = 2166136261;
@@ -64,6 +64,19 @@ export class MockProvider implements MarketDataProvider {
     };
   }
 
+  async getPrices(codes: string[]): Promise<Record<string, number>> {
+    return Object.fromEntries(codes.map((c) => [c, this.build(c).at(-1)!.close]));
+  }
+
+  async getUniverse(market: Market): Promise<UniverseRow[]> {
+    return STOCKS.filter((s) => s.market === market).map((s) => {
+      const cs = this.build(s.code);
+      const last = cs[cs.length - 1]!;
+      const prev = cs[cs.length - 2]!;
+      return { code: s.code, name: s.name, market, price: last.close, changePct: (last.close / prev.close - 1) * 100, volume: last.volume, tradeValue: last.close * last.volume };
+    });
+  }
+
   async getIndexCandles(market: Market, count: number): Promise<Candle[]> {
     return this.build(`INDEX:${market}`, 2000).slice(-count);
   }
@@ -92,20 +105,32 @@ export class MockProvider implements MarketDataProvider {
     if (hit) return hit;
     const r = rng(hash(code));
     const days = businessDays(new Date(), 750);
-    let price = startPrice ?? 5000 + Math.floor(r() * 150) * 1000;
+    const us = regionOfCode(code) === "US" && !code.startsWith("INDEX:");
+    const dec = us ? 2 : 0;
+    const rd = (x: number) => Number(x.toFixed(dec));
+    let price = startPrice ?? (us ? 20 + r() * 480 : 5000 + Math.floor(r() * 150) * 1000);
     // 장기 추세와 사이클을 섞어 신호가 다양하게 나오도록 한다
     const drift = (r() - 0.45) * 0.0012;
     const cycleLen = 60 + Math.floor(r() * 80);
     const out: Candle[] = days.map((date, i) => {
       const cycle = Math.sin((2 * Math.PI * i) / cycleLen) * 0.004;
       const ret = drift + cycle + (r() - 0.5) * 0.035;
-      const open = Math.round(price * (1 + (r() - 0.5) * 0.008));
-      const close = Math.max(100, Math.round(price * (1 + ret)));
-      const high = Math.round(Math.max(open, close) * (1 + r() * 0.012));
-      const low = Math.round(Math.min(open, close) * (1 - r() * 0.012));
+      const open = rd(price * (1 + (r() - 0.5) * 0.008));
+      const close = Math.max(us ? 1 : 100, rd(price * (1 + ret)));
+      const high = rd(Math.max(open, close) * (1 + r() * 0.012));
+      const low = rd(Math.min(open, close) * (1 - r() * 0.012));
       price = close;
       return { date, open, high, low, close, volume: Math.round(200_000 + r() * 1_800_000 * (1 + Math.abs(ret) * 25)) };
     });
+    // 데모용: 일부 종목은 오늘 거래량을 동반해 오른 것으로 만들어 스캔 화면이 비지 않게 한다(샘플 모드 전용)
+    if (!code.startsWith("INDEX:") && hash(code) % 4 === 0) {
+      const prev = out[out.length - 2]!;
+      const last = out[out.length - 1]!;
+      const avg = out.slice(-21, -1).reduce((a, c) => a + c.volume, 0) / 20;
+      const close = rd(prev.close * (1.035 + (hash(code + "u") % 30) / 1000));
+      const open = rd(prev.close * 1.004);
+      Object.assign(last, { open, close, high: rd(close * 1.003), low: rd(open * 0.997), volume: Math.round(avg * (3 + (hash(code + "v") % 30) / 10)) });
+    }
     this.cache.set(code, out);
     return out;
   }

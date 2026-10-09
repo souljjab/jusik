@@ -5,7 +5,7 @@ import { num } from "./format";
 const GROUPS = ["안정성", "저평가", "실적"] as const;
 const MARK = { pass: "✔", fail: "✖", unknown: "?" } as const;
 
-export function FundamentalsTab({ f, a }: { f: Fundamentals; a: Analysis | null }) {
+export function FundamentalsTab({ f, a, region }: { f: Fundamentals; a: Analysis | null; region: "KR" | "US" }) {
   const s = a?.screening;
   return (
     <div className="card">
@@ -36,7 +36,7 @@ export function FundamentalsTab({ f, a }: { f: Fundamentals; a: Analysis | null 
       <h4 className="group">참고 지표</h4>
       <table className="kv">
         <tbody>
-          {([["EPS", f.eps, "원"], ["BPS", f.bps, "원"], ["ROE", f.roe, "%"]] as const).map(([l, v, u]) => (
+          {([["EPS", f.eps, region === "US" ? "$" : "원"], ["BPS", f.bps, region === "US" ? "$" : "원"], ["ROE", f.roe, "%"]] as const).map(([l, v, u]) => (
             <tr key={l}><th>{l}</th><td>{v == null ? "-" : `${num(v, 1)}${u}`}</td><td /></tr>
           ))}
         </tbody>
