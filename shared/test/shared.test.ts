@@ -6,12 +6,10 @@ import {
   computeIndicators,
   ema,
   macd,
-  recommend,
   rsi,
   runBacktest,
   sma,
   technicalScoreAt,
-  valuationScore,
   type Candle,
 } from "../src";
 
@@ -80,36 +78,13 @@ describe("technical score", () => {
   });
 });
 
-describe("valuation", () => {
-  it("returns null with no data", () => {
-    expect(valuationScore(undefined)).toBeNull();
-    expect(valuationScore({})).toBeNull();
-  });
-  it("rewards cheap + profitable + growing, punishes the opposite", () => {
-    const good = valuationScore({ per: 8, pbr: 0.8, roe: 18, revenueGrowth: 25, opIncomeGrowth: 30, debtRatio: 50 })!;
-    const bad = valuationScore({ per: -5, pbr: 6, roe: -3, revenueGrowth: -10, opIncomeGrowth: -20, debtRatio: 300 })!;
-    expect(good.score).toBeGreaterThan(80);
-    expect(bad.score).toBeLessThan(-60);
-  });
-});
-
-describe("recommend", () => {
-  it("needs enough candles", () => {
-    expect(recommend(candlesFrom(range(30, () => 100)))).toBeNull();
-  });
+describe("action", () => {
   it("maps scores to actions", () => {
     expect(actionFromScore(60)).toBe("STRONG_BUY");
     expect(actionFromScore(20)).toBe("BUY");
     expect(actionFromScore(0)).toBe("HOLD");
     expect(actionFromScore(-30)).toBe("SELL");
     expect(actionFromScore(-80)).toBe("STRONG_SELL");
-  });
-  it("blends valuation and sets stop below price and target above", () => {
-    const cs = candlesFrom(range(200, (i) => 100 + i * 0.5));
-    const r = recommend(cs, { per: 8, pbr: 0.8, roe: 18 })!;
-    expect(r.valuation).not.toBeNull();
-    expect(r.stopLoss!).toBeLessThan(r.price);
-    expect(r.target!).toBeGreaterThan(r.price);
   });
 });
 

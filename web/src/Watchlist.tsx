@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { loadStock, type StockData } from "./api";
-import { ActionBadge } from "./RecommendationCard";
+import { ActionBadge } from "./AnalysisCard";
 import { pct, tone } from "./format";
 
 function Row({ code, active, onSelect, onRemove }: { code: string; active: boolean; onSelect: () => void; onRemove: () => void }) {
@@ -20,7 +20,7 @@ function Row({ code, active, onSelect, onRemove }: { code: string; active: boole
         {d ? (
           <span className="wl-sub">
             <span className={tone(d.quote.changePct)}>{pct(d.quote.changePct)}</span>
-            {d.rec && <ActionBadge action={d.rec.action} />}
+            {d.analysis && <ActionBadge action={d.analysis.action} />}
           </span>
         ) : (
           <span className="wl-sub muted">{failed ? "불러오기 실패" : "불러오는 중…"}</span>

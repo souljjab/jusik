@@ -39,6 +39,10 @@ export interface Fundamentals {
   opIncomeGrowth?: number;
   /** 부채비율 % */
   debtRatio?: number;
+  /** 유동비율 % */
+  currentRatio?: number;
+  /** 유보율 % */
+  reserveRatio?: number;
 }
 
 export type Action = "STRONG_BUY" | "BUY" | "HOLD" | "SELL" | "STRONG_SELL";
@@ -53,4 +57,10 @@ export interface ScoreResult {
   /** -100 ~ 100 */
   score: number;
   reasons: Reason[];
+}
+
+/** 화면에 근거를 보여주기 위한 한 줄 설명 */
+export interface Note {
+  tone: "good" | "bad" | "warn" | "info";
+  text: string;
 }

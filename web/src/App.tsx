@@ -3,15 +3,17 @@ import { fetchHealth, type Health } from "./api";
 import { BacktestTab } from "./BacktestTab";
 import { ChartPanel } from "./ChartPanel";
 import { FundamentalsTab } from "./FundamentalsTab";
-import { RecommendationCard } from "./RecommendationCard";
+import { AnalysisCard } from "./AnalysisCard";
+import { JournalTab } from "./JournalTab";
 import { SearchBox } from "./SearchBox";
 import { Watchlist } from "./Watchlist";
 import { num, pct, tone, won } from "./format";
-import { loadWatchlist, saveWatchlist } from "./storage";
+import { loadJournal, loadWatchlist, saveJournal, saveWatchlist } from "./storage";
+import type { JournalEntry } from "@jusik/shared";
 import { useStock } from "./useStock";
 
-type Tab = "signal" | "fundamentals" | "backtest";
-const TABS: [Tab, string][] = [["signal", "차트·신호"], ["fundamentals", "재무·가치"], ["backtest", "백테스트"]];
+type Tab = "signal" | "fundamentals" | "backtest" | "journal";
+const TABS: [Tab, string][] = [["signal", "차트·신호"], ["fundamentals", "재무·스크리닝"], ["backtest", "백테스트"], ["journal", "매매일지"]];
 
 export default function App() {
   const [health, setHealth] = useState<Health | null>(null);
@@ -19,7 +21,12 @@ export default function App() {
   const [watch, setWatch] = useState<string[]>(loadWatchlist);
   const [code, setCode] = useState<string | null>(() => loadWatchlist()[0] ?? "005930");
   const [tab, setTab] = useState<Tab>("signal");
+  const [journal, setJournal] = useState<JournalEntry[]>(loadJournal);
   const { data, error, loading } = useStock(code);
+  const updateJournal = useCallback((next: JournalEntry[]) => {
+    setJournal(next);
+    saveJournal(next);
+  }, []);
 
   useEffect(() => {
     fetchHealth().then(setHealth).catch(() => setHealthErr(true));
@@ -80,12 +87,13 @@ export default function App() {
 
               {tab === "signal" && (
                 <>
-                  <RecommendationCard rec={data.rec} />
+                  <AnalysisCard a={data.analysis} journal={journal} />
                   <div className="card"><ChartPanel candles={data.candles} /></div>
                 </>
               )}
-              {tab === "fundamentals" && <FundamentalsTab f={data.fundamentals} rec={data.rec} />}
-              {tab === "backtest" && <BacktestTab candles={data.candles} />}
+              {tab === "fundamentals" && <FundamentalsTab f={data.fundamentals} a={data.analysis} />}
+              {tab === "backtest" && <BacktestTab candles={data.candles} indexCandles={data.indexCandles} />}
+              {tab === "journal" && <JournalTab key={data.info.code} data={data} entries={journal} onChange={updateJournal} />}
             </>
           )}
         </main>

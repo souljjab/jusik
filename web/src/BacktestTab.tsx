@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ColorType, createChart, type Time } from "lightweight-charts";
-import { DEFAULT_BACKTEST, runBacktest, type Candle } from "@jusik/shared";
+import { DEFAULT_BACKTEST, expectancy, runBacktest, runStageBacktest, type BacktestResult, type Candle } from "@jusik/shared";
 import { num, pct, tone, won } from "./format";
 import { useChartColors } from "./theme";
 
@@ -13,18 +13,34 @@ function Metric({ label, value, cls }: { label: string; value: string; cls?: str
   );
 }
 
-export function BacktestTab({ candles }: { candles: Candle[] }) {
+type Strategy = "stage" | "score";
+
+export function BacktestTab({ candles, indexCandles }: { candles: Candle[]; indexCandles: Candle[] | null }) {
   const colors = useChartColors();
+  const [strategy, setStrategy] = useState<Strategy>("stage");
   const [initialCash, setCash] = useState(DEFAULT_BACKTEST.initialCash);
+  const [useRegime, setUseRegime] = useState(true);
   const [buy, setBuy] = useState(DEFAULT_BACKTEST.buyThreshold);
   const [sell, setSell] = useState(DEFAULT_BACKTEST.sellThreshold);
   const [stop, setStop] = useState(0);
   const chartEl = useRef<HTMLDivElement>(null);
 
-  const result = useMemo(
-    () => runBacktest(candles, { initialCash, buyThreshold: buy, sellThreshold: sell, stopLossPct: stop / 100 }),
-    [candles, initialCash, buy, sell, stop],
+  const result: BacktestResult | null = useMemo(
+    () =>
+      strategy === "stage"
+        ? runStageBacktest(candles, indexCandles ?? undefined, { initialCash, useRegime })
+        : runBacktest(candles, { initialCash, buyThreshold: buy, sellThreshold: sell, stopLossPct: stop / 100 }),
+    [strategy, candles, indexCandles, initialCash, useRegime, buy, sell, stop],
   );
+
+  const ev = useMemo(() => {
+    if (!result || result.trades.length < 3) return null;
+    const w = result.trades.filter((t) => t.returnPct > 0);
+    const l = result.trades.filter((t) => t.returnPct <= 0);
+    if (!w.length || !l.length) return null;
+    const mean = (xs: number[]) => xs.reduce((a, t) => a + t, 0) / xs.length;
+    return expectancy({ winRate: w.length / result.trades.length, avgWinPct: mean(w.map((t) => t.returnPct)), avgLossPct: mean(l.map((t) => t.returnPct)) });
+  }, [result]);
 
   useEffect(() => {
     if (!chartEl.current || !result) return;
@@ -49,15 +65,32 @@ export function BacktestTab({ candles }: { candles: Candle[] }) {
 
   return (
     <div className="card">
+      <div className="seg" role="radiogroup" aria-label="전략">
+        <button role="radio" aria-checked={strategy === "stage"} className={strategy === "stage" ? "on" : ""} onClick={() => setStrategy("stage")}>주봉 단계 전략 (기본)</button>
+        <button role="radio" aria-checked={strategy === "score"} className={strategy === "score" ? "on" : ""} onClick={() => setStrategy("score")}>일봉 점수 전략 (단기)</button>
+      </div>
       <p className="muted small">
-        기술적 점수 신호를 과거에 그대로 적용해 본 결과예요. 신호는 당일 종가로 계산하고 <b>다음 거래일 시가</b>에 체결한다고 가정해요.
+        {strategy === "stage" ? (
+          <>주봉이 마감된 뒤 신호를 갱신하고 <b>다음 거래일 시가</b>에 체결해요. 매수: 2단계 상승 + 과열 아님. 매도: 3단계 이탈·4단계 또는 손절가 이탈(손절가는 최근 8주 저점에서 시작해 올라가기만 해요).</>
+        ) : (
+          <>일봉 기술 점수가 기준 이상이면 다음 거래일 시가에 매수, 기준 이하면 매도해요.</>
+        )}{" "}
         재무 지표는 과거 시점 데이터가 없어 백테스트에 포함하지 않아요.
       </p>
       <div className="form">
         <label>투자금(원)<input type="number" min={100000} step={1000000} value={initialCash} onChange={(e) => setCash(Math.max(100000, +e.target.value || 0))} /></label>
-        <label>매수 기준 점수 ≥<input type="number" min={-100} max={100} value={buy} onChange={(e) => setBuy(+e.target.value)} /></label>
-        <label>매도 기준 점수 ≤<input type="number" min={-100} max={100} value={sell} onChange={(e) => setSell(+e.target.value)} /></label>
-        <label>손절 %(0=사용 안 함)<input type="number" min={0} max={50} value={stop} onChange={(e) => setStop(Math.max(0, +e.target.value || 0))} /></label>
+        {strategy === "stage" ? (
+          <label className="check">
+            <input type="checkbox" checked={useRegime} disabled={!indexCandles} onChange={(e) => setUseRegime(e.target.checked)} />
+            지수 약세 국면에서는 매수 안 함{!indexCandles && " (지수 데이터 없음)"}
+          </label>
+        ) : (
+          <>
+            <label>매수 기준 점수 ≥<input type="number" min={-100} max={100} value={buy} onChange={(e) => setBuy(+e.target.value)} /></label>
+            <label>매도 기준 점수 ≤<input type="number" min={-100} max={100} value={sell} onChange={(e) => setSell(+e.target.value)} /></label>
+            <label>손절 %(0=사용 안 함)<input type="number" min={0} max={50} value={stop} onChange={(e) => setStop(Math.max(0, +e.target.value || 0))} /></label>
+          </>
+        )}
       </div>
       {!result ? (
         <p className="muted">데이터가 부족해서 백테스트를 할 수 없어요.</p>
@@ -72,9 +105,13 @@ export function BacktestTab({ candles }: { candles: Candle[] }) {
             <Metric label="거래 횟수" value={`${result.tradeCount}회`} />
             <Metric label="승률" value={result.tradeCount ? `${num(result.winRatePct, 0)}%` : "-"} />
             <Metric label="최종 평가금액" value={won(result.finalEquity)} />
+            {ev && <Metric label="거래당 기대값" value={pct(ev.expectancyPct)} cls={tone(ev.expectancyPct)} />}
+            {ev && <Metric label="손익비(평균이익/손실)" value={ev.payoff ? `${num(ev.payoff, 2)} : 1` : "-"} />}
+            {ev && <Metric label="켈리 비중(절반)" value={`${num(ev.kellyPct, 0)}% (${num(ev.halfKellyPct, 0)}%)`} />}
           </div>
+          {result.tradeCount < 10 && <p className="warn">거래가 {result.tradeCount}회뿐이라 승률·기대값은 통계로서 의미가 약해요. 여러 종목, 더 긴 기간으로 확인하세요.</p>}
           {result.totalReturnPct < result.buyHoldReturnPct && (
-            <p className="warn">이 구간에서는 신호 매매가 단순 보유보다 성과가 낮았어요. 신호를 그대로 믿기보다 참고용으로만 보세요.</p>
+            <p className="warn">이 구간에서는 신호 매매가 단순 보유보다 성과가 낮았어요. 하락 방어(MDD)까지 같이 비교해 보세요.</p>
           )}
           <div ref={chartEl} />
           {result.openPosition && <p className="muted small">※ 마지막 날 기준 보유 중인 포지션이 있어요(거래 내역에는 청산된 거래만 표시).</p>}

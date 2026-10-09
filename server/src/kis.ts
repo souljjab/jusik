@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import type { Candle, Fundamentals, Quote, StockInfo } from "@jusik/shared";
+import type { Candle, Fundamentals, Market, Quote, StockInfo } from "@jusik/shared";
 import type { MarketDataProvider } from "./provider";
 import { findStock, searchStocks } from "./stocks";
 
@@ -79,33 +79,54 @@ export class KisProvider implements MarketDataProvider {
   }
 
   async getCandles(code: string, count: number): Promise<Candle[]> {
+    return this.pagedDaily(
+      "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
+      "FHKST03010100",
+      { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: code, FID_PERIOD_DIV_CODE: "D", FID_ORG_ADJ_PRC: "0" /* 수정주가 반영 */ },
+      (r) => ({ close: r.stck_clpr, open: r.stck_oprc, high: r.stck_hgpr, low: r.stck_lwpr, volume: r.acml_vol }),
+      count,
+    );
+  }
+
+  /** 업종(지수) 일봉. 0001=코스피, 1001=코스닥 */
+  async getIndexCandles(market: Market, count: number): Promise<Candle[]> {
+    return this.pagedDaily(
+      "/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice",
+      "FHKUP03500100",
+      { FID_COND_MRKT_DIV_CODE: "U", FID_INPUT_ISCD: market === "KOSPI" ? "0001" : "1001", FID_PERIOD_DIV_CODE: "D" },
+      (r) => ({ close: r.bstp_nmix_prpr, open: r.bstp_nmix_oprc, high: r.bstp_nmix_hgpr, low: r.bstp_nmix_lwpr, volume: r.acml_vol }),
+      count,
+    );
+  }
+
+  /** 1회 호출당 최대 100봉이라 구간을 나눠 과거로 거슬러 올라가며 일봉을 모은다 */
+  private async pagedDaily(
+    path: string,
+    trId: string,
+    params: Record<string, string>,
+    pick: (row: Record<string, string>) => Record<"close" | "open" | "high" | "low" | "volume", string | undefined>,
+    count: number,
+  ): Promise<Candle[]> {
     const byDate = new Map<string, Candle>();
     let end = new Date();
-    // 1회 호출당 최대 100봉이라 구간을 나눠 과거로 거슬러 올라간다
     for (let guard = 0; guard < 20 && byDate.size < count; guard++) {
       const start = new Date(end);
       start.setUTCDate(start.getUTCDate() - 140);
-      const o = await this.get("/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice", "FHKST03010100", {
-        FID_COND_MRKT_DIV_CODE: "J",
-        FID_INPUT_ISCD: code,
-        FID_INPUT_DATE_1: ymd(start),
-        FID_INPUT_DATE_2: ymd(end),
-        FID_PERIOD_DIV_CODE: "D",
-        FID_ORG_ADJ_PRC: "0", // 0: 수정주가 반영
-      });
+      const o = await this.get(path, trId, { ...params, FID_INPUT_DATE_1: ymd(start), FID_INPUT_DATE_2: ymd(end) });
       const rows = ((o.output2 as Record<string, string>[] | undefined) ?? []).filter((r) => r.stck_bsop_date);
       if (rows.length === 0) break;
       let oldest = rows[0]!.stck_bsop_date!;
       for (const r of rows) {
-        const close = num(r.stck_clpr);
+        const v = pick(r);
+        const close = num(v.close);
         if (close == null) continue;
         byDate.set(r.stck_bsop_date!, {
           date: dash(r.stck_bsop_date!),
-          open: num(r.stck_oprc) ?? close,
-          high: num(r.stck_hgpr) ?? close,
-          low: num(r.stck_lwpr) ?? close,
+          open: num(v.open) ?? close,
+          high: num(v.high) ?? close,
+          low: num(v.low) ?? close,
           close,
-          volume: num(r.acml_vol) ?? 0,
+          volume: num(v.volume) ?? 0,
         });
         if (r.stck_bsop_date! < oldest) oldest = r.stck_bsop_date!;
       }
@@ -140,8 +161,25 @@ export class KisProvider implements MarketDataProvider {
         f.revenueGrowth = num(latest.grs);
         f.opIncomeGrowth = num(latest.bsop_prfi_inrt);
         f.debtRatio = num(latest.lblt_rate);
+        f.reserveRatio = num(latest.rsrv_rate);
         const roe = num(latest.roe_val);
         if (roe != null) f.roe = roe;
+      }
+    } catch {
+      /* best effort */
+    }
+    // 안정성 비율(유동비율). 응답 필드가 계정마다 비어 있을 수 있어 best effort
+    try {
+      const r = await this.get("/uapi/domestic-stock/v1/finance/stability-ratio", "FHKST66430600", {
+        FID_DIV_CLS_CODE: "0",
+        fid_cond_mrkt_div_code: "J",
+        fid_input_iscd: code,
+      });
+      const rows = (r.output as Record<string, string>[] | undefined) ?? [];
+      const latest = [...rows].sort((a, b) => (b.stac_yymm ?? "").localeCompare(a.stac_yymm ?? ""))[0];
+      if (latest) {
+        f.currentRatio = num(latest.crnt_rate);
+        f.debtRatio ??= num(latest.lblt_rate);
       }
     } catch {
       /* best effort */

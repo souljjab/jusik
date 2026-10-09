@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildApp } from "../src/app";
 import { MockProvider } from "../src/mock";
 import { TtlCache } from "../src/cache";
-import { recommend } from "@jusik/shared";
+import { analyze } from "@jusik/shared";
 
 describe("api (mock provider)", () => {
   const app = buildApp(new MockProvider());
@@ -25,16 +25,26 @@ describe("api (mock provider)", () => {
     expect((await app.inject("/api/stocks/abc/candles")).statusCode).toBe(400);
   });
 
-  it("returns sorted, valid candles and a recommendation can be computed", async () => {
-    const { candles } = (await app.inject("/api/stocks/005930/candles?count=300")).json();
-    expect(candles).toHaveLength(300);
+  it("returns sorted, valid candles and a full analysis can be computed", async () => {
+    const { candles } = (await app.inject("/api/stocks/005930/candles?count=750")).json();
+    expect(candles).toHaveLength(750);
     for (let i = 1; i < candles.length; i++) expect(candles[i].date > candles[i - 1].date).toBe(true);
     for (const c of candles) {
       expect(c.high).toBeGreaterThanOrEqual(Math.max(c.open, c.close));
       expect(c.low).toBeLessThanOrEqual(Math.min(c.open, c.close));
     }
     const { fundamentals } = (await app.inject("/api/stocks/005930/overview")).json();
-    expect(recommend(candles, fundamentals)).not.toBeNull();
+    const { candles: indexCandles } = (await app.inject("/api/index/KOSPI/candles?count=750")).json();
+    const a = analyze({ candles, fundamentals, indexCandles });
+    expect(a).not.toBeNull();
+    expect(a!.regime).not.toBeNull();
+    expect(a!.screening.known).toBeGreaterThanOrEqual(6);
+  });
+
+  it("serves index candles and rejects unknown markets", async () => {
+    const ok = (await app.inject("/api/index/KOSDAQ/candles?count=100")).json();
+    expect(ok.candles).toHaveLength(100);
+    expect((await app.inject("/api/index/NASDAQ/candles")).statusCode).toBe(400);
   });
 
   it("mock data is deterministic per code", async () => {

@@ -1,4 +1,4 @@
-import type { Candle, Fundamentals, Quote, StockInfo } from "@jusik/shared";
+import type { Candle, Fundamentals, Market, Quote, StockInfo } from "@jusik/shared";
 import type { MarketDataProvider } from "./provider";
 import { findStock, searchStocks } from "./stocks";
 
@@ -64,6 +64,10 @@ export class MockProvider implements MarketDataProvider {
     };
   }
 
+  async getIndexCandles(market: Market, count: number): Promise<Candle[]> {
+    return this.build(`INDEX:${market}`, 2000).slice(-count);
+  }
+
   async getFundamentals(code: string): Promise<Fundamentals> {
     const r = rng(hash(code + "f"));
     const eps = Math.round(1000 + r() * 9000);
@@ -78,15 +82,17 @@ export class MockProvider implements MarketDataProvider {
       revenueGrowth: round1(-10 + r() * 45),
       opIncomeGrowth: round1(-25 + r() * 80),
       debtRatio: round1(30 + r() * 220),
+      currentRatio: round1(60 + r() * 220),
+      reserveRatio: round1(80 + r() * 1500),
     };
   }
 
-  private build(code: string): Candle[] {
+  private build(code: string, startPrice?: number): Candle[] {
     const hit = this.cache.get(code);
     if (hit) return hit;
     const r = rng(hash(code));
     const days = businessDays(new Date(), 750);
-    let price = 5000 + Math.floor(r() * 150) * 1000;
+    let price = startPrice ?? 5000 + Math.floor(r() * 150) * 1000;
     // 장기 추세와 사이클을 섞어 신호가 다양하게 나오도록 한다
     const drift = (r() - 0.45) * 0.0012;
     const cycleLen = 60 + Math.floor(r() * 80);

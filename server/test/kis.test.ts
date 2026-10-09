@@ -56,6 +56,30 @@ describe("KisProvider", () => {
     await expect(new KisProvider(cfg).getQuote("005930")).rejects.toThrow(/OPSQ0002/);
   });
 
+  it("reads index candles from the index endpoint", async () => {
+    vi.stubGlobal("fetch", async (url: string) => {
+      if (url.endsWith("/oauth2/tokenP")) return json({ access_token: "T", expires_in: 100000 });
+      expect(url).toContain("inquire-daily-indexchartprice");
+      const q = new URL(url).searchParams;
+      expect(q.get("FID_INPUT_ISCD")).toBe("1001");
+      if (q.get("FID_INPUT_DATE_2")!.startsWith("2024")) return json({ rt_cd: "0", output2: [] });
+      return json({ rt_cd: "0", output2: [{ stck_bsop_date: "20240110", bstp_nmix_prpr: "850.5", bstp_nmix_oprc: "845.0", bstp_nmix_hgpr: "852.0", bstp_nmix_lwpr: "843.0", acml_vol: "1,000" }] });
+    });
+    const cs = await new KisProvider(cfg).getIndexCandles("KOSDAQ", 10);
+    expect(cs).toEqual([{ date: "2024-01-10", open: 845, high: 852, low: 843, close: 850.5, volume: 1000 }]);
+  });
+
+  it("reads reserve and current ratios", async () => {
+    vi.stubGlobal("fetch", async (url: string) => {
+      if (url.endsWith("/oauth2/tokenP")) return json({ access_token: "T", expires_in: 100000 });
+      if (url.includes("financial-ratio")) return json({ rt_cd: "0", output: [{ stac_yymm: "202312", grs: "5.0", bsop_prfi_inrt: "-3.0", lblt_rate: "120", rsrv_rate: "850", roe_val: "9.5" }] });
+      if (url.includes("stability-ratio")) return json({ rt_cd: "0", output: [{ stac_yymm: "202312", crnt_rate: "180.5", lblt_rate: "120" }] });
+      return json({ rt_cd: "0", output: { per: "9", pbr: "0.9", eps: "1,000", bps: "10,000" } });
+    });
+    const f = await new KisProvider(cfg).getFundamentals("005930");
+    expect(f).toMatchObject({ debtRatio: 120, reserveRatio: 850, currentRatio: 180.5, revenueGrowth: 5, opIncomeGrowth: -3, roe: 9.5 });
+  });
+
   it("builds fundamentals even if the ratio endpoint fails", async () => {
     vi.stubGlobal("fetch", async (url: string) => {
       if (url.endsWith("/oauth2/tokenP")) return json({ access_token: "T", expires_in: 100000 });

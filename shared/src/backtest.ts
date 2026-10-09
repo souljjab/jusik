@@ -1,7 +1,7 @@
 import type { Candle } from "./types";
 import { computeIndicators } from "./indicators";
 import { technicalScoreAt } from "./technical";
-import { MIN_CANDLES } from "./recommend";
+import { MIN_CANDLES } from "./action";
 
 export interface BacktestOptions {
   initialCash: number;
@@ -127,6 +127,11 @@ export function runBacktest(candles: Candle[], partial: Partial<BacktestOptions>
     });
   }
 
+  return summarize(equity, trades, o.initialCash, shares > 0);
+}
+
+/** 자산 곡선과 거래 목록으로 성과 지표를 계산한다 */
+export function summarize(equity: EquityPoint[], trades: Trade[], initialCash: number, openPosition: boolean): BacktestResult {
   const finalEquity = equity[equity.length - 1]!.equity;
   const bhFinal = equity[equity.length - 1]!.buyHold;
   const days = (Date.parse(equity[equity.length - 1]!.date) - Date.parse(equity[0]!.date)) / 86_400_000;
@@ -144,12 +149,12 @@ export function runBacktest(candles: Candle[], partial: Partial<BacktestOptions>
     trades,
     equity,
     finalEquity,
-    totalReturnPct: (finalEquity / o.initialCash - 1) * 100,
-    buyHoldReturnPct: (bhFinal / o.initialCash - 1) * 100,
-    cagrPct: years > 0.1 ? ((finalEquity / o.initialCash) ** (1 / years) - 1) * 100 : 0,
+    totalReturnPct: (finalEquity / initialCash - 1) * 100,
+    buyHoldReturnPct: (bhFinal / initialCash - 1) * 100,
+    cagrPct: years > 0.1 ? ((finalEquity / initialCash) ** (1 / years) - 1) * 100 : 0,
     maxDrawdownPct: mdd * 100,
     winRatePct: trades.length ? (wins / trades.length) * 100 : 0,
     tradeCount: trades.length,
-    openPosition: shares > 0,
+    openPosition,
   };
 }
