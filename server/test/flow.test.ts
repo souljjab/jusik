@@ -4,6 +4,7 @@ import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
 import { buildApp } from "../src/app";
 import { Exporter } from "../src/exporter";
+import { MockExtras, MockMacro } from "../src/extras";
 import { monitorPositions, runScan, syncPaperWithDeposit } from "../src/scanner";
 import { evaluatePaper, runReplay } from "../src/evaluate";
 import { Scheduler } from "../src/scheduler";
@@ -165,7 +166,7 @@ describe("export", () => {
     await writeExcel(tables, file);
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.readFile(file);
-    expect(wb.worksheets.map((w) => w.name)).toEqual(["요약", "추천(최신)", "추천이력", "모의포지션", "매매일지", "성과", "규칙점검"]);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(["요약", "추천(최신)", "추천이력", "모의포지션", "매매일지", "성과", "규칙점검", "일일복기"]);
     const rec = wb.getWorksheet("추천(최신)")!;
     expect(rec.rowCount).toBe(1 + store.state.latestScan!.candidates.length);
     expect(rec.getRow(1).getCell(4).value).toBe("종목명");
@@ -213,7 +214,7 @@ describe("export", () => {
     }) as typeof fetch;
     const r = await syncSheets(tables, { spreadsheetId: "SID", getToken: async () => "TOKEN", fetchImpl });
     const add = calls.find((c) => c.url.endsWith(":batchUpdate"))!;
-    expect(add.body.requests.map((x: any) => x.addSheet.properties.title)).toEqual(["추천(최신)", "추천이력", "모의포지션", "매매일지", "성과", "규칙점검"]);
+    expect(add.body.requests.map((x: any) => x.addSheet.properties.title)).toEqual(["추천(최신)", "추천이력", "모의포지션", "매매일지", "성과", "규칙점검", "일일복기"]);
     expect(calls.filter((c) => c.url.includes(":clear"))).toHaveLength(tables.length);
     const puts = calls.filter((c) => c.method === "PUT");
     expect(puts).toHaveLength(tables.length);
@@ -228,7 +229,7 @@ describe("HTTP API", () => {
     const s = setup({ paperEnabled: false });
     const exporter = new Exporter({ excelPath: join(s.dir, "jusik.xlsx"), sheets: null, debounceMs: 1, build: () => buildTables(s.store.state, { provider: "stub", sample: true, now: new Date() }) });
     const scheduler = new Scheduler(s.deps, () => exporter.request());
-    return { ...s, exporter, scheduler, app: buildApp({ provider: s.provider, store: s.store, exporter, scheduler }) };
+    return { ...s, exporter, scheduler, app: buildApp({ provider: s.provider, store: s.store, exporter, scheduler, macro: new MockMacro(), extras: new MockExtras() }) };
   }
 
   it("serves state, updates settings with clamping, and syncs the paper account to the deposit", async () => {
@@ -374,7 +375,7 @@ describe("rule check (2단계)", () => {
   it("serves evaluation endpoints and blocks concurrent replays", async () => {
     const s = setup({ paperEnabled: false });
     const exporter = new Exporter({ excelPath: join(s.dir, "j.xlsx"), sheets: null, debounceMs: 1, build: () => buildTables(s.store.state, { provider: "stub", sample: true, now: new Date() }) });
-    const app = buildApp({ provider: s.provider, store: s.store, exporter, scheduler: new Scheduler(s.deps) });
+    const app = buildApp({ provider: s.provider, store: s.store, exporter, scheduler: new Scheduler(s.deps), macro: new MockMacro(), extras: new MockExtras() });
     expect((await app.inject("/api/evaluate/paper")).json()).toMatchObject({ tradeCount: 0 });
     let release!: () => void;
     s.provider.gate = new Promise<void>((r) => (release = r));

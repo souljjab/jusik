@@ -1,9 +1,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
-import { isValidCode, type JournalEntry, type Market } from "@jusik/shared";
+import {
+  averagingDownCheck, isValidCode, macroNotes, marketClock, paperTrackingStatus, preTradeChecklist, regionOfCode,
+  type JournalCheck, type JournalEntry, type MacroResponse, type Market, type Note, type Region, type ServerState, type StockExtras,
+} from "@jusik/shared";
 import { TtlCache } from "./cache";
 import type { Exporter } from "./exporter";
+import { loadStockExtras, type ExtrasSource, type MacroSource } from "./extras";
 import type { MarketDataProvider } from "./provider";
 import { evaluatePaper, runReplay } from "./evaluate";
 import { syncPaperWithDeposit } from "./scanner";
@@ -15,17 +19,25 @@ export interface AppDeps {
   store: Store;
   exporter: Exporter;
   scheduler: Scheduler;
+  macro: MacroSource;
+  extras: ExtrasSource;
+  now?: () => Date;
 }
 
 const BAD_CODE = { error: "종목코드는 6자리 숫자(국내) 또는 영문 티커(미국, 예: AAPL)여야 해요." };
 const MARKETS = ["KOSPI", "KOSDAQ", "US"] as const;
 
 const normCode = (c: string) => (/^\d{6}$/.test(c) ? c : c.toUpperCase());
+const REGIONS: Region[] = ["KR", "US"];
+const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const optNum = (v: unknown) => (v != null && v !== "" && Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : undefined);
+const optText = (v: unknown, max: number) => (v != null && String(v).trim() ? String(v).trim().slice(0, max) : undefined);
 
-export function buildApp({ provider, store, exporter, scheduler }: AppDeps) {
+export function buildApp({ provider, store, exporter, scheduler, macro, extras, now = () => new Date() }: AppDeps) {
   const app = Fastify({ logger: false });
   const cache = new TtlCache(60_000);
   const slowCache = new TtlCache(30 * 60_000);
+  const extrasCache = new TtlCache(10 * 60_000);
 
   // 같은 PC의 화면(5173)과 로컬 서버만 쓰는 도구라 localhost 계열만 허용한다. 배포할 때는 허용 도메인을 직접 지정하세요.
   app.register(cors, { origin: [/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/, /^capacitor:\/\/localhost$/, /^https?:\/\/localhost$/] });
@@ -59,14 +71,42 @@ export function buildApp({ provider, store, exporter, scheduler }: AppDeps) {
     return { candles: await slowCache.get(`i:${market}:${count}`, () => provider.getIndexCandles(market, count)) };
   });
 
+  // 국내 종목 수급·공시·업종(미국 종목은 supported=false)
+  app.get<{ Params: { code: string } }>("/api/stocks/:code/extras", async (req, reply) => {
+    const code = normCode(req.params.code);
+    if (!isValidCode(code)) return reply.code(400).send(BAD_CODE);
+    const today = marketClock(regionOfCode(code), now()).date;
+    return extrasCache.get<StockExtras>(`x:${code}:${today}`, () => loadStockExtras(extras, code, today));
+  });
+
+  // 매크로(FRED): 금리차·VIX·10년물·초과 유동성·원/달러
+  app.get("/api/macro", async (): Promise<MacroResponse> => {
+    try {
+      const m = await macro.getSnapshot();
+      const ok = m.snapshot.asOf != null;
+      return {
+        snapshot: ok ? m.snapshot : null,
+        notes: { KR: ok ? macroNotes(m.snapshot, "KR") : [], US: ok ? macroNotes(m.snapshot, "US") : [] },
+        errors: m.errors, fetchedAt: m.fetchedAt, sample: macro.sample,
+      };
+    } catch (e) {
+      return { snapshot: null, notes: { KR: [], US: [] }, errors: [errText(e)], fetchedAt: null, sample: macro.sample };
+    }
+  });
+
   // ---- 단타 스캔 / 설정 / 모의계좌 ----
-  app.get("/api/state", async () => ({
-    settings: store.state.settings,
-    status: { provider: provider.name, sample: provider.sample, scheduler: scheduler.status(), export: exporter.status },
-    latestScan: store.state.latestScan,
-    paper: store.state.paper,
-    counts: { journal: store.state.journal.length, history: store.state.history.length },
-  }));
+  app.get("/api/state", async (): Promise<ServerState> => {
+    const t = now();
+    const tracking = (r: Region) => paperTrackingStatus(store.state.journal, marketClock(r, t).date, { region: r });
+    return {
+      settings: store.state.settings,
+      status: { provider: provider.name, sample: provider.sample, scheduler: scheduler.status(), export: exporter.status },
+      latestScan: store.state.latestScan,
+      paper: store.state.paper,
+      counts: { journal: store.state.journal.length, history: store.state.history.length, reviews: store.state.reviews.length },
+      paperTracking: { KR: tracking("KR"), US: tracking("US") },
+    };
+  });
 
   app.put("/api/settings", async (req) => {
     const before = store.state.settings;
@@ -119,15 +159,48 @@ export function buildApp({ provider, store, exporter, scheduler }: AppDeps) {
     if (!(price > 0) || !(qty > 0) || !Number.isInteger(qty)) return reply.code(400).send({ error: "가격은 0보다 크고 수량은 1 이상의 정수여야 해요." });
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(b.date ?? ""))) return reply.code(400).send({ error: "날짜 형식은 YYYY-MM-DD 예요." });
     const info = await provider.getInfo(code).catch(() => undefined);
+    const date = String(b.date);
+    const stop = optNum(b.stop), target = optNum(b.target), reason = String(b.reason ?? "").slice(0, 500);
+    const weightPct = optNum(b.weightPct) != null ? Math.min(100, optNum(b.weightPct)!) : undefined;
+
+    // 매수는 주문 전 체크리스트(손절가·목표가·근거·비중)와 손실 중 추가 매수를 점검한다(5.5, M4-02). 막지는 않고 기록에 남긴다
+    const notes: Note[] = [];
+    if (b.side === "BUY") {
+      notes.push(...preTradeChecklist({ stop, target, reason, price, weightPct }));
+      notes.push(...averagingDownCheck(store.state.journal, { code, side: "BUY", price, date }).notes);
+    }
+    const violations = notes.filter((n) => n.tone === "bad").map((n) => n.text);
+    const regime = info ? (store.state.latestScan?.regimes[info.market] ?? null) : null;
     const entry: JournalEntry = {
-      id: globalThis.crypto.randomUUID(), code, name: info?.name ?? String(b.name ?? code), date: String(b.date), side: b.side, price, qty,
-      stop: b.stop && Number(b.stop) > 0 ? Number(b.stop) : undefined, reason: String(b.reason ?? "").slice(0, 500),
-      review: b.review ? String(b.review).slice(0, 1000) : undefined, source: "수동",
+      id: globalThis.crypto.randomUUID(), code, name: info?.name ?? String(b.name ?? code), date, side: b.side, price, qty,
+      stop, reason, review: optText(b.review, 1000), source: "수동",
+      ...(optText(b.strategy, 60) ? { strategy: optText(b.strategy, 60) } : {}),
+      ...(target != null ? { target } : {}),
+      ...(weightPct != null ? { weightPct } : {}),
+      ...(b.side === "BUY" && regime ? { regime } : {}),
+      ...(b.side === "SELL" && optText(b.exitReason, 60) ? { exitReason: optText(b.exitReason, 60) } : {}),
+      ...(optText(b.emotion, 200) ? { emotion: optText(b.emotion, 200) } : {}),
+      ...(violations.length ? { violations } : {}),
     };
     store.state.journal.push(entry);
     store.save();
     exporter.request();
-    return reply.code(201).send({ entry });
+    const check: JournalCheck = { notes, violations };
+    return reply.code(201).send({ entry, check });
+  });
+
+  // 복기 메모·감정·청산 사유 고치기(매매 뒤에 채우는 칸)
+  app.patch<{ Params: { id: string }; Body: Partial<JournalEntry> }>("/api/journal/:id", async (req, reply) => {
+    const e = store.state.journal.find((x) => x.id === req.params.id);
+    if (!e) return reply.code(404).send({ error: "기록을 찾을 수 없어요." });
+    const b = req.body ?? {};
+    if ("review" in b) e.review = optText(b.review, 1000);
+    if ("emotion" in b) e.emotion = optText(b.emotion, 200);
+    if ("exitReason" in b && e.side === "SELL") e.exitReason = optText(b.exitReason, 60);
+    if ("strategy" in b) e.strategy = optText(b.strategy, 60);
+    store.save();
+    exporter.request();
+    return { entry: e };
   });
 
   app.delete<{ Params: { id: string } }>("/api/journal/:id", async (req, reply) => {
@@ -137,6 +210,27 @@ export function buildApp({ provider, store, exporter, scheduler }: AppDeps) {
     store.save();
     exporter.request();
     return { ok: true };
+  });
+
+  // ---- 일일 복기(M5-01) ----
+  app.get("/api/reviews", async () => ({ reviews: [...store.state.reviews].reverse() }));
+
+  app.post<{ Body: { region?: string } }>("/api/reviews", async (req, reply) => {
+    const region = String(req.body?.region ?? "").toUpperCase() as Region;
+    if (!REGIONS.includes(region)) return reply.code(400).send({ error: "지역은 KR 또는 US 여야 해요." });
+    const r = await scheduler.buildReview(region);
+    if (r === "busy") return reply.code(409).send({ error: "스캔·점검 중이에요. 잠시 뒤에 다시 시도하세요." });
+    exporter.request();
+    return reply.code(201).send(r);
+  });
+
+  app.put<{ Params: { region: string; date: string }; Body: { comment?: string } }>("/api/reviews/:region/:date", async (req, reply) => {
+    const r = store.state.reviews.find((x) => x.region === req.params.region && x.date === req.params.date);
+    if (!r) return reply.code(404).send({ error: "복기를 찾을 수 없어요." });
+    r.userComment = optText(req.body?.comment, 2000);
+    store.save();
+    exporter.request();
+    return { review: r };
   });
 
   // ---- 내보내기 ----

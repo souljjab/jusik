@@ -1,4 +1,4 @@
-import { regionOfCode, type Candle, type Fundamentals, type Market, type Quote, type StockInfo } from "@jusik/shared";
+import { regionOfCode, type Candle, type Fundamentals, type Market, type PeriodFinancials, type Quote, type StockInfo } from "@jusik/shared";
 import type { MarketDataProvider, UniverseRow } from "./provider";
 import { findStock, searchStocks, STOCKS } from "./stocks";
 
@@ -97,7 +97,30 @@ export class MockProvider implements MarketDataProvider {
       debtRatio: round1(30 + r() * 220),
       currentRatio: round1(60 + r() * 220),
       reserveRatio: round1(80 + r() * 1500),
+      sectorPer: round1(6 + r() * 20),
+      ...this.periods(code, eps),
     };
+  }
+
+  /** 가짜 연간(최근 3년 + 추정 1년)·분기(최근 5분기 + 추정 1분기) 실적. 단위: 억 원 */
+  private periods(code: string, eps: number): { annual: PeriodFinancials[]; quarterly: PeriodFinancials[] } {
+    const r = rng(hash(code + "p"));
+    const growth = -0.08 + r() * 0.3;
+    const y = new Date().getUTCFullYear() - 1;
+    const row = (period: string, k: number, estimate: boolean): PeriodFinancials => {
+      const scale = (1 + growth) ** k * (1 + (r() - 0.5) * 0.04);
+      const revenue = Math.round(10_000 * scale);
+      const opIncome = Math.round(revenue * (0.06 + r() * 0.08));
+      return { period, estimate, revenue, opIncome, netIncome: Math.round(opIncome * 0.75), eps: Math.round(eps * scale) };
+    };
+    const annual = [0, 1, 2, 3].map((k) => row(`${y - 2 + k}.12${k === 3 ? "(E)" : ""}`, k, k === 3));
+    const qs = ["03", "06", "09", "12"];
+    const quarterly = [0, 1, 2, 3, 4, 5].map((k) => {
+      const yy = y + Math.floor((k + 1) / 4), q = qs[(k + 1) % 4]!;
+      const it = row(`${yy}.${q}${k === 5 ? "(E)" : ""}`, k / 4, k === 5);
+      return { ...it, revenue: Math.round(it.revenue! / 4), opIncome: Math.round(it.opIncome! / 4), netIncome: Math.round(it.netIncome! / 4), eps: Math.round(it.eps! / 4) };
+    });
+    return { annual, quarterly };
   }
 
   private build(code: string, startPrice?: number): Candle[] {

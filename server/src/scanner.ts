@@ -1,13 +1,17 @@
 import {
-  DAYTRADE_BY_REGION, currencyOfRegion, marketClock, marketRegime, newPaperAccount, PAPER_COSTS, paperCheckExits, paperOpen, planWithCash, regionOf, scoreDayTrade,
-  type Currency, type DayTradeCandidate, type DayTradeParams, type JournalEntry, type Market, type PaperAccount, type Region,
+  assessRegime, consecutiveLosses, currencyOfRegion, DAYTRADE_BY_REGION, marketClock, marketRegime, newPaperAccount, PAPER_COSTS, paperCheckExits, paperEquity, paperOpen,
+  paperTradesFromJournal, paperUnrealizedPnl, planWithCash, regionOf, regionOfCode, scoreDayTrade, todayPnl, tradingGuards,
+  type Currency, type DayTradeParams, type GuardResult, type JournalEntry, type MacroSnapshot, type Market, type PaperAccount, type Region,
 } from "@jusik/shared";
+import type { MacroSource } from "./extras";
 import type { MarketDataProvider, UniverseRow } from "./provider";
 import { HISTORY_LIMIT, type ScanResult, type Settings, type Store } from "./state";
 
 export interface Deps {
   provider: MarketDataProvider;
   store: Store;
+  /** 매크로(FRED) 스냅숏. 없으면 국면 점수에서 매크로를 뺀다 */
+  macro?: MacroSource | null;
   now?: () => Date;
 }
 
@@ -26,24 +30,83 @@ export function availableCash(s: Settings, paper: Record<Currency, PaperAccount>
   return cur === "KRW" ? s.depositKRW : s.depositUSD;
 }
 
-function buildPlans(store: Store, candidates: DayTradeCandidate[]) {
+/**
+ * 지역의 국면별 투자 상한(%): 그 지역에서 스캔한 시장 중 가장 보수적인(낮은) 상한.
+ * 국면을 판정하지 못한 시장은 중립 상한으로 본다(데이터가 없을 때 공격으로 가지 않게).
+ */
+export function exposureCapFor(s: Settings, scan: Pick<ScanResult, "markets" | "postures">, region: Region): number {
+  const caps = scan.markets.filter((m) => regionOf(m) === region).map((m) => scan.postures?.[m]?.exposureCapPct ?? s.postureCaps.NEUTRAL);
+  return caps.length ? Math.min(...caps) : s.postureCaps.NEUTRAL;
+}
+
+const heldValueOf = (acct: PaperAccount) => acct.positions.reduce((a, p) => a + p.qty * (p.lastPrice ?? p.entryPrice), 0);
+
+function buildPlans(store: Store, scan: ScanResult) {
   const { settings: s, paper } = store.state;
   const plans: ScanResult["plans"] = {};
+  scan.exposureCaps ??= {};
   for (const region of REGIONS) {
     const cur = currencyOfRegion(region);
     const acct = paper[cur];
+    const cap = exposureCapFor(s, scan, region);
+    scan.exposureCaps[cur] = cap;
     plans[cur] = planWithCash(
-      candidates.filter((c) => regionOf(c.market) === region),
+      scan.candidates.filter((c) => regionOf(c.market) === region),
       {
         cash: availableCash(s, paper, cur),
         riskPct: s.riskPct, maxWeightPct: s.maxWeightPct, maxPositions: s.maxPositions, reservePct: s.reservePct,
         feeRate: PAPER_COSTS[region].feeRate,
         heldCodes: acct.positions.map((p) => p.code),
         heldCount: acct.positions.length,
+        // 모의매매를 끄면 실제 보유분을 모르므로 예수금 × 상한만 적용한다
+        exposureCapPct: cap,
+        heldValue: s.paperEnabled ? heldValueOf(acct) : 0,
       },
     );
   }
   return plans;
+}
+
+const STREAK_RULE = "5.5 박용선·슈웨거";
+
+/**
+ * 계좌 단위 리스크 가드(M4-04 일일 손실 한도, 5.5 연속 손실 휴식). 모의계좌와 자동(모의) 매매 기록으로 계산한다.
+ * 연속 손실 휴식은 마지막 손실이 난 그날만 진입을 멈추고, 다음 날부터는 규모를 줄이라는 경고로 바꾼다
+ * (계속 막으면 새 거래가 없어 연속 손실이 영원히 풀리지 않는다).
+ */
+export function guardsFor(store: Store, region: Region, today: string, pending: JournalEntry[] = []): GuardResult {
+  const { settings: s, paper, journal } = store.state;
+  const acct = paper[currencyOfRegion(region)];
+  const mine = [...journal, ...pending].filter((e) => regionOfCode(e.code) === region);
+  const closed = paperTradesFromJournal(mine).map((t) => t.returnPct);
+  const lastSell = mine.filter((e) => e.source === "자동(모의)" && e.side === "SELL").reduce<string | null>((a, e) => (a == null || e.date > a ? e.date : a), null);
+  const streakToday = lastSell === today;
+  const pnl = todayPnl(mine, today) + paperUnrealizedPnl(acct);
+  const g = tradingGuards({
+    closedReturnsPct: streakToday ? closed : [],
+    todayPnl: pnl,
+    equityStartOfDay: paperEquity(acct) - pnl,
+    riskPct: s.riskPct,
+    maxWeightPct: s.maxWeightPct,
+    params: { dailyLossLimitPct: s.dailyLossLimitPct, maxConsecutiveLosses: s.maxConsecutiveLosses },
+  });
+  const streak = consecutiveLosses(closed);
+  if (!streakToday && s.maxConsecutiveLosses > 0 && streak >= s.maxConsecutiveLosses)
+    g.notes.push({ tone: "warn", text: `최근 ${streak}번 연속 손실 뒤 하루 쉬었어요. 다시 진입하되 규모를 줄이세요.`, rule: STREAK_RULE });
+  return g;
+}
+
+async function loadMacro(deps: Deps, result: ScanResult): Promise<MacroSnapshot | null> {
+  if (!deps.macro) return null;
+  try {
+    const m = await deps.macro.getSnapshot();
+    if (m.errors.length) result.errors.push(`매크로(FRED) ${m.errors.length}개 시리즈 실패: ${m.errors[0]}`);
+    result.macroAsOf = m.snapshot.asOf;
+    return m.snapshot.asOf ? m.snapshot : null;
+  } catch (e) {
+    result.errors.push(`매크로(FRED): ${msg(e)}`);
+    return null;
+  }
 }
 
 /** 시장별 후보 풀을 읽어 규칙에 맞는 단타 후보를 찾고, 예수금으로 살 수 있는 계획을 만든다. */
@@ -54,9 +117,11 @@ export async function runScan(deps: Deps): Promise<ScanResult> {
   const markets = MARKETS.filter((m) => s.markets[m]);
   const result: ScanResult = {
     id: globalThis.crypto.randomUUID(), at: at.toISOString(), markets, universeCount: 0, scannedCount: 0, rejected: {}, regimes: {},
+    postures: {}, exposureCaps: {}, guards: {}, macroAsOf: null,
     candidates: [], plans: {}, executed: [], errors: [],
   };
   const reject = (r: string) => (result.rejected[r] = (result.rejected[r] ?? 0) + 1);
+  const macro = await loadMacro(deps, result);
 
   for (const market of markets) {
     const region = regionOf(market);
@@ -64,8 +129,10 @@ export async function runScan(deps: Deps): Promise<ScanResult> {
     try {
       const idx = await provider.getIndexCandles(market, 250);
       result.regimes[market] = marketRegime(idx)?.regime ?? null;
+      result.postures![market] = assessRegime(idx, macro, s.postureCaps, { region });
     } catch (e) {
       result.regimes[market] = null;
+      result.postures![market] = null;
       result.errors.push(`${market} 지수: ${msg(e)}`);
     }
 
@@ -76,6 +143,7 @@ export async function runScan(deps: Deps): Promise<ScanResult> {
       result.errors.push(`${market} 후보 목록: ${msg(e)}`);
       continue;
     }
+    store.state.lastUniverse[market] = { at: result.at, rows };
     result.universeCount += rows.length;
     const pool = rows
       .filter((r) => {
@@ -105,9 +173,14 @@ export async function runScan(deps: Deps): Promise<ScanResult> {
   }
 
   result.candidates.sort((a, b) => b.score - a.score);
-  result.plans = buildPlans(store, result.candidates);
+  result.plans = buildPlans(store, result);
 
   if (s.paperEnabled) await autoTrade(deps, result, at);
+  // 자동매매가 계산하지 않은 지역도 화면에 보여 줄 가드 상태를 남긴다
+  for (const region of REGIONS) {
+    const cur = currencyOfRegion(region);
+    result.guards![cur] ??= guardsFor(store, region, marketClock(region, at).date);
+  }
 
   store.state.latestScan = result;
   for (const c of result.candidates.slice(0, 10))
@@ -135,16 +208,21 @@ async function autoTrade(deps: Deps, scan: ScanResult, at: Date) {
     }
     if (clock.inEntryWindow) {
       store.state.paper[cur] = acct;
-      const plan = buildPlans(store, scan.candidates)[cur]!;
+      // 방금 청산한 기록까지 반영한 오늘 손익으로 가드를 본다
+      const guard = guardsFor(store, region, clock.date, entries);
+      scan.guards![cur] = guard;
+      const plan = buildPlans(store, scan)[cur]!;
       scan.plans[cur] = plan; // 진입 시점의 계획을 그대로 남긴다(실행된 종목은 executed로 표시)
-      for (const item of plan.items) {
-        const o = paperOpen(acct, item, at, clock, PAPER_COSTS[region], scan.regimes[item.candidate.market] ?? null);
-        if (o) {
-          acct = o.acct;
-          entries.push(o.entry);
-          scan.executed.push(item.candidate.code);
+      const equity = paperEquity(acct);
+      if (!guard.blocked)
+        for (const item of plan.items) {
+          const o = paperOpen(acct, item, at, clock, PAPER_COSTS[region], scan.regimes[item.candidate.market] ?? null, equity);
+          if (o) {
+            acct = o.acct;
+            entries.push(o.entry);
+            scan.executed.push(item.candidate.code);
+          }
         }
-      }
     }
     store.state.paper[cur] = acct;
     store.state.journal.push(...entries);

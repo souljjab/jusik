@@ -1,5 +1,6 @@
 import { MIN_RELIABLE } from "./dayEval";
 import type { DayTradeCandidate } from "./daytrade";
+import type { SectorRow } from "./flows";
 import type { JournalEntry } from "./journal";
 import { REGIME_LABEL, type Regime } from "./regime";
 import { regionOf, regionOfCode, type Candle, type Market, type Note, type Region } from "./types";
@@ -36,6 +37,11 @@ export interface DailyReviewInput {
   regime?: string | null;
   /** 52주 신고가 판정용 종목 일봉(코드 → 오래된 순). newHighLookback개 이상 있어야 판정한다 */
   candlesByCode?: Record<string, Candle[]>;
+  /**
+   * 그날 업종 등락률(국내, 네이버 업종 시세). 있으면 섹터 흐름을 채운다.
+   * 만든 시점의 스냅숏이라 과거 날짜로 다시 만들 때는 넘기지 않는다
+   */
+  sectors?: SectorRow[];
 }
 
 export interface IndexMove {
@@ -73,6 +79,8 @@ export interface DailyReview {
   topLosers: MarketRowLike[];
   mostTraded: MarketRowLike[];
   newHighs: NewHigh[];
+  /** 섹터 흐름: 업종 등락률 상위·하위(데이터가 없으면 없음) */
+  sectorMoves?: { top: SectorRow[]; bottom: SectorRow[] };
   candidatesTop: { code: string; name: string; score: number }[];
   paper: PaperDaySummary;
   /** 데이터가 없어 채우지 못한 복기 항목. 사용자가 직접 확인할 부분 */
@@ -147,8 +155,14 @@ export function buildDailyReview(input: DailyReviewInput, params: Partial<DailyR
   }
   if (!input.indices.length) missing.push("지수");
 
-  // 2) 섹터 흐름: 업종 데이터가 없다
-  missing.push(REVIEW_MISSING.sector);
+  // 2) 섹터 흐름: 업종 등락률이 있으면 상위·하위, 없으면 직접 확인할 항목
+  const sectorRows = (input.sectors ?? []).filter((x) => Number.isFinite(x.changePct));
+  let sectorMoves: DailyReview["sectorMoves"];
+  if (sectorRows.length) {
+    const sorted = [...sectorRows].sort((a, b) => b.changePct - a.changePct);
+    const n = Math.min(P.topN, Math.floor(sorted.length / 2) || 1);
+    sectorMoves = { top: sorted.slice(0, n), bottom: sorted.slice(-n).reverse() };
+  } else missing.push(REVIEW_MISSING.sector);
 
   // 같은 종목이 여러 순위표에 겹쳐 올 수 있어 첫 줄만 쓴다
   const rows: MarketRowLike[] = [];
@@ -213,7 +227,9 @@ export function buildDailyReview(input: DailyReviewInput, params: Partial<DailyR
   paper.realizedPnl = r2(paper.realizedPnl);
   if (unparsed) missing.push(`모의 매도 손익 ${unparsed}건`);
 
-  const review: DailyReview = { date, region, indexMoves, topGainers, topLosers, mostTraded, newHighs, candidatesTop, paper, missing, comment: "", rule: REVIEW_RULE };
+  const review: DailyReview = {
+    date, region, indexMoves, topGainers, topLosers, mostTraded, newHighs, ...(sectorMoves ? { sectorMoves } : {}), candidatesTop, paper, missing, comment: "", rule: REVIEW_RULE,
+  };
   // 6) 코멘트: 앞 항목을 종합한 자동 요약
   review.comment = reviewComment(review, cands.length, input.regime ?? null, input.posture ?? null);
   return review;
@@ -252,6 +268,10 @@ function reviewComment(r: DailyReview, candCount: number, regime: string | null,
     if (trend.length) out.push(`${INDEX_TREND_DAYS}거래일 전과 비교하면 ${trend.join(", ")}예요.`);
   } else out.push("지수 데이터가 없어요.");
 
+  if (r.sectorMoves) {
+    const t = r.sectorMoves.top[0], b = r.sectorMoves.bottom[0];
+    if (t && b && t.no !== b.no) out.push(`업종 강세 1위는 ${t.name}(${signPct(t.changePct)}), 약세 1위는 ${b.name}(${signPct(b.changePct)})예요.`);
+  }
   if (regime) out.push(`시장 국면은 ${eyo(REGIME_LABEL[regime as Regime] ?? regime)}.`);
   if (posture) out.push(`운용 태도는 ${eyo(posture)}.`);
 
@@ -267,6 +287,7 @@ function reviewComment(r: DailyReview, candCount: number, regime: string | null,
 
   // 섹터·실적은 늘 빠지는 항목이라 직접 확인하라고 덧붙인다
   if (r.missing.includes(REVIEW_MISSING.sector) && r.missing.includes(REVIEW_MISSING.earnings)) out.push("섹터·실적은 데이터가 없어 직접 확인해야 해요.");
+  else if (r.missing.includes(REVIEW_MISSING.earnings)) out.push("실적은 데이터가 없어 직접 확인해야 해요.");
   return out.join(" ");
 }
 
@@ -285,7 +306,10 @@ export function reviewToRows(r: DailyReview): (string | number)[][] {
   };
   const cl = (x: number) => withCommas(x, 2);
   list("지수 흐름", r.indexMoves, (m) => `${m.name} ${cl(m.close)} (${signPct(m.changePct)}, ${INDEX_TREND_DAYS}거래일 전 대비 ${m.vs20dPct == null ? "-" : signPct(m.vs20dPct)})${m.asOf !== r.date ? ` · ${m.asOf} 기준` : ""}`);
-  rows.push(["섹터 흐름", r.missing.includes(REVIEW_MISSING.sector) ? "데이터 없음(직접 확인)" : "-"]);
+  if (r.sectorMoves) {
+    list("섹터 흐름(강세)", r.sectorMoves.top, (x) => `${x.name} ${signPct(x.changePct)}`);
+    list("섹터 흐름(약세)", r.sectorMoves.bottom, (x) => `${x.name} ${signPct(x.changePct)}`);
+  } else rows.push(["섹터 흐름", "데이터 없음(직접 확인)"]);
   list("신고가", r.newHighs, (h) => `${h.name}(${h.code}) — ${h.basis}`);
   list("특징주(상승)", r.topGainers, (x) => `${x.name}(${x.code}) ${signPct(x.changePct)}`);
   list("특징주(하락)", r.topLosers, (x) => `${x.name}(${x.code}) ${signPct(x.changePct)}`);

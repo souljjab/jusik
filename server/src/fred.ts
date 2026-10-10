@@ -1,5 +1,4 @@
-// 통합 전이라 shared 인덱스에 macro가 아직 없어 모듈 파일을 직접 가져온다
-import { buildMacroSnapshot, MACRO_SERIES_IDS, type MacroSeriesId, type MacroSeriesPoint, type MacroSnapshot } from "@jusik/shared/src/macro";
+import { buildMacroSnapshot, MACRO_SERIES_IDS, type MacroSeriesId, type MacroSeriesPoint, type MacroSnapshot } from "@jusik/shared";
 import type { Http } from "./http";
 
 /*
@@ -48,6 +47,7 @@ export interface MacroFetchResult {
 
 /** FRED 6개 시리즈를 순차로 받아 매크로 스냅샷을 만든다. 시리즈별 실패는 errors에 담고 계속한다 */
 export class MacroProvider {
+  readonly sample = false;
   private cached: { at: number; ttl: number; value: Promise<MacroFetchResult> } | null = null;
   private readonly now: () => number;
 

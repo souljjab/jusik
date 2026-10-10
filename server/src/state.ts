@@ -1,6 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { newPaperAccount, type HistoryRow, type JournalEntry, type PaperAccount, type ReplayRun, type ScanResult, type Settings } from "@jusik/shared";
+import {
+  DEFAULT_POSTURE_CAPS, GUARD_DEFAULTS, newPaperAccount,
+  type DailyReview, type HistoryRow, type JournalEntry, type Market, type MarketRowLike, type PaperAccount, type ReplayRun, type ScanResult, type Settings,
+} from "@jusik/shared";
 
 export type { HistoryRow, ScanResult, Settings };
 
@@ -19,16 +22,20 @@ export const DEFAULT_SETTINGS: Settings = {
   paperEnabled: false,
   markets: { KOSPI: true, KOSDAQ: true, US: true },
   maxScanPerMarket: 40,
+  postureCaps: { ...DEFAULT_POSTURE_CAPS },
+  dailyLossLimitPct: GUARD_DEFAULTS.dailyLossLimitPct,
+  maxConsecutiveLosses: GUARD_DEFAULTS.maxConsecutiveLosses,
 };
 
 const RANGES: Record<string, [number, number]> = {
   depositKRW: [0, 1e13], depositUSD: [0, 1e10], riskPct: [0.1, 10], maxWeightPct: [1, 100], maxPositions: [1, 10], reservePct: [0, 90],
   minScore: [0, 100], minTradeValueKRW: [0, 1e14], minTradeValueUSD: [0, 1e11], scanIntervalMin: [1, 240], monitorIntervalSec: [15, 3600], maxScanPerMarket: [5, 100],
+  dailyLossLimitPct: [0, 50], maxConsecutiveLosses: [0, 20],
 };
 
 /** 입력값을 검증하고 범위 안으로 맞춘다. 알 수 없는 키·잘못된 타입은 무시한다. */
 export function sanitizeSettings(input: unknown, base: Settings = DEFAULT_SETTINGS): Settings {
-  const out: Settings = { ...base, markets: { ...base.markets } };
+  const out: Settings = { ...base, markets: { ...base.markets }, postureCaps: { ...DEFAULT_POSTURE_CAPS, ...base.postureCaps } };
   const src = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   for (const [k, [lo, hi]] of Object.entries(RANGES)) {
     const v = src[k];
@@ -37,8 +44,15 @@ export function sanitizeSettings(input: unknown, base: Settings = DEFAULT_SETTIN
   if (typeof src.paperEnabled === "boolean") out.paperEnabled = src.paperEnabled;
   const m = src.markets as Record<string, unknown> | undefined;
   if (m && typeof m === "object") for (const k of ["KOSPI", "KOSDAQ", "US"] as const) if (typeof m[k] === "boolean") out.markets[k] = m[k] as boolean;
+  const caps = src.postureCaps as Record<string, unknown> | undefined;
+  if (caps && typeof caps === "object")
+    for (const k of ["ATTACK", "NEUTRAL", "DEFENSE"] as const) {
+      const v = caps[k];
+      if (typeof v === "number" && Number.isFinite(v)) out.postureCaps[k] = Math.min(100, Math.max(0, v));
+    }
   out.maxPositions = Math.round(out.maxPositions);
   out.maxScanPerMarket = Math.round(out.maxScanPerMarket);
+  out.maxConsecutiveLosses = Math.round(out.maxConsecutiveLosses);
   return out;
 }
 
@@ -50,9 +64,14 @@ export interface AppState {
   journal: JournalEntry[];
   /** 마지막 과거 재현(규칙 점검) 결과 */
   lastReplay: ReplayRun | null;
+  /** 일일 복기(M5-01). 날짜·지역마다 하나, 오래된 순 */
+  reviews: DailyReview[];
+  /** 시장별 마지막 순위표(일일 복기의 특징주 재료). 스캔할 때마다 덮어쓴다 */
+  lastUniverse: Partial<Record<Market, { at: string; rows: MarketRowLike[] }>>;
 }
 
 export const HISTORY_LIMIT = 3000;
+export const REVIEW_LIMIT = 500;
 
 function fresh(): AppState {
   return {
@@ -62,6 +81,8 @@ function fresh(): AppState {
     history: [],
     journal: [],
     lastReplay: null,
+    reviews: [],
+    lastUniverse: {},
   };
 }
 
@@ -81,6 +102,8 @@ export class Store {
           history: Array.isArray(raw.history) ? raw.history : [],
           journal: Array.isArray(raw.journal) ? raw.journal : [],
           lastReplay: raw.lastReplay ?? null,
+          reviews: Array.isArray(raw.reviews) ? raw.reviews : [],
+          lastUniverse: raw.lastUniverse && typeof raw.lastUniverse === "object" ? raw.lastUniverse : {},
         };
       } catch (e) {
         // 파일이 깨졌으면 덮어쓰지 않고 백업해 둔다

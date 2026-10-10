@@ -1,5 +1,6 @@
-import { marketClock, regionOf, type Market, type SchedulerStatus } from "@jusik/shared";
-import { monitorPositions, runScan, type Deps } from "./scanner";
+import { marketClock, regionOf, type Market, type Region, type SchedulerStatus } from "@jusik/shared";
+import { buildReviewNow, MARKETS_OF, type ReviewDeps } from "./reviewJob";
+import { monitorPositions, runScan } from "./scanner";
 
 /**
  * 장이 열려 있는 동안 정해진 주기로 스캔하고(기본 10분), 보유 모의 포지션은 더 자주(기본 60초) 점검한다.
@@ -12,8 +13,10 @@ export class Scheduler {
   private lastMonitorMs = 0;
   private lastError: string | null = null;
   private lastScanAt: string | null = null;
+  /** 이미 시도한 일일 복기(지역:날짜). 실패해도 같은 날 다시 시도하지 않는다(수동으로는 다시 만들 수 있다) */
+  private reviewTried = new Set<string>();
 
-  constructor(private deps: Deps, private onChange: () => void = () => {}) {}
+  constructor(private deps: ReviewDeps, private onChange: () => void = () => {}) {}
 
   start(tickMs = 15_000) {
     if (this.timer) return;
@@ -57,6 +60,18 @@ export class Scheduler {
     return true;
   }
 
+  /** 일일 복기를 지금 만든다(수동). 스캔·점검 중이면 "busy" */
+  async buildReview(region: Region): Promise<Awaited<ReturnType<typeof buildReviewNow>> | "busy"> {
+    if (this.busy) return "busy";
+    this.busy = true;
+    try {
+      return await buildReviewNow(this.deps, region);
+    } finally {
+      this.busy = false;
+      this.onChange();
+    }
+  }
+
   private now() {
     return (this.deps.now ?? (() => new Date()))();
   }
@@ -76,6 +91,19 @@ export class Scheduler {
         this.lastScanAt = new Date(this.lastScanMs).toISOString();
       });
       this.lastMonitorMs = this.lastScanMs;
+      return;
+    }
+    // 장 마감 직후(30분 안) 그날 일일 복기를 한 번 자동 작성한다(M5-01)
+    for (const region of ["KR", "US"] as Region[]) {
+      const clock = marketClock(region, now);
+      const key = `${region}:${clock.date}`;
+      if (!clock.justClosed || this.reviewTried.has(key) || !MARKETS_OF[region].some((m) => s.markets[m])) continue;
+      if (this.deps.store.state.reviews.some((r) => r.region === region && r.date === clock.date)) continue;
+      this.reviewTried.add(key);
+      await this.runExclusive(async () => {
+        const r = await buildReviewNow(this.deps, region);
+        if (r.errors.length) console.error(`[jusik] 일일 복기(${key}) 일부 실패: ${r.errors.join(" / ")}`);
+      });
       return;
     }
     if (t - this.lastMonitorMs >= s.monitorIntervalSec * 1000) {

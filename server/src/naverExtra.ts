@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio";
-import type { Disclosure, InvestorFlow, SectorRow } from "@jusik/shared/src/flows";
+import type { Disclosure, InvestorFlow, SectorRow } from "@jusik/shared";
 import type { GetOptions, Http } from "./http";
 import { NAVER } from "./naver";
 
