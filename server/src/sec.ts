@@ -1,5 +1,5 @@
 import type { Disclosure, PeriodFinancials } from "@jusik/shared";
-import { classifySecFiling, normalizeSecItems } from "../../shared/src/usFlows";
+import { classifySecFiling, normalizeSecItems } from "@jusik/shared";
 import type { Http } from "./http";
 
 /*

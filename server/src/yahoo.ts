@@ -1,5 +1,5 @@
 import type { Candle, Fundamentals, StockInfo } from "@jusik/shared";
-import type { UsHolders } from "../../shared/src/usFlows";
+import type { UsHolders } from "@jusik/shared";
 import type { UniverseRow } from "./provider";
 
 /*

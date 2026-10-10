@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Candle } from "@jusik/shared";
-import { assessIntraday, barMinutes, INTRADAY_SESSIONS, type IntradayBar } from "../../shared/src/intraday";
+import { assessIntraday, barMinutes, INTRADAY_SESSIONS, type IntradayBar } from "@jusik/shared";
 import type { GetOptions, Http } from "../src/http";
 import {
   decumulateVolume, latestSessions, MINUTE_PARAMS, MINUTE_URLS, MockMinuteSource, parseNaverMinute, parseYahooMinute, sessionBars,

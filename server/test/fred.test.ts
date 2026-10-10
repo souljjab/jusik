@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { macroNotes, macroPressure, type IsmReading } from "../../shared/src/macro";
+import { macroNotes, macroPressure, type IsmReading } from "@jusik/shared";
 import { FRED, MacroProvider, parseFredCsv, type IsmLatestSource } from "../src/fred";
 import { HttpError, type Http } from "../src/http";
 import { ISM_URL, IsmSource } from "../src/ism";

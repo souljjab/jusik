@@ -1,5 +1,5 @@
 // ISM·지역 연준 시리즈가 추가된 macro 모듈이라 상대 경로로 가져온다(통합 때 "@jusik/shared"로 바꾼다)
-import { buildMacroSnapshot, MACRO_SERIES_IDS, type IsmReading, type MacroSeriesId, type MacroSeriesPoint, type MacroSnapshot } from "../../shared/src/macro";
+import { buildMacroSnapshot, MACRO_SERIES_IDS, type IsmReading, type MacroSeriesId, type MacroSeriesPoint, type MacroSnapshot } from "@jusik/shared";
 import type { Http } from "./http";
 import { manualIsm } from "./ism";
 

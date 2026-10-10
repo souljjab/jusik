@@ -1,5 +1,5 @@
 import { marketClock, regionOfCode, type Candle, type Region } from "@jusik/shared";
-import { barDate, barMinutes, hmToMinutes, INTRADAY_SESSIONS, minutesToHm, type IntradayBar } from "../../shared/src/intraday";
+import { barDate, barMinutes, hmToMinutes, INTRADAY_SESSIONS, minutesToHm, type IntradayBar } from "@jusik/shared";
 import type { Http } from "./http";
 
 /*

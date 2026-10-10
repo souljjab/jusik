@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifySecFiling, secDisclosureNotes, usFlowSignals } from "../../shared/src/usFlows";
+import { classifySecFiling, secDisclosureNotes, usFlowSignals } from "@jusik/shared";
 import type { GetOptions, Http } from "../src/http";
 import { HttpError } from "../src/http";
 import { MockUsSource, sampleSecFilings, sampleSecFinancials, sampleUsHolders } from "../src/mockUs";

@@ -1,6 +1,6 @@
 import * as cheerio from "cheerio";
 import type { Candle, Market, StockInfo } from "@jusik/shared";
-import { analyzeBreadth, breadthFromCandles, type BreadthAnalysis, type BreadthDay } from "../../shared/src/breadth";
+import { analyzeBreadth, breadthFromCandles, type BreadthAnalysis, type BreadthDay } from "@jusik/shared";
 import type { GetOptions, Http } from "./http";
 
 /*

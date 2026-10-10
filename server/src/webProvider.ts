@@ -1,5 +1,5 @@
 import { regionOfCode, type Candle, type Fundamentals, type Market, type PeriodFinancials, type Quote, type StockInfo } from "@jusik/shared";
-import type { UsHolders } from "../../shared/src/usFlows";
+import type { UsHolders } from "@jusik/shared";
 import type { Http } from "./http";
 import { HttpError } from "./http";
 import { NAVER, parseFchart, parseNaverFundamentals, parseRankingTable, parseRealtime, realtimeToQuote } from "./naver";

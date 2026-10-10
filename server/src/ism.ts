@@ -1,5 +1,5 @@
 // 새로 추가된 매크로 타입·상수라 상대 경로로 가져온다(통합 때 "@jusik/shared"로 바꾼다)
-import { MACRO_RELEASE_LAG_DAYS, type IsmReading, type MacroSeriesId, type MacroSeriesPoint } from "../../shared/src/macro";
+import { MACRO_RELEASE_LAG_DAYS, type IsmReading, type MacroSeriesId, type MacroSeriesPoint } from "@jusik/shared";
 import type { Http } from "./http";
 
 /*

@@ -1,5 +1,5 @@
 import type { Disclosure } from "@jusik/shared";
-import { classifySecFiling, type UsHolders } from "../../shared/src/usFlows";
+import { classifySecFiling, type UsHolders } from "@jusik/shared";
 import type { SecFinancials, SecPeriodFinancials, SecSource } from "./sec";
 
 /*

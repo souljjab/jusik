@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { usFlowSignals } from "../../shared/src/usFlows";
+import { usFlowSignals } from "@jusik/shared";
 import { createHttp, HttpError, type Http } from "../src/http";
 import { SecClient, type SecFinancials, type SecSource } from "../src/sec";
 import { mergeSecFinancials, WebProvider } from "../src/webProvider";

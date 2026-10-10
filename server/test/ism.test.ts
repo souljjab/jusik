@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildMacroSnapshot, MACRO_RELEASE_LAG_DAYS } from "../../shared/src/macro";
+import { buildMacroSnapshot, MACRO_RELEASE_LAG_DAYS } from "@jusik/shared";
 import { HttpError, type Http } from "../src/http";
 import {
   ISM_PARAMS, ISM_URL, IsmSource, ismMonthUrl, ismReleaseDate, latestReleasedIsmMonth, manualIsm, MockIsmSource, parseIsmPmi,
