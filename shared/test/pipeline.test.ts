@@ -157,7 +157,8 @@ describe("screening", () => {
     expect(bad.grade).toBe("D");
     const few = screenFundamentals({ per: 5, pbr: 0.5 });
     expect(few.grade).toBe("N/A");
-    expect(few.checks.filter((c) => c.status === "unknown")).toHaveLength(5);
+    // PER·PBR만 확인되고 나머지(소프트 체크가 늘어도)는 모두 unknown
+    expect(few.checks.filter((c) => c.status === "unknown")).toHaveLength(few.checks.length - 2);
   });
   it("treats negative PER (loss) as fail", () => {
     expect(screenFundamentals({ per: -3 }).checks.find((c) => c.id === "per")!.status).toBe("fail");

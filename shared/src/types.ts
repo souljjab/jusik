@@ -51,6 +51,30 @@ export interface Fundamentals {
   currentRatio?: number;
   /** 유보율 % */
   reserveRatio?: number;
+  /** 당좌비율 % (당좌자산 ⊂ 유동자산이라 항상 유동비율 이하) */
+  quickRatio?: number;
+  /** 동일업종 PER(배) */
+  sectorPer?: number;
+  /** 연간 실적(오래된 → 최신). 추정치(estimate)가 섞일 수 있다 */
+  annual?: PeriodFinancials[];
+  /** 분기 실적(오래된 → 최신). 추정치(estimate)가 섞일 수 있다 */
+  quarterly?: PeriodFinancials[];
+}
+
+/** 한 결산 기간의 실적. 금액 단위는 출처를 따른다(네이버: 억 원). EPS는 주당 금액(원·달러) */
+export interface PeriodFinancials {
+  /** 결산 기간 라벨(예: "2024.12") */
+  period: string;
+  /** 컨센서스 추정치(E)면 true. 스크리닝 판단에는 확정값만 쓴다 */
+  estimate: boolean;
+  /** 매출액 */
+  revenue?: number;
+  /** 영업이익 */
+  opIncome?: number;
+  /** 당기순이익 */
+  netIncome?: number;
+  /** 주당순이익 */
+  eps?: number;
 }
 
 export type Action = "STRONG_BUY" | "BUY" | "HOLD" | "SELL" | "STRONG_SELL";
