@@ -186,6 +186,13 @@ export interface PlanParams {
   heldCodes?: string[];
   /** 이미 보유한 종목 수(최대 종목 수에서 차감) */
   heldCount?: number;
+  /**
+   * 국면별 주식 투자 상한(총자산 대비 %). 지정하면 신규 매수 가능액을
+   * (cash + heldValue) × 상한 − heldValue 이하로 줄인다(예: M1-03 강동진 60% ↔ 40%). 없으면 기존 동작
+   */
+  exposureCapPct?: number;
+  /** 이미 보유한 포지션의 평가액(exposureCapPct와 함께 쓴다, 기본 0) */
+  heldValue?: number;
 }
 
 export interface PlanItem {
@@ -210,9 +217,19 @@ export interface Plan {
   remainingCash: number;
 }
 
-/** 점수 순으로 예수금 안에서 살 수 있는 조합을 만든다. 손절폭 기준 수량 + 비중 상한 + 예비 현금 + 최대 종목 수를 지킨다. */
+const EXPOSURE_CAP_REASON = "국면별 투자 상한 도달";
+
+/**
+ * 점수 순으로 예수금 안에서 살 수 있는 조합을 만든다. 손절폭 기준 수량 + 비중 상한 + 예비 현금 + 최대 종목 수를 지킨다.
+ * exposureCapPct를 주면 보유 평가액을 포함한 총 투자 비중이 상한을 넘지 않게 신규 매수액을 줄인다.
+ */
 export function planWithCash(candidates: DayTradeCandidate[], p: PlanParams): Plan {
-  const spendable = Math.max(0, p.cash * (1 - p.reservePct / 100));
+  const base = Math.max(0, p.cash * (1 - p.reservePct / 100));
+  const heldValue = p.heldValue != null && Number.isFinite(p.heldValue) ? Math.max(0, p.heldValue) : 0;
+  const capRoom = p.exposureCapPct != null && Number.isFinite(p.exposureCapPct) ? ((p.cash + heldValue) * p.exposureCapPct) / 100 - heldValue : Infinity;
+  const spendable = Math.max(0, Math.min(base, capRoom));
+  // 투자 상한이 예비 현금 기준보다 더 좁게 묶고 있는지(사유 문구를 구분하려고)
+  const capBinds = capRoom < base;
   const slots = Math.max(0, p.maxPositions - (p.heldCount ?? 0));
   const held = new Set(p.heldCodes ?? []);
   const items: PlanItem[] = [];
@@ -220,6 +237,10 @@ export function planWithCash(candidates: DayTradeCandidate[], p: PlanParams): Pl
   let used = 0;
 
   for (const cand of [...candidates].sort((a, b) => b.score - a.score)) {
+    if (capRoom <= 0) {
+      skipped.push({ candidate: cand, reason: EXPOSURE_CAP_REASON });
+      continue;
+    }
     if (held.has(cand.code)) {
       skipped.push({ candidate: cand, reason: "이미 보유 중" });
       continue;
@@ -237,7 +258,7 @@ export function planWithCash(candidates: DayTradeCandidate[], p: PlanParams): Pl
     const byCash = Math.floor(room / (cand.entry * (1 + (p.feeRate ?? 0.00015))));
     const qty = Math.min(size.shares, byCash);
     if (qty < 1) {
-      skipped.push({ candidate: cand, reason: "남은 예수금 부족" });
+      skipped.push({ candidate: cand, reason: capBinds ? EXPOSURE_CAP_REASON : "남은 예수금 부족" });
       continue;
     }
     const amount = qty * cand.entry;
