@@ -1,4 +1,5 @@
 import { BUY_ACTIONS, SELL_ACTIONS } from "./action";
+import { CANDLE_MASTER_PARAMS, candleMasterAt, type CandleMasterParams, type CandleMasterResult } from "./candleMaster";
 import { DEFAULT_BACKTEST, summarize, type BacktestResult, type EquityPoint, type Trade } from "./backtest";
 import { DAYTRADE_BY_REGION, scoreDayTrade, type DayTradeParams, type StockRef } from "./daytrade";
 import { DEFAULT_REPLAY } from "./dayEval";
@@ -24,7 +25,7 @@ export interface StrategyContext {
   ref?: StockRef;
 }
 
-/** i일 종가에 낸 매수 주문. 다음 봉 시가에 체결한다 */
+/** i일 종가에 낸 매수 주문. 기본은 다음 봉 시가에 체결하고, limitPrice가 있으면 지정가로 기다린다 */
 export interface StrategyEntry {
   /** 초기 손절가 */
   stop: number;
@@ -35,9 +36,9 @@ export interface StrategyEntry {
   rule?: string;
   /** 목표가에서 팔 비율(0~1, 기본 1 = 전량) */
   targetFraction?: number;
-  /** 있으면 stop 대신 '체결 봉 시가 × (1 − stopPct%)'를 손절가로 쓴다 */
+  /** 있으면 stop 대신 '체결가(슬리피지 전) × (1 − stopPct%)'를 손절가로 쓴다. 시장가 주문이면 체결가 = 체결 봉 시가 */
   stopPct?: number;
-  /** 있으면 target 대신 '체결 봉 시가 × (1 + targetPct%)'를 목표가로 쓴다 */
+  /** 있으면 target 대신 '체결가(슬리피지 전) × (1 + targetPct%)'를 목표가로 쓴다 */
   targetPct?: number;
   /** 다음 날 시가가 이 가격보다 높으면(갭 상승 추격) 주문을 취소한다 */
   maxEntryPrice?: number;
@@ -45,6 +46,14 @@ export interface StrategyEntry {
   sizeFraction?: number;
   stopRule?: string;
   targetRule?: string;
+  /**
+   * 지정가 매수(예: M3-12 캔들마스터). i일 종가에 낸 주문이 i+1 ~ i+limitBars봉 동안 살아 있다가
+   * 시가 ≤ 지정가면 시가에, 아니면 저가 ≤ 지정가일 때 지정가에 체결하고, 끝까지 안 닿으면 취소된다.
+   * 각 봉에서는 그 봉의 시가·저가만 보므로 미래 참조가 없다. 대기 중에는 새 진입을 평가하지 않는다
+   */
+  limitPrice?: number;
+  /** 지정가 주문 유효 봉 수(기본 1 = 다음 봉 하루) */
+  limitBars?: number;
 }
 
 /** i일 종가에 낸 매도 주문. 기본은 다음 봉 시가 체결 */
@@ -96,10 +105,17 @@ export interface Strategy<P = unknown> {
   entry(i: number, prep: P): StrategyEntry | null;
   /** i일 종가 시점 평가(i까지의 데이터만). 보유 중일 때만 부른다 */
   exit(i: number, pos: StrategyPosition, prep: P): StrategyExit | null;
-  /** 추적 손절. 지금 손절가보다 높을 때만 반영한다(내리지 않는다) */
-  updateStop?(i: number, pos: StrategyPosition, prep: P): number | null;
+  /** 추적 손절. 지금 손절가보다 높을 때만 반영한다(내리지 않는다). 객체로 주면 근거 규칙과 이름(예: "본전 스탑")도 바꾼다 */
+  updateStop?(i: number, pos: StrategyPosition, prep: P): number | StopUpdate | null;
   /** 보유 중에 목표가가 새로 생길 때(예: 스윙 목표). 목표가가 없고 아직 목표 청산을 안 했을 때만 반영한다 */
   updateTarget?(i: number, pos: StrategyPosition, prep: P): { price: number; fraction: number; rule?: string } | null;
+}
+
+export interface StopUpdate {
+  price: number;
+  rule?: string;
+  /** 청산 기록에 쓸 손절 이름(기본 "손절가") */
+  label?: string;
 }
 
 export interface RunOptions {
@@ -151,6 +167,15 @@ interface Holding extends StrategyPosition {
   entryRule?: string;
   stopRule?: string;
   targetRule?: string;
+  /** 청산 기록에 쓸 손절 이름 */
+  stopLabel?: string;
+}
+
+/** 대기 중인 지정가 매수: until 봉까지 유효 */
+interface PendingLimit {
+  e: StrategyEntry;
+  limit: number;
+  until: number;
 }
 
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
@@ -158,10 +183,11 @@ const px = (x: number) => (Math.abs(x) >= 1000 ? Math.round(x).toString().replac
 
 /**
  * 전략 하나를 일봉에 적용한다. 봉마다 순서:
- * (1) 직전 종가에 정한 주문을 오늘 시가에 체결
- * (2) 보유 중이면 장중 손절(저가 ≤ 손절 → min(시가, 손절)) 먼저, 그다음 목표(고가 ≥ 목표 → max(시가, 목표)). 같은 봉에서 둘 다 닿으면 손절
+ * (1) 직전 종가에 정한 주문을 오늘 시가에 체결. 지정가 매수는 시가 ≤ 지정가면 시가, 저가 ≤ 지정가면 지정가에 체결(유효 기간이 지나면 취소)
+ * (2) 보유 중이면 장중 손절(저가 ≤ 손절 → min(시가, 손절)) 먼저, 그다음 목표(고가 ≥ 목표 → max(시가, 목표)). 같은 봉에서 둘 다 닿으면 손절.
+ *     지정가가 장중에 체결된 봉에서는 고가가 체결 전이었을 수 있어 목표를 보지 않는다(손절은 지정가를 지나야 닿으므로 본다)
  * (3) 종가에 exit / updateStop / entry 평가(i까지의 데이터만)
- * 한 번에 한 포지션, 정수 주식, 수수료·매도세·슬리피지 반영. 청산한 봉에서는 다시 진입하지 않는다.
+ * 한 번에 한 포지션, 정수 주식, 수수료·매도세·슬리피지 반영. 청산한 봉과 지정가 대기 중에는 새로 진입을 평가하지 않는다.
  */
 export function runStrategy<P>(strategy: Strategy<P>, candles: Candle[], ctx: StrategyContext = {}, opts: Partial<RunOptions> = {}): StrategyBacktest | null {
   if (candles.length < 2) return null;
@@ -176,6 +202,7 @@ function runPrepared<P>(strategy: Strategy<P>, candles: Candle[], prep: P, o: Ru
   let cash = o.initialCash;
   let pos: Holding | null = null;
   let pendingBuy: StrategyEntry | null = null;
+  let pendingLimit: PendingLimit | null = null;
   let pendingExit: StrategyExit | null = null;
   const trades: StrategyTrade[] = [];
   const equity: EquityPoint[] = [];
@@ -201,17 +228,18 @@ function runPrepared<P>(strategy: Strategy<P>, candles: Candle[], prep: P, o: Ru
     return h.shares > 0 ? h : null;
   };
 
-  const buy = (e: StrategyEntry, i: number): Holding | null => {
+  /** raw = 슬리피지 전 체결가(시장가 주문은 시가, 지정가 주문은 시가 또는 지정가) */
+  const buy = (e: StrategyEntry, i: number, raw: number): Holding | null => {
     const c = candles[i]!;
-    if (e.maxEntryPrice != null && c.open > e.maxEntryPrice) return null; // 갭 상승 추격 안 함
-    const stop = e.stopPct != null ? c.open * (1 - e.stopPct / 100) : e.stop;
-    if (!(c.open > stop)) return null; // 이미 손절가 아래에서 시작하면 들어가지 않는다
-    const price = c.open * (1 + slip);
+    if (e.maxEntryPrice != null && raw > e.maxEntryPrice) return null; // 갭 상승 추격 안 함
+    const stop = e.stopPct != null ? raw * (1 - e.stopPct / 100) : e.stop;
+    if (!(raw > stop)) return null; // 이미 손절가 아래에서 시작하면 들어가지 않는다
+    const price = raw * (1 + slip);
     const n = Math.floor((cash * clamp01(e.sizeFraction ?? 1)) / (price * (1 + o.feeRate)));
     if (n < 1) return null;
     const costPerShare = price * (1 + o.feeRate);
     cash -= n * costPerShare;
-    const target = e.targetPct != null ? c.open * (1 + e.targetPct / 100) : e.target;
+    const target = e.targetPct != null ? raw * (1 + e.targetPct / 100) : e.target;
     return {
       entryIndex: i, entryDate: c.date, entryPrice: price, shares: n, initialShares: n, stop,
       target: target != null && target > price ? target : null, targetFraction: clamp01(e.targetFraction ?? 1),
@@ -224,22 +252,32 @@ function runPrepared<P>(strategy: Strategy<P>, candles: Candle[], prep: P, o: Ru
   for (let i = start; i < candles.length; i++) {
     const c = candles[i]!;
     let closedToday = false;
+    /** 지정가가 장중(시가 아님)에 체결된 봉 */
+    let intrabarFill = false;
 
-    // 1) 직전 종가에 정한 주문을 오늘 시가에 체결
+    // 1) 직전 종가에 정한 주문을 오늘 시가에 체결(지정가는 오늘 시가·저가로만 판단)
     if (pendingExit && pos) {
       const ex: StrategyExit = pendingExit;
       pos = sell(pos, i, c.open, qtyOf(pos, ex.fraction), ex.kind, ex.reason, ex.rule);
       if (pos) pos.partialExits++;
       else closedToday = true;
     } else if (pendingBuy && !pos) {
-      pos = buy(pendingBuy, i);
+      pos = buy(pendingBuy, i, c.open);
+    } else if (pendingLimit && !pos) {
+      const { e, limit, until } = pendingLimit;
+      const atOpen = c.open <= limit;
+      if (atOpen || c.low <= limit) {
+        pos = buy(e, i, atOpen ? c.open : limit);
+        intrabarFill = pos != null && !atOpen;
+        pendingLimit = null; // 체결했거나, 손절가 아래 시작 등으로 체결할 수 없으면 취소
+      } else if (i >= until) pendingLimit = null; // 유효 기간 만료
     }
     pendingBuy = null;
     pendingExit = null;
 
     // 2) 장중: 시가가 이미 목표가 위면 시가에 목표 청산부터(시가가 그날 첫 가격). 그다음 손절, 마지막으로 목표.
     //    시가가 손절가와 목표가 사이면 장중 순서를 알 수 없어 보수적으로 손절을 먼저 본다
-    if (pos && pos.target != null && c.open >= pos.target) {
+    if (pos && !intrabarFill && pos.target != null && c.open >= pos.target) {
       const t = pos.target;
       pos = sell(pos, i, c.open, qtyOf(pos, pos.targetFraction), "TARGET", `시가가 목표가 ${px(t)} 위에서 시작`, pos.targetRule);
       if (pos) {
@@ -249,9 +287,9 @@ function runPrepared<P>(strategy: Strategy<P>, candles: Candle[], prep: P, o: Ru
       } else closedToday = true;
     }
     if (pos && c.low <= pos.stop) {
-      pos = sell(pos, i, Math.min(c.open, pos.stop), pos.shares, "STOP_LOSS", `손절가 ${px(pos.stop)} 이탈`, pos.stopRule);
+      pos = sell(pos, i, Math.min(c.open, pos.stop), pos.shares, "STOP_LOSS", `${pos.stopLabel ?? "손절가"} ${px(pos.stop)} 이탈`, pos.stopRule);
       closedToday = true;
-    } else if (pos && pos.target != null && c.high >= pos.target) {
+    } else if (pos && !intrabarFill && pos.target != null && c.high >= pos.target) {
       const t = pos.target;
       pos = sell(pos, i, Math.max(c.open, t), qtyOf(pos, pos.targetFraction), "TARGET", `목표가 ${px(t)} 도달`, pos.targetRule);
       if (pos) {
@@ -273,7 +311,12 @@ function runPrepared<P>(strategy: Strategy<P>, candles: Candle[], prep: P, o: Ru
       }
       if (pos) {
         const ns = strategy.updateStop?.(i, view(pos), prep);
-        if (ns != null && ns > pos.stop) pos.stop = ns;
+        const nsu = typeof ns === "number" ? { price: ns } : ns;
+        if (nsu != null && nsu.price > pos.stop) {
+          pos.stop = nsu.price;
+          if (nsu.rule) pos.stopRule = nsu.rule;
+          if (nsu.label) pos.stopLabel = nsu.label;
+        }
         if (pos.target == null && !pos.targetHit) {
           const nt = strategy.updateTarget?.(i, view(pos), prep);
           if (nt && nt.price > c.close) {
@@ -283,8 +326,10 @@ function runPrepared<P>(strategy: Strategy<P>, candles: Candle[], prep: P, o: Ru
           }
         }
       }
-    } else if (!closedToday && i < candles.length - 1) {
-      pendingBuy = strategy.entry(i, prep);
+    } else if (!closedToday && !pendingLimit && i < candles.length - 1) {
+      const e = strategy.entry(i, prep);
+      if (e?.limitPrice != null) pendingLimit = { e, limit: e.limitPrice, until: i + Math.max(1, Math.floor(e.limitBars ?? 1)) };
+      else pendingBuy = e;
     }
 
     equity.push({ date: c.date, equity: cash + (pos ? pos.shares * c.close : 0), buyHold: bhCash + bhShares * c.close });
@@ -306,6 +351,22 @@ function crossedUpWithin(a: Series, b: Series, i: number, lookback: number): boo
     if (a0 <= b0 && a1 > b1) return true;
   }
   return false;
+}
+
+/** i일이 그 주의 마지막 거래일인지. 다음 봉의 날짜(달력)만 보고 가격은 보지 않는다. 마지막 봉은 금요일 이후면 마감으로 본다 */
+function isWeekEnd(candles: Candle[], i: number): boolean {
+  const next = candles[i + 1];
+  if (next) return weekKeyOf(next.date) !== weekKeyOf(candles[i]!.date);
+  return (new Date(Date.parse(candles[i]!.date)).getUTCDay() + 6) % 7 >= 4;
+}
+
+/** 일봉 인덱스 → 주봉 인덱스 */
+function weekIndexOf(candles: Candle[], weekly: WeeklyBar[]): number[] {
+  const weekOf: number[] = new Array(candles.length).fill(0);
+  weekly.forEach((w, k) => {
+    for (let d = w.startIndex; d <= w.endIndex; d++) weekOf[d] = k;
+  });
+  return weekOf;
 }
 
 const prevWeekKey = (date: string) => new Date(Date.parse(weekKeyOf(date)) - 7 * 86_400_000).toISOString().slice(0, 10);
@@ -347,13 +408,7 @@ export interface WeinsteinPrep {
 
 export function weinsteinStrategy(partial: Partial<WeinsteinParams> = {}): Strategy<WeinsteinPrep> {
   const P = { ...WEINSTEIN_DEFAULTS, ...partial };
-  /** i일이 그 주의 마지막 거래일인지. 다음 봉의 날짜(달력)만 보고 가격은 보지 않는다. 마지막 봉은 금요일 이후면 마감으로 본다 */
-  const weekEnd = (p: WeinsteinPrep, i: number) => {
-    const next = p.candles[i + 1];
-    if (next) return weekKeyOf(next.date) !== weekKeyOf(p.candles[i]!.date);
-    return (new Date(Date.parse(p.candles[i]!.date)).getUTCDay() + 6) % 7 >= 4;
-  };
-  const signal = (p: WeinsteinPrep, i: number): StageResult | null => (weekEnd(p, i) ? p.results[p.weekOf[i]!] ?? null : null);
+  const signal = (p: WeinsteinPrep, i: number): StageResult | null => (isWeekEnd(p.candles, i) ? p.results[p.weekOf[i]!] ?? null : null);
 
   return {
     id: "weinstein",
@@ -364,10 +419,7 @@ export function weinsteinStrategy(partial: Partial<WeinsteinParams> = {}): Strat
     rules: ["M1-02 와인스타인", "M3-01 와인스타인", "M3-02 와인스타인", "M3-03 와인스타인", "M3-04 와인스타인", "M4-01 와인스타인"],
     prepare(candles, ctx) {
       const weekly = toWeekly(candles);
-      const weekOf: number[] = new Array(candles.length).fill(0);
-      weekly.forEach((w, k) => {
-        for (let d = w.startIndex; d <= w.endIndex; d++) weekOf[d] = k;
-      });
+      const weekOf = weekIndexOf(candles, weekly);
       const idxWeekly = ctx.index?.length ? toWeekly(ctx.index) : undefined;
       const rs = idxWeekly ? relativeStrength(weekly, idxWeekly) : undefined;
       const sctx = prepareStage(weekly);
@@ -644,6 +696,77 @@ export function dayTradeBreakoutStrategy(params: Partial<DayTradeParams> = {}, m
   };
 }
 
+// ───────────────────────── 6. 캔들마스터 주봉 캔들 ─────────────────────────
+
+export interface CandleMasterStrategyParams {
+  /** 지정가(M3-12) 대기 봉 수(일봉). 20봉 ≈ 4주 — 앱 기본값(책은 '대기 매수'라고만 한다) */
+  limitBars: number;
+  /** 진입가: third = 종가와 손절가 사이 1/3 지점(M3-12), mid = 중간 지점(4.5의 대안) */
+  entryMode: "third" | "mid";
+  /** 예수금 중 쓸 비율. 다른 전략과 같게 1 — 종목당 비중(M4-03)은 계좌 단위 규칙이라 candleMasterSizing으로 본다 */
+  sizeFraction: number;
+  /** 파동·신호 판정 기준값 덮어쓰기(CANDLE_MASTER_PARAMS) */
+  candle: Partial<CandleMasterParams>;
+}
+
+export const CANDLE_MASTER_STRATEGY_DEFAULTS: CandleMasterStrategyParams = { limitBars: 20, entryMode: "third", sizeFraction: 1, candle: {} };
+
+export interface CandleMasterPrep {
+  candles: Candle[];
+  weekly: WeeklyBar[];
+  weekOf: number[];
+  /** 주마다 그 주까지의 데이터로만 낸 판정(candleMasterAt) */
+  results: (CandleMasterResult | null)[];
+}
+
+/**
+ * 캔들마스터 주봉 캔들매매(4.5). 주 마감 봉에서만 판정하고, 유효한 신호면 종가와 손절가 사이 1/3 지점(M3-12)에
+ * limitBars봉 동안 지정가로 기다린다. 손절은 신호별(최대 −20%, M4-01), 목표는 표준 3배·비표준 2배(M3-13, 전량),
+ * 고가가 진입가 × 2에 닿은 뒤에는 손절을 본전(진입가)으로 올린다(M3-13). 매도 신호는 따로 없다.
+ */
+export function candleMasterStrategy(partial: Partial<CandleMasterStrategyParams> = {}): Strategy<CandleMasterPrep> {
+  const P = { ...CANDLE_MASTER_STRATEGY_DEFAULTS, ...partial };
+  const CP = { ...CANDLE_MASTER_PARAMS, ...P.candle };
+  return {
+    id: "candle-master",
+    name: "캔들마스터 주봉 캔들",
+    source: "캔들마스터",
+    timeframe: "weekly",
+    description: `직전 파동과 간격을 둔 수평 파동에서 주봉 매수 신호 캔들(양봉 스프링·꼬리 양봉·꼬리군)이 나오면 종가와 손절가 사이 ${P.entryMode === "mid" ? "중간" : "1/3"} 지점에 약 ${Math.round(P.limitBars / 5)}주 동안 지정가로 기다려요. 손절은 신호 저점 아래(최대 −${CP.maxStopPct}%), 목표는 표준 ${CP.standardMultiple}배·비표준 ${CP.nonStandardMultiple}배이고, +100%에 닿은 뒤엔 손절을 본전으로 올려요.`,
+    rules: ["4.5 캔들마스터", "M3-12 캔들마스터", "M3-13 캔들마스터", "M4-01 캔들마스터"],
+    prepare(candles) {
+      const weekly = toWeekly(candles);
+      // 각 주의 판정은 그 주까지의 주봉만 쓴다(candleMasterAt). 주 마감 봉에서만 꺼내 쓴다
+      return { candles, weekly, weekOf: weekIndexOf(candles, weekly), results: weekly.map((_, k) => candleMasterAt(weekly, k, CP)) };
+    },
+    startIndex(p) {
+      const w = p.weekly[Math.max(0, CP.minWeeks - 1)];
+      return w ? w.endIndex : Infinity;
+    },
+    entry(i, p) {
+      if (!isWeekEnd(p.candles, i)) return null;
+      const r = p.results[p.weekOf[i]!];
+      if (!r?.valid || r.entry == null || r.entryMid == null || r.stop == null || r.targetMultiple == null) return null;
+      const limit = P.entryMode === "mid" ? r.entryMid : r.entry;
+      const names = r.signals.map((s) => s.name).join(" · ");
+      return {
+        stop: r.stop, stopRule: "M4-01 캔들마스터",
+        targetPct: (r.targetMultiple - 1) * 100, targetFraction: 1, targetRule: "M3-13 캔들마스터",
+        limitPrice: limit, limitBars: P.limitBars, sizeFraction: P.sizeFraction,
+        reason: `주봉 ${names}(${r.standard ? "표준" : "비표준"} — 목표 ${r.targetMultiple}배), 지정가 ${px(limit)} 대기`,
+        rule: "M3-12 캔들마스터",
+      };
+    },
+    exit: () => null,
+    updateStop(i, pos, p) {
+      // M3-13 본전 스탑: 체결 뒤 고가가 진입가 × 2에 닿았으면 손절을 진입가로. 체결 봉은 고가가 체결 전일 수 있어 종가만 본다
+      let hi = p.candles[pos.entryIndex]!.close;
+      for (let j = pos.entryIndex + 1; j <= i; j++) hi = Math.max(hi, p.candles[j]!.high);
+      return hi >= pos.entryPrice * CP.breakevenMultiple ? { price: pos.entryPrice, rule: "M3-13 캔들마스터", label: "본전 스탑" } : null;
+    },
+  };
+}
+
 // ───────────────────────── 목록과 비교 ─────────────────────────
 
 export const STRATEGIES: Strategy[] = [
@@ -652,6 +775,7 @@ export const STRATEGIES: Strategy[] = [
   rsiRecoveryStrategy(),
   bbcPullbackStrategy(),
   dayTradeBreakoutStrategy(),
+  candleMasterStrategy(),
 ];
 
 export function getStrategy(id: string): Strategy | undefined {

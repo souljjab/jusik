@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import { DAYTRADE_BY_REGION } from "../src/daytrade";
 import { replayDayTrade } from "../src/dayEval";
 import { prepareStage, stageAt, STAGE_PARAMS } from "../src/stage";
+import { candleMasterAt } from "../src/candleMaster";
 import {
-  bbcPullbackStrategy, compareStrategies, dayTradeBreakoutStrategy, rsiRecoveryStrategy, runStrategy, seolSwingStrategy,
+  bbcPullbackStrategy, candleMasterStrategy, compareStrategies, dayTradeBreakoutStrategy, DEFAULT_RUN, getStrategy, rsiRecoveryStrategy, runStrategy, seolSwingStrategy,
   STRATEGIES, TRADE_REASON_LABEL, weinsteinStrategy,
   type Strategy, type StrategyEntry, type StrategyExit,
 } from "../src/strategies";
@@ -483,6 +484,8 @@ describe("strategy comparison and look-ahead", () => {
     expect(rows.find((x) => x.id === "seol-swing")!.result).not.toBeNull();
   });
 
+  // 캔들마스터 패턴은 난수 보행에서 거의 나오지 않아 거래 여부는 따로 만든 시나리오(아래 candle master strategy)로 확인한다
+  const SPARSE = new Set(["candle-master"]);
   for (const s of STRATEGIES) {
     it(`${s.id} is unaffected by data after the evaluation bar`, () => {
       const cut = 380;
@@ -493,8 +496,226 @@ describe("strategy comparison and look-ahead", () => {
       expect(n).toBeGreaterThan(0);
       expect(b.equity.slice(0, n)).toEqual(a.equity.slice(0, n));
       const before = (r: typeof a) => r.trades.filter((t) => t.sellDate < cs[cut]!.date);
-      expect(before(a).length).toBeGreaterThan(0);
+      if (!SPARSE.has(s.id)) expect(before(a).length).toBeGreaterThan(0);
       expect(before(b)).toEqual(before(a));
     });
   }
+});
+
+describe("limit orders", () => {
+  const lim = (limitPrice: number, limitBars: number, extra: Partial<StrategyEntry> = {}): StrategyEntry => ({ stop: 80, limitPrice, limitBars, reason: "지정가", ...extra });
+
+  it("fills at the open when the open is at or below the limit", () => {
+    const cs = bars([...flat(1), [99, 100, 98, 99], ...flat(4)]);
+    const r = runStrategy(scripted({ 0: lim(100, 3) }, { 2: { fraction: 1, kind: "SIGNAL", reason: "청산" } }).s, cs, {}, noCost)!;
+    expect(r.trades[0]).toMatchObject({ buyDate: cs[1]!.date, buyPrice: 99, sellDate: cs[3]!.date });
+  });
+
+  it("fills at the limit intrabar and skips the target on that bar", () => {
+    const cs = bars([...flat(1), [103, 104, 102, 103], [103, 106, 99, 101], [101, 106, 100, 105], ...flat(2, 105)]);
+    const r = runStrategy(scripted({ 0: lim(100, 3, { target: 104 }) }).s, cs, {}, noCost)!;
+    // 1봉: 저가 102 > 100이라 안 닿음 → 2봉 장중 100에 체결. 2봉 고가 106은 체결 전일 수 있어 목표로 보지 않는다
+    expect(r.trades).toHaveLength(1);
+    expect(r.trades[0]).toMatchObject({ buyDate: cs[2]!.date, buyPrice: 100, sellDate: cs[3]!.date, sellPrice: 104, reason: "TARGET" });
+  });
+
+  it("expires after limitBars, never fills on the order bar, and pauses new entries while pending", () => {
+    const cs = bars([[100, 100, 90, 100], [100, 101, 96, 100], [100, 101, 96, 100], [100, 101, 90, 95], ...flat(2)]);
+    const { s, entryCalls } = scripted({ 0: lim(95, 2) });
+    const r = runStrategy(s, cs, {}, noCost)!;
+    // 0봉 저가 90은 주문 전(종가에 낸 주문). 1·2봉은 안 닿고 2봉에서 만료 → 3봉 저가 90에도 체결 없음
+    expect(r.trades).toHaveLength(0);
+    expect(r.openPosition).toBe(false);
+    expect(r.finalEquity).toBe(DEFAULT_RUN.initialCash);
+    // 대기 중(1봉)에는 진입을 평가하지 않고, 만료된 2봉 종가부터 다시 평가한다
+    expect(entryCalls).toEqual([0, 2, 3, 4]);
+    // 유효 기간을 3봉으로 늘리면 3봉에 지정가로 체결
+    const longer = runStrategy(scripted({ 0: lim(95, 3) }, { 4: { fraction: 1, kind: "SIGNAL", reason: "청산" } }).s, cs, {}, noCost)!;
+    expect(longer.trades[0]).toMatchObject({ buyDate: cs[3]!.date, buyPrice: 95 });
+  });
+
+  it("cancels when the open gaps under the stop", () => {
+    const cs = bars([...flat(1), [75, 76, 74, 75], [96, 97, 94, 96], ...flat(2)]);
+    const { s, entryCalls } = scripted({ 0: lim(95, 3) });
+    const r = runStrategy(s, cs, {}, noCost)!;
+    expect(r.openPosition).toBe(false);
+    expect(r.trades).toHaveLength(0);
+    expect(entryCalls.slice(0, 2)).toEqual([0, 1]); // 취소된 봉 종가에 다시 평가
+  });
+
+  it("checks the stop on the fill bar, measured from the fill price", () => {
+    const cs = bars([...flat(1), [103, 104, 85, 90], ...flat(2, 90)]);
+    const r = runStrategy(scripted({ 0: lim(100, 3, { stopPct: 10 }) }).s, cs, {}, noCost)!;
+    expect(r.trades[0]).toMatchObject({ buyDate: cs[1]!.date, buyPrice: 100, sellDate: cs[1]!.date, sellPrice: 90, reason: "STOP_LOSS" });
+  });
+
+  it("does not look ahead", () => {
+    const cs = bars([...flat(1), [103, 104, 102, 103], [103, 106, 99, 101], [101, 106, 100, 105], ...flat(2, 105)]);
+    const tampered = cs.map((c, i) => (i >= 3 ? { ...c, open: 50, high: 300, low: 1, close: 60 } : c));
+    const run = (x: Candle[]) => runStrategy(scripted({ 0: lim(100, 3, { target: 104 }) }).s, x, {}, noCost)!;
+    const a = run(cs), b = run(tampered);
+    expect(b.equity.slice(0, 3)).toEqual(a.equity.slice(0, 3));
+    expect(b.trades[0]!.buyDate).toBe(cs[2]!.date);
+    expect(b.trades[0]!.buyPrice).toBe(100);
+  });
+
+  it("lets updateStop rename the stop and its rule", () => {
+    const s: Strategy<null> = {
+      ...scripted({ 0: { stop: 80, reason: "x" } }).s,
+      updateStop: (i) => (i >= 2 ? { price: 100, rule: "M3-13 캔들마스터", label: "본전 스탑" } : null),
+    };
+    const cs = bars([...flat(1), [100, 110, 99.5, 108], [108, 112, 104, 110], [105, 106, 98, 99], ...flat(2)]);
+    const t = runStrategy(s, cs, {}, noCost)!.trades[0]!;
+    expect(t).toMatchObject({ reason: "STOP_LOSS", sellPrice: 100, exitRule: "M3-13 캔들마스터", sellDate: cs[3]!.date });
+    expect(t.exitReason).toContain("본전 스탑 100.00 이탈");
+  });
+});
+
+// ───── 캔들마스터 시나리오: 직전 파동 → 수평 횡보 → 양봉 스프링(60주) ─────
+
+type Row = [number, number, number, number];
+
+/** 주봉 행 → 월~금 일봉 행 5개(합치면 정확히 그 주봉) */
+const weekDays = ([o, h, l, c]: Row): Row[] => {
+  const m = (o + c) / 2;
+  return [[o, o, o, o], [o, h, Math.min(o, m), m], [m, m, l, m], [m, m, m, m], [m, Math.max(m, c), Math.min(m, c), c]];
+};
+
+/** 0~19주 60→100 상승, 20~44주 100→50 하락, 45~59주 수평 횡보(저점이 매주 step씩 오름), 60주 신호 */
+function cmWeeks(signal: Row, step = 0.25): Row[] {
+  const rows: Row[] = [];
+  const trend = (from: number, to: number, n: number) => {
+    for (let j = 1; j <= n; j++) {
+      const o = from + ((to - from) * (j - 1)) / n, c = from + ((to - from) * j) / n;
+      rows.push([o, Math.max(o, c) * 1.02, Math.min(o, c) * 0.98, c]);
+    }
+  };
+  trend(60, 100, 20);
+  trend(100, 50, 25);
+  for (let w = 0; w < 15; w++) {
+    const b = 50 + w * step;
+    rows.push(w % 2 ? [b + 1, b + 1.8, b - 0.8, b] : [b, b + 1.8, b - 0.8, b + 1]);
+  }
+  rows.push(signal);
+  return rows;
+}
+
+function climb(from: number, to: number, r = 1.02): Row[] {
+  const out: Row[] = [];
+  for (let p = from; p < to; p *= r) out.push([p, p * r * 1.003, p * 0.997, p * r]);
+  return out;
+}
+function slide(from: number, to: number, r = 0.98): Row[] {
+  const out: Row[] = [];
+  for (let p = from; p > to; p *= r) out.push([p, p * 1.003, p * r * 0.997, p * r]);
+  return out;
+}
+
+describe("candle master strategy", () => {
+  const SPRING: Row = [52.5, 55.5, 50.2, 55];
+  const STOP = 50.2 * 0.99;
+  const L = 55 - (55 - STOP) / 3; // M3-12 진입가
+  const SIGNAL_BAR = 60 * 5 + 4; // 60주 금요일
+  const FILL_BAR = SIGNAL_BAR + 2; // 다음 주 화요일
+  const base = cmWeeks(SPRING).flatMap(weekDays);
+  const dip: Row[] = [[54.5, 55, 54, 54.5], [54.5, 54.6, 53, 53.5]];
+  const run = (tail: Row[], p = {}) => {
+    const cs = bars([...base, ...dip, ...tail]);
+    return { cs, r: runStrategy(candleMasterStrategy(p), cs, {}, noCost)! };
+  };
+
+  it("is listed with its metadata", () => {
+    expect(STRATEGIES.map((s) => s.id)).toEqual(["weinstein", "seol-swing", "rsi-recovery", "bbc-pullback", "daytrade-breakout", "candle-master"]);
+    expect(getStrategy("candle-master")).toMatchObject({ name: "캔들마스터 주봉 캔들", source: "캔들마스터", timeframe: "weekly" });
+    expect(getStrategy("candle-master")!.rules).toEqual(expect.arrayContaining(["M3-12 캔들마스터", "M3-13 캔들마스터", "M4-01 캔들마스터"]));
+  });
+
+  it("matches candleMasterAt on the signal week", () => {
+    const cs = bars(base);
+    const r = candleMasterAt(toWeekly(cs), 60)!;
+    expect(r).toMatchObject({ valid: true, standard: true, primary: "SPRING" });
+    expect(r.entry).toBeCloseTo(L, 9);
+    expect(cs[SIGNAL_BAR]!.date).toBe(r.date);
+  });
+
+  it("waits at the M3-12 limit, fills intrabar, and sells everything at 3x", () => {
+    const { cs, r } = run(climb(53.5, 170));
+    expect(r.trades).toHaveLength(1);
+    const t = r.trades[0]!;
+    expect(t.buyDate).toBe(cs[FILL_BAR]!.date);
+    expect(t.buyPrice).toBeCloseTo(L, 9);
+    expect(t).toMatchObject({ reason: "TARGET", fraction: 1, entryRule: "M3-12 캔들마스터", exitRule: "M3-13 캔들마스터" });
+    expect(t.sellPrice).toBeCloseTo(L * 3, 6);
+    expect(t.returnPct).toBeCloseTo(200, 6);
+    expect(t.entryReason).toContain("양봉 스프링");
+    expect(t.entryReason).toContain("표준");
+  });
+
+  it("raises the stop to breakeven after +100% (M3-13)", () => {
+    const { r } = run([...climb(53.5, 110), ...slide(110, 40)]);
+    const t = r.trades[0]!;
+    expect(t).toMatchObject({ reason: "STOP_LOSS", exitRule: "M3-13 캔들마스터" });
+    expect(t.exitReason).toContain("본전 스탑");
+    expect(t.sellPrice).toBeCloseTo(L, 9);
+    expect(t.returnPct).toBeCloseTo(0, 9);
+    // +100%에 못 닿으면 원래 신호 손절가(M4-01)에서 나간다
+    const { r: r2 } = run([...climb(53.5, 100), ...slide(100, 40)]);
+    expect(r2.trades[0]).toMatchObject({ reason: "STOP_LOSS", exitRule: "M4-01 캔들마스터" });
+    expect(r2.trades[0]!.sellPrice).toBeCloseTo(STOP, 9);
+    expect(r2.trades[0]!.exitReason).toContain("손절가");
+  });
+
+  it("lets the limit order expire after about four weeks", () => {
+    const wait: Row[] = Array.from({ length: 18 }, () => [56, 56.5, 55.5, 56]);
+    const fall: Row[] = [[56, 56, 52, 52.5], ...Array.from({ length: 9 }, (): Row => [52.5, 52.6, 52.4, 52.5])];
+    // dip 대신 4주(20봉) 내내 지정가 위 → 21번째 봉에서 닿아도 체결하지 않는다
+    const cs = bars([...base, [56, 56.5, 55.5, 56], [56, 56.5, 55.5, 56], ...wait, ...fall]);
+    const r = runStrategy(candleMasterStrategy(), cs, {}, noCost)!;
+    expect(r.trades).toHaveLength(0);
+    expect(r.openPosition).toBe(false);
+    expect(cs[SIGNAL_BAR + 21]!.low).toBeLessThan(L);
+    // 유효 기간이 더 길면 그 봉에서 지정가로 체결
+    const longer = runStrategy(candleMasterStrategy({ limitBars: 30 }), cs, {}, noCost)!;
+    expect(longer.openPosition).toBe(true);
+  });
+
+  it("can wait at the midpoint instead", () => {
+    const deeper: Row[] = [[54.5, 55, 54, 54.5], [54.5, 54.6, 52, 53.5]];
+    const cs = bars([...base, ...deeper, ...climb(53.5, 170)]);
+    const mid = runStrategy(candleMasterStrategy({ entryMode: "mid" }), cs, {}, noCost)!.trades[0]!;
+    const third = runStrategy(candleMasterStrategy(), cs, {}, noCost)!.trades[0]!;
+    expect(mid.buyPrice).toBeCloseTo((55 + STOP) / 2, 9);
+    expect(third.buyPrice).toBeCloseTo(L, 9);
+    expect(mid.sellPrice).toBeCloseTo(mid.buyPrice * 3, 6);
+  });
+
+  it("targets 2x for a non-standard setup", () => {
+    const sig: Row = [50.5, 53, 48.5, 52.8];
+    const L2 = 52.8 - (52.8 - 48.5 * 0.99) / 3;
+    const cs = bars([...cmWeeks(sig, 0).flatMap(weekDays), [52, 52.5, 51.8, 52], [52, 52.1, 51, 51.5], ...climb(51.5, 120)]);
+    const t = runStrategy(candleMasterStrategy(), cs, {}, noCost)!.trades[0]!;
+    expect(t.buyPrice).toBeCloseTo(L2, 9);
+    expect(t).toMatchObject({ reason: "TARGET", fraction: 1 });
+    expect(t.sellPrice).toBeCloseTo(L2 * 2, 6);
+    expect(t.entryReason).toContain("비표준");
+  });
+
+  it("needs a year of weekly candles", () => {
+    expect(runStrategy(candleMasterStrategy(), bars(base.slice(0, 40 * 5)))).toBeNull();
+    expect(compareStrategies(bars(base.slice(0, 40 * 5))).find((x) => x.id === "candle-master")!.result).toBeNull();
+  });
+
+  it("is unaffected by data after the evaluation bar", () => {
+    const { cs, r: a } = run(climb(53.5, 170));
+    const sold = cs.findIndex((c) => c.date === a.trades[0]!.sellDate);
+    for (const cut of [SIGNAL_BAR + 1, FILL_BAR, sold + 3]) {
+      const tampered = cs.map((c, i) => (i >= cut ? { ...c, open: c.open * 3, high: c.high * 3.5, low: c.low * 0.2, close: c.close * 0.3 } : c));
+      const b = runStrategy(candleMasterStrategy(), tampered, {}, noCost)!;
+      const n = a.equity.findIndex((p) => p.date === cs[cut]!.date);
+      expect(b.equity.slice(0, n)).toEqual(a.equity.slice(0, n));
+      const before = (x: typeof a) => x.trades.filter((t) => t.sellDate < cs[cut]!.date);
+      expect(before(b)).toEqual(before(a));
+    }
+    expect(a.trades.filter((t) => t.sellDate < cs[sold + 3]!.date)).toHaveLength(1);
+  });
 });
