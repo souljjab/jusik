@@ -1,0 +1,53 @@
+/* --- 종목 분석 카드·재무 탭(접두어 an-) ---
+ * 이 파일은 styles.css보다 먼저 번들될 수 있어 .chip·.banner를 덮는 규칙은 클래스를 겹쳐 우선순위를 올렸다. */
+
+/* 근거 규칙 꼬리표(자료집 부록 A 규칙 ID) */
+.an-rule { display: inline-block; margin-left: 4px; padding: 0 6px; border: 1px solid var(--border); border-radius: 4px; font-size: 11px; line-height: 16px; font-weight: 400; color: var(--muted); white-space: nowrap; vertical-align: 1px; }
+
+/* ① 시장 국면 */
+.chip.an-posture-ATTACK { background: #c62828; } .chip.an-posture-NEUTRAL { background: #78879b; } .chip.an-posture-DEFENSE { background: #1d4ed8; }
+.an-score { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 2px 0 4px; }
+.an-breakdown { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.an-breakdown span { padding: 0 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); font-size: 12px; }
+.an-macro { margin-top: 8px; }
+.an-macro-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.an-macro-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 6px; margin: 6px 0 4px; }
+.an-macro-item { display: flex; flex-direction: column; min-width: 0; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
+.an-macro-item b { font-size: 15px; }
+.an-macro-item.an-bad { border-color: var(--err); } .an-macro-item.an-bad b { color: var(--err); }
+.an-macro-item.an-warn { border-color: var(--warn); } .an-macro-item.an-warn b { color: var(--warn); }
+.an-label, .an-date { font-size: 11px; color: var(--muted); }
+
+/* ② 종목 스크리닝 */
+.an-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0; }
+.chip.an-group-A { background: #15803d; } .chip.an-group-B { background: #d97706; }
+.chip.an-tag { background: var(--accent); }
+.banner.an-exclude { margin: 6px 0; padding: 8px 12px; }
+.an-exclude ul { margin: 4px 0 0; padding-left: 18px; }
+
+/* ③ 일봉 보조 신호 */
+.an-daily { margin-top: 8px; }
+.an-daily-group { display: flex; align-items: flex-start; gap: 8px; }
+.an-daily-group .notes { flex: 1; min-width: 0; }
+.an-side { flex: none; margin-top: 4px; padding: 0 6px; border-radius: 4px; font-size: 11px; font-weight: 700; line-height: 18px; color: #fff; }
+.an-side-buy { background: #c62828; } .an-side-sell { background: #1d4ed8; } .an-side-warn { background: #d97706; } .an-side-info { background: #78879b; }
+.an-sub { display: block; font-size: 11px; color: var(--muted); }
+
+/* 수급·공시·업종 */
+.an-extras { margin-top: 14px; padding-top: 2px; border-top: 1px solid var(--border); }
+.an-extras-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 900px) { .an-extras-grid { grid-template-columns: 1fr; } }
+.an-extras-grid > div { min-width: 0; }
+.an-dis { list-style: none; margin: 4px 0; padding: 0; }
+.an-dis li { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+.an-dis-date { flex: none; font-size: 12px; color: var(--muted); }
+.an-dis-title { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.an-dis .chip { flex: none; }
+.chip.an-tone-good { background: #15803d; } .chip.an-tone-bad { background: #b91c1c; } .chip.an-tone-info { background: #78879b; }
+
+/* 재무 탭 */
+.an-status-fail { color: var(--err); font-weight: 700; } .an-status-unknown { color: var(--muted); } .an-status-pass { color: #15803d; }
+@media (prefers-color-scheme: dark) { .an-status-pass { color: #4ade80; } }
+.an-fin td.an-est, .an-fin tr.an-est td { color: var(--muted); }
+.an-fin { font-variant-numeric: tabular-nums; }
+.an-caption { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
