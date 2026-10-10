@@ -59,12 +59,20 @@ export interface Fundamentals {
   annual?: PeriodFinancials[];
   /** 분기 실적(오래된 → 최신). 추정치(estimate)가 섞일 수 있다 */
   quarterly?: PeriodFinancials[];
+  /** 시가총액. 단위는 amountUnit(실적 금액과 같은 단위)라 PSR = marketCap ÷ 매출로 바로 계산된다 */
+  marketCap?: number;
+  /** 상장 주식 수(주) */
+  sharesOutstanding?: number;
+  /** marketCap·annual·quarterly 금액 단위. 국내(네이버·DART)는 억 원, 미국(SEC·야후)은 백만 달러 */
+  amountUnit?: "억원" | "백만달러";
 }
 
-/** 한 결산 기간의 실적. 금액 단위는 출처를 따른다(네이버: 억 원). EPS는 주당 금액(원·달러) */
+/** 한 결산 기간의 실적. 금액 단위는 Fundamentals.amountUnit(국내 억 원, 미국 백만 달러). EPS는 주당 금액(원·달러) */
 export interface PeriodFinancials {
   /** 결산 기간 라벨(예: "2024.12") */
   period: string;
+  /** 실제 공시(제출)일 YYYY-MM-DD. 있으면 과거 시점 판단에서 공시 지연 추정 대신 이 날짜를 쓴다(DART·SEC) */
+  filed?: string;
   /** 컨센서스 추정치(E)면 true. 스크리닝 판단에는 확정값만 쓴다 */
   estimate: boolean;
   /** 매출액 */

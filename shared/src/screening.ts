@@ -147,6 +147,7 @@ export function confirmedPeriods(f: Fundamentals | undefined, asOf?: string): { 
   const keep = (p: PeriodFinancials, lag: number) => {
     if (p.estimate) return false;
     if (!asOf) return true;
+    if (p.filed) return p.filed <= asOf; // 실제 제출일을 알면 그 날짜로
     const d = disclosedBy(p.period, lag);
     return d != null && d <= asOf; // 날짜를 모르면 공시 여부를 장담할 수 없어 뺀다
   };

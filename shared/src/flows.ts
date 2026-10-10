@@ -22,6 +22,12 @@ export interface Disclosure {
   /** YYYY-MM-DD */
   date: string;
   title: string;
+  /** 원문 링크(DART 접수번호·SEC 문서 주소 등) */
+  url?: string;
+  /** 출처 */
+  source?: "네이버" | "DART" | "SEC";
+  /** SEC 서식(8-K, 10-Q, 4 …) 또는 DART 보고서 구분 */
+  form?: string;
 }
 
 export interface SectorRow {
