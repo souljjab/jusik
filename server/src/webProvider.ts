@@ -1,10 +1,12 @@
-import { regionOfCode, type Candle, type Fundamentals, type Market, type Quote, type StockInfo } from "@jusik/shared";
+import { regionOfCode, type Candle, type Fundamentals, type Market, type PeriodFinancials, type Quote, type StockInfo } from "@jusik/shared";
+import type { UsHolders } from "../../shared/src/usFlows";
 import type { Http } from "./http";
 import { HttpError } from "./http";
 import { NAVER, parseFchart, parseNaverFundamentals, parseRankingTable, parseRealtime, realtimeToQuote } from "./naver";
 import type { MarketDataProvider, UniverseRow } from "./provider";
+import type { SecFinancials, SecSource } from "./sec";
 import { findStock, searchStocks } from "./stocks";
-import { parseYahooChart, parseYahooFundamentals, parseYahooScreener, parseYahooSearch, YAHOO, YAHOO_INDEX } from "./yahoo";
+import { parseYahooChart, parseYahooFundamentals, parseYahooHolders, parseYahooScreener, parseYahooSearch, YAHOO, YAHOO_INDEX } from "./yahoo";
 
 const rangeFor = (count: number) => (count <= 60 ? "3mo" : count <= 130 ? "6mo" : count <= 250 ? "1y" : count <= 500 ? "2y" : "5y");
 const AUTO = { encoding: "auto" } as const;
@@ -16,7 +18,8 @@ export class WebProvider implements MarketDataProvider {
   private known = new Map<string, StockInfo>();
   private crumb: { value: string; cookie: string } | null = null;
 
-  constructor(private http: Http) {}
+  /** sec를 주면 미국 종목 실적(연간·분기)을 SEC EDGAR에서 채운다(SecClient 또는 같은 모양의 원천) */
+  constructor(private http: Http, private sec?: SecSource) {}
 
   async search(q: string): Promise<StockInfo[]> {
     const local = searchStocks(q);
@@ -96,12 +99,25 @@ export class WebProvider implements MarketDataProvider {
   }
 
   async getFundamentals(code: string): Promise<Fundamentals> {
-    try {
-      if (regionOfCode(code) === "KR") return parseNaverFundamentals(await this.http.get(NAVER.main(code), AUTO));
-      return parseYahooFundamentals(await this.yahooWithCrumb(YAHOO.summary(code)));
-    } catch {
-      return {}; // 재무는 없어도 분석은 계속한다(스크리닝에서 '데이터 없음')
+    if (regionOfCode(code) === "KR") {
+      try {
+        return parseNaverFundamentals(await this.http.get(NAVER.main(code), AUTO));
+      } catch {
+        return {}; // 재무는 없어도 분석은 계속한다(스크리닝에서 '데이터 없음')
+      }
     }
+    // 미국: 야후(밸류에이션·시가총액) + SEC(연간·분기 실적). 어느 한쪽이 실패해도 나머지로 계속한다
+    const [yahoo, sec] = await Promise.all([
+      this.yahooWithCrumb(YAHOO.summary(code)).then(parseYahooFundamentals, (): Fundamentals => ({})),
+      this.sec ? this.sec.financials(code).catch((): SecFinancials | null => null) : Promise.resolve(null),
+    ]);
+    return mergeSecFinancials(yahoo, sec);
+  }
+
+  /** 미국 종목 지분·수급(기관·내부자·공매도). 국내 종목이면 빈 값. 접속 실패는 그대로 던진다(호출하는 쪽에서 오류로 표시) */
+  async getUsHolders(code: string): Promise<UsHolders> {
+    if (regionOfCode(code) === "KR") return {};
+    return parseYahooHolders(await this.yahooWithCrumb(YAHOO.holders(code)));
   }
 
   async getUniverse(market: Market): Promise<UniverseRow[]> {
@@ -154,4 +170,29 @@ export class WebProvider implements MarketDataProvider {
     }
     return second.text;
   }
+}
+
+const growthPct = (cur?: number, prev?: number) => (cur != null && prev != null && prev > 0 ? Math.round((cur / prev - 1) * 1000) / 10 : undefined);
+
+/**
+ * 야후 요약에 SEC 실적을 합친다. SEC 실적이 있으면 annual·quarterly를 채우고, 야후에 매출·영업이익 증가율이 없으면
+ * 마지막 두 확정 연간 실적(추정치 아님)으로 계산한다(직전 해 값이 0 이하면 증가율을 내지 않는다). 금액 단위는 백만 달러.
+ */
+export function mergeSecFinancials(yahoo: Fundamentals, sec: SecFinancials | null | undefined): Fundamentals {
+  const f: Fundamentals = { ...yahoo };
+  if (!sec || (!sec.annual.length && !sec.quarterly.length)) return f;
+  if (sec.annual.length) f.annual = sec.annual;
+  if (sec.quarterly.length) f.quarterly = sec.quarterly;
+  f.amountUnit = "백만달러";
+  const confirmed = sec.annual.filter((p: PeriodFinancials) => !p.estimate);
+  const cur = confirmed.at(-1), prev = confirmed.at(-2);
+  if (f.revenueGrowth == null) {
+    const g = growthPct(cur?.revenue, prev?.revenue);
+    if (g != null) f.revenueGrowth = g;
+  }
+  if (f.opIncomeGrowth == null) {
+    const g = growthPct(cur?.opIncome, prev?.opIncome);
+    if (g != null) f.opIncomeGrowth = g;
+  }
+  return f;
 }
