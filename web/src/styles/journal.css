@@ -1,0 +1,54 @@
+/* --- 매매일지 · 일일 복기 (jr-) --- */
+
+/* 입력 폼 */
+.jr-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.jr-emos { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.jr-emo { padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--input); color: var(--text); font: inherit; font-size: 12px; cursor: pointer; }
+.jr-emo[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.jr-emo-text { flex: 1 1 160px; min-width: 0; padding: 5px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--input); color: var(--text); font: inherit; font-size: 12px; }
+.jr-textarea { width: 100%; min-height: 56px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--input); color: var(--text); font: inherit; resize: vertical; }
+
+/* 주문 전 체크리스트 · 저장 결과 */
+.jr-check { background: var(--bg); border-left: 3px solid var(--warn); border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
+.jr-check.jr-ok { border-left-color: var(--accent); }
+.jr-check h4 { margin: 0 0 4px; font-size: 14px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.jr-result { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
+.jr-result p { margin: 4px 0; }
+.jr-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+
+/* 기록 표 */
+.jr-wide { min-width: 160px; max-width: 280px; }
+.jr-viol { display: inline-block; min-width: 22px; padding: 0 7px; border-radius: 999px; background: var(--err-bg); color: var(--err); font-weight: 700; font-size: 12px; text-align: center; cursor: help; }
+.jr-row-actions { display: flex; gap: 2px; align-items: center; justify-content: flex-end; }
+.trades tr.jr-editing td { background: var(--warn-bg); }
+.trades .jr-edit-row td { background: var(--bg); text-align: left; white-space: normal; }
+.jr-edit { display: grid; gap: 10px; padding: 6px 0; max-width: 720px; }
+
+/* 일일 복기 */
+.jr-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: space-between; margin: 8px 0; }
+.jr-bar .seg { margin-bottom: 0; }
+.jr-bar-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.jr-msg { margin: 8px 0; }
+.jr-msg ul { margin: 4px 0 0; padding-left: 18px; }
+.jr-rv-head { margin: 0 0 6px; font-size: 16px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.jr-rv-comment { margin: 6px 0 12px; line-height: 1.65; }
+.jr-rv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-bottom: 10px; }
+.jr-rv-sec { background: var(--bg); border-radius: 10px; padding: 10px 12px; min-width: 0; }
+.jr-rv-sec h5 { margin: 0 0 6px; font-size: 13px; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.trades.jr-mini th { position: static; background: none; }
+.trades.jr-mini th, .trades.jr-mini td { padding: 4px 6px; }
+.jr-rows { list-style: none; margin: 0; padding: 0; }
+.jr-rows li { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 2px 0; font-size: 13px; }
+.jr-rows .jr-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jr-rows .jr-val { white-space: nowrap; text-align: right; }
+.jr-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.jr-chip { display: inline-flex; gap: 4px; align-items: baseline; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); font-size: 12px; white-space: nowrap; }
+.jr-name-btn { text-align: left; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: none; }
+.jr-name-btn:hover { text-decoration: underline; }
+.jr-missing { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0 10px; }
+.jr-memo { display: grid; gap: 6px; }
+
+/* 상단 화면 탭이 5개라 좁은 화면에서는 가로로 넘겨 본다 */
+.jr-views { overflow-x: auto; scrollbar-width: none; }
+.jr-views::-webkit-scrollbar { display: none; }
+.jr-views button { flex: none; white-space: nowrap; }
