@@ -1,21 +1,61 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ColorType, createChart, type Time } from "lightweight-charts";
-import { DEFAULT_BACKTEST, expectancy, runBacktest, runStageBacktest, type BacktestResult, type Candle, type Region } from "@jusik/shared";
+import {
+  DEFAULT_BACKTEST,
+  TRADE_REASON_LABEL,
+  expectancy,
+  runBacktest,
+  runStageBacktest,
+  type BacktestResult,
+  type Candle,
+  type Region,
+  type StockInfo,
+} from "@jusik/shared";
+import { DcaSimulator } from "./DcaSimulator";
 import { money, num, pct, tone } from "./format";
+import { Metric, StrategyCompare } from "./StrategyCompare";
 import { useChartColors } from "./theme";
+import "./styles/backtest.css";
 
-function Metric({ label, value, cls }: { label: string; value: string; cls?: string }) {
+type Mode = "single" | "compare" | "dca";
+const MODES: [Mode, string][] = [
+  ["single", "단일 전략"],
+  ["compare", "전략 비교"],
+  ["dca", "적립식(DCA)"],
+];
+
+interface Props {
+  candles: Candle[];
+  indexCandles: Candle[] | null;
+  region: Region;
+  /** 종목 정보. 전략 비교에서 단타 전략의 지역별 기준값을 고를 때 써요 */
+  info?: StockInfo;
+}
+
+export function BacktestTab({ candles, indexCandles, region, info }: Props) {
+  const [mode, setMode] = useState<Mode>("single");
   return (
-    <div className="metric">
-      <span className="muted small">{label}</span>
-      <b className={cls}>{value}</b>
+    <div className="card">
+      <div className="bt-modebar">
+        <div className="seg" role="radiogroup" aria-label="백테스트 방식">
+          {MODES.map(([k, label]) => (
+            <button key={k} role="radio" aria-checked={mode === k} className={mode === k ? "on" : ""} onClick={() => setMode(k)}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {mode === "single" && <SingleBacktest candles={candles} indexCandles={indexCandles} region={region} />}
+      {mode === "compare" && <StrategyCompare candles={candles} indexCandles={indexCandles} region={region} info={info} />}
+      {mode === "dca" && <DcaSimulator candles={candles} region={region} />}
     </div>
   );
 }
 
 type Strategy = "stage" | "score";
 
-export function BacktestTab({ candles, indexCandles, region }: { candles: Candle[]; indexCandles: Candle[] | null; region: Region }) {
+/** 기존 단일 전략 백테스트(주봉 단계 / 일봉 점수) */
+function SingleBacktest({ candles, indexCandles, region }: { candles: Candle[]; indexCandles: Candle[] | null; region: Region }) {
   const won = (n: number) => money(n, region);
   const colors = useChartColors();
   const [strategy, setStrategy] = useState<Strategy>("stage");
@@ -65,7 +105,7 @@ export function BacktestTab({ candles, indexCandles, region }: { candles: Candle
   }, [result, colors]);
 
   return (
-    <div className="card">
+    <>
       <div className="seg" role="radiogroup" aria-label="전략">
         <button role="radio" aria-checked={strategy === "stage"} className={strategy === "stage" ? "on" : ""} onClick={() => setStrategy("stage")}>주봉 단계 전략 (기본)</button>
         <button role="radio" aria-checked={strategy === "score"} className={strategy === "score" ? "on" : ""} onClick={() => setStrategy("score")}>일봉 점수 전략 (단기)</button>
@@ -128,7 +168,10 @@ export function BacktestTab({ candles, indexCandles, region }: { candles: Candle
                     <td>{t.sellDate}</td><td>{t.sellPrice.toLocaleString()}</td>
                     <td>{t.shares.toLocaleString()}</td>
                     <td className={tone(t.returnPct)}>{pct(t.returnPct)}</td>
-                    <td>{t.reason === "STOP_LOSS" ? "손절" : "신호"}</td>
+                    <td>
+                      {TRADE_REASON_LABEL[t.reason]}
+                      {t.fraction != null && t.fraction < 0.999 && <span className="muted small"> ({Math.round(t.fraction * 100)}%)</span>}
+                    </td>
                   </tr>
                 ))}
                 {result.trades.length === 0 && <tr><td colSpan={7} className="muted">이 조건에서는 거래가 발생하지 않았어요.</td></tr>}
@@ -137,6 +180,6 @@ export function BacktestTab({ candles, indexCandles, region }: { candles: Candle
           </div>
         </>
       )}
-    </div>
+    </>
   );
 }

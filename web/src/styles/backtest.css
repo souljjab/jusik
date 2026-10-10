@@ -1,0 +1,48 @@
+/* --- 백테스트 탭: 방식 선택 · 전략 비교 · 적립식(DCA) ---
+ * 이 파일은 styles.css보다 먼저 번들될 수 있어요. 기존 클래스를 덮어쓸 때는 선택자를 한 단계 더 구체적으로 써요. */
+
+.bt-modebar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-bottom: 10px; margin-bottom: 12px; border-bottom: 1px solid var(--border); }
+.bt-modebar .seg { margin-bottom: 0; max-width: 100%; }
+.bt-modebar .seg button { padding: 6px 12px; white-space: nowrap; }
+.bt-intro { margin: 0 0 6px; }
+.bt-caption { margin: 6px 0 0; }
+.bt-chart { margin-top: 4px; }
+
+/* 근거 규칙 태그 */
+.bt-rule { display: inline-block; margin: 0 4px 2px 0; padding: 0 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--muted); font-size: 11px; font-weight: 400; line-height: 18px; white-space: nowrap; vertical-align: middle; }
+.bt-rules { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 4px 0 8px; }
+.bt-rules .bt-rule { margin: 0; }
+
+/* 선 색 견본·범례 */
+.bt-swatch { display: inline-block; width: 12px; height: 3px; border-radius: 2px; vertical-align: middle; flex: none; }
+.bt-swatch.bt-swatch-dash { height: 0; background: none; border-top: 2px dashed; border-radius: 0; }
+.bt-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; vertical-align: middle; }
+.bt-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 6px 0 4px; font-size: 12px; }
+.bt-legend label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.bt-legend input { margin: 0; }
+
+/* 전략 비교 표 */
+.table-wrap.bt-wrap { max-height: none; }
+.bt-compare td.left { min-width: 190px; }
+.bt-name { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: var(--text); font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
+.bt-name:hover { color: var(--accent); }
+.bt-caret { display: inline-block; width: 10px; color: var(--muted); }
+.bt-sub { display: block; padding-left: 16px; color: var(--muted); font-size: 12px; }
+.pill.bt-best { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+.pill.bt-tag { margin-left: 6px; }
+.bt-compare tr.bt-open td { background: var(--bg); }
+.trades td.bt-detail { padding: 10px 12px 12px; background: var(--bg); text-align: left; white-space: normal; }
+/* 펼친 내용이 표 폭을 넓히지 않게: 칸 너비만큼만 쓰고 넘치면 안쪽 표가 가로 스크롤돼요 */
+.bt-detail-body { width: 0; min-width: 100%; }
+.bt-desc { margin: 0 0 6px; }
+.bt-detail .table-wrap { background: var(--card); border-radius: 8px; }
+.trades td.bt-reason { min-width: 200px; }
+
+/* 적립식 */
+.bt-presets { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: -4px 0 10px; }
+.bt-presets .seg { margin-bottom: 0; }
+.bt-open-cycle { margin: 12px 0; padding: 12px; border-radius: 10px; background: var(--bg); }
+.bt-open-cycle .h3 { margin-bottom: 4px; }
+.bt-open-cycle .levels { margin: 8px 0; }
+.bt-open-cycle .levels > div { background: var(--card); }
+.bt-plan { margin: 6px 0 0; }
