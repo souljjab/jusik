@@ -1,6 +1,6 @@
 import { useState } from "react";
 import {
-  DEFAULT_PAPER_TRACKING, paperEquity, regionOfCode,
+  DEFAULT_PAPER_TRACKING, EXPOSURE_CAP_REASON, paperEquity, regionOfCode,
   type Currency, type DayTradeCandidate, type PaperAccount, type PaperTrackingStatus, type Plan, type PlanItem, type Region, type ServerState,
 } from "@jusik/shared";
 import { excelUrl, resetPaper, startScan, syncExport } from "./api";
@@ -13,7 +13,6 @@ import "./styles/daytrade.css";
 const CUR_LABEL: Record<Currency, string> = { KRW: "원화(국내)", USD: "달러(해외)" };
 const REGIME_LABEL: Record<string, string> = { BULL: "강세", NEUTRAL: "중립", BEAR: "약세" };
 /** shared/daytrade.ts planWithCash가 남기는 사유 문구 */
-const CAP_REASON = "국면별 투자 상한 도달";
 
 /** 제외 사유별 개수(많은 순) */
 function reasonCounts(plan: Plan): [string, number][] {
@@ -24,7 +23,7 @@ function reasonCounts(plan: Plan): [string, number][] {
 
 function SkippedList({ plan, cap, paperEnabled }: { plan: Plan; cap: number | undefined; paperEnabled: boolean }) {
   const counts = reasonCounts(plan);
-  const capHit = counts.some(([r]) => r === CAP_REASON);
+  const capHit = counts.some(([r]) => r === EXPOSURE_CAP_REASON);
   return (
     <>
       <p className="small dt-skip-sum"><span className="muted">제외 사유:</span> {counts.map(([r, n]) => `${r} ${n}개`).join(" · ")}</p>
@@ -38,7 +37,7 @@ function SkippedList({ plan, cap, paperEnabled }: { plan: Plan; cap: number | un
         <summary className="muted small">제외된 후보 {plan.skipped.length}개</summary>
         <ul className="notes small">
           {plan.skipped.map((x) => (
-            <li key={x.candidate.code} className={x.reason === CAP_REASON ? "note-warn" : "note-info"}>{x.candidate.name}({x.candidate.code}) — {x.reason}</li>
+            <li key={x.candidate.code} className={x.reason === EXPOSURE_CAP_REASON ? "note-warn" : "note-info"}>{x.candidate.name}({x.candidate.code}) — {x.reason}</li>
           ))}
         </ul>
       </details>

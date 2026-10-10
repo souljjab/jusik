@@ -217,7 +217,7 @@ export interface Plan {
   remainingCash: number;
 }
 
-const EXPOSURE_CAP_REASON = "국면별 투자 상한 도달";
+export const EXPOSURE_CAP_REASON = "국면별 투자 상한 도달";
 
 /**
  * 점수 순으로 예수금 안에서 살 수 있는 조합을 만든다. 손절폭 기준 수량 + 비중 상한 + 예비 현금 + 최대 종목 수를 지킨다.
