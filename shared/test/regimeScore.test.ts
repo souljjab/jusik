@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { analyzeBreadth, analyzeBreadthAt, type BreadthAnalysis, type BreadthDay } from "../src/breadth";
 import { rsi } from "../src/indicators";
 import { buildMacroSnapshot, type MacroSnapshot } from "../src/macro";
 import { assessRegime, assessRegimeAt, DEFAULT_POSTURE_CAPS, POSTURE_LABEL } from "../src/regimeScore";
@@ -45,7 +46,7 @@ describe("assessRegime", () => {
     expect(a.stageRegime).toBe("BULL");
     expect(a.macdBullish).toBe(true);
     expect(a.choppy).toBe(false);
-    expect(a.breakdown).toEqual({ stage: 2, macd: 1, rsi: 0, macro: 0 });
+    expect(a.breakdown).toEqual({ stage: 2, macd: 1, rsi: 0, macro: 0, breadth: 0 });
     expect(a.score).toBe(3);
     expect(a.posture).toBe("ATTACK");
     expect(a.exposureCapPct).toBe(DEFAULT_POSTURE_CAPS.ATTACK);
@@ -169,5 +170,123 @@ describe("assessRegimeAt (no look-ahead)", () => {
     expect(assessRegimeAt(crashed, 299)!.posture).not.toBe(assessRegimeAt(candles, 299)!.posture);
     expect(assessRegimeAt(candles, -1)).toBeNull();
     expect(assessRegimeAt(candles, 300)).toBeNull();
+  });
+});
+
+/** 지수 날짜에 맞춘 시장 폭 집계일(표본 100종목). nets[k]가 k번째 날 순상승 */
+function breadthDays(candles: Candle[], net: (k: number) => number, extra: Partial<BreadthDay> = {}): BreadthDay[] {
+  return candles.map((c, k) => {
+    const n = net(k);
+    const adv = Math.floor((100 + n) / 2);
+    return { date: c.date, adv, dec: adv - n, unch: 100 - adv - (adv - n), newHigh: 0, newLow: 0, total: 100, ...extra };
+  });
+}
+
+/** 점수만 정해 둔 시장 폭 분석(통합 확인용) */
+function fakeBreadth(asOf: string, score: -1 | 0 | 1): BreadthAnalysis {
+  return {
+    asOf,
+    basis: "테스트",
+    sampleSize: 100,
+    adLine: [],
+    mi: [],
+    mcclellan: [],
+    mcclellanSum: [],
+    hiLo: { newHigh: 0, newLow: 0, avg10High: 0, avg10Low: 0 },
+    divergence: null,
+    miSignal: null,
+    hiLoState: null,
+    signals: [{ tone: score < 0 ? "bad" : score > 0 ? "good" : "info", text: "시장 폭 테스트 신호예요", rule: "M1-04 와인스타인" }],
+    score,
+  };
+}
+
+describe("assessRegime with market breadth (2.2, M1-04·05)", () => {
+  const candles = daily(bullCloses);
+  const last = candles.at(-1)!.date;
+
+  it("absent or null breadth changes nothing", () => {
+    const base = assessRegime(candles)!;
+    expect(assessRegime(candles, null, DEFAULT_POSTURE_CAPS, { breadth: null })).toEqual(base);
+    expect(assessRegime(candles, null, DEFAULT_POSTURE_CAPS, { breadth: undefined })).toEqual(base);
+    expect(base.breakdown.breadth).toBe(0);
+  });
+
+  it("adds the breadth score as a separate breakdown item and appends its signals with rule tags", () => {
+    const base = assessRegime(candles)!;
+    const bad = assessRegime(candles, null, DEFAULT_POSTURE_CAPS, { breadth: fakeBreadth(last, -1) })!;
+    expect(bad.breakdown).toEqual({ ...base.breakdown, breadth: -1 });
+    expect(bad.score).toBe(base.score - 1);
+    expect(bad.notes.some((n) => n.text === "시장 폭 테스트 신호예요" && n.rule === "M1-04 와인스타인" && n.tone === "bad")).toBe(true);
+    expect(bad.notes.some((n) => n.rule === "2.2 와인스타인" && n.text.includes("국면 점수 -1점"))).toBe(true);
+    const good = assessRegime(candles, null, DEFAULT_POSTURE_CAPS, { breadth: fakeBreadth(last, 1) })!;
+    expect(good.breakdown.breadth).toBe(1);
+    expect(good.score).toBe(base.score + 1);
+    // 0점이면 신호는 붙지만 점수 안내는 없다
+    const flat = assessRegime(candles, null, DEFAULT_POSTURE_CAPS, { breadth: fakeBreadth(last, 0) })!;
+    expect(flat.score).toBe(base.score);
+    expect(flat.notes.some((n) => n.text.includes("시장 폭 신호 →"))).toBe(false);
+    for (const n of bad.notes) expect(n.rule, n.text).toBeTruthy();
+  });
+
+  it("can move the posture as an auxiliary point (ATTACK 2 → NEUTRAL 1)", () => {
+    const oneMacro: MacroSnapshot = { asOf: "2023-02-24", yieldSpread: { value: -0.1, date: "2023-02-24" } };
+    const a = assessRegime(candles, oneMacro)!;
+    expect(a.score).toBe(2);
+    expect(a.posture).toBe("ATTACK");
+    const b = assessRegime(candles, oneMacro, DEFAULT_POSTURE_CAPS, { breadth: fakeBreadth(last, -1) })!;
+    expect(b.score).toBe(1);
+    expect(b.posture).toBe("NEUTRAL");
+    // 약세 국면(M1-02)은 시장 폭이 좋아도 방어
+    const bear = daily(bearCloses);
+    expect(assessRegime(bear, null, DEFAULT_POSTURE_CAPS, { breadth: fakeBreadth(bear.at(-1)!.date, 1) })!.posture).toBe("DEFENSE");
+  });
+
+  it("ignores breadth dated after the index's last bar (no look-ahead) or stale by more than a week", () => {
+    const base = assessRegime(candles)!;
+    const future = assessRegime(candles, null, DEFAULT_POSTURE_CAPS, { breadth: fakeBreadth("2099-01-01", -1) })!;
+    expect(future.breakdown.breadth).toBe(0);
+    expect(future.score).toBe(base.score);
+    expect(future.notes.some((n) => n.rule === "2.2 와인스타인" && n.text.includes("늦어"))).toBe(true);
+    expect(future.notes.some((n) => n.text === "시장 폭 테스트 신호예요")).toBe(false);
+    const stale = assessRegime(candles, null, DEFAULT_POSTURE_CAPS, { breadth: fakeBreadth(candles.at(-7)!.date, -1) })!;
+    expect(stale.breakdown.breadth).toBe(0);
+    expect(stale.notes.some((n) => n.text.includes("오래돼"))).toBe(true);
+    // 일주일 안쪽(직전 거래일 등)은 쓴다
+    expect(assessRegime(candles, null, DEFAULT_POSTURE_CAPS, { breadth: fakeBreadth(candles.at(-2)!.date, -1) })!.breakdown.breadth).toBe(-1);
+  });
+
+  it("works with a real analysis: MI deep stay then cross down costs a point", () => {
+    // 지수는 그대로 강세, 시장 내부는 250일 +30 뒤 47일 전 종목 하락 → MI 0선 하향 교차(M1-05)
+    const days = breadthDays(candles.slice(0, 297), (k) => (k < 250 ? 30 : -100));
+    const br = analyzeBreadth(days, candles)!;
+    expect(br.miSignal?.dir).toBe("DOWN");
+    expect(br.score).toBe(-1);
+    const i = 296;
+    const a = assessRegimeAt(candles, i, null, DEFAULT_POSTURE_CAPS, { breadth: br })!;
+    expect(a.breakdown.breadth).toBe(-1);
+    expect(a.notes.some((n) => n.rule === "M1-05 와인스타인" && n.tone === "bad")).toBe(true);
+    expect(a.score).toBe(assessRegimeAt(candles, i)!.score - 1);
+  });
+});
+
+describe("assessRegimeAt with breadth (no look-ahead)", () => {
+  it("passes breadth through and past assessments ignore later breadth", () => {
+    const candles = daily(bullCloses);
+    const days = breadthDays(candles, (k) => (k % 3 ? 10 : -14), { newHigh: 0, newLow: 12, hiLoBase: 100 });
+    const latest = analyzeBreadth(days, candles)!;
+    for (const i of [200, 250]) {
+      const date = candles[i]!.date;
+      const asOf = analyzeBreadthAt(days, candles, date)!;
+      expect(asOf.asOf).toBe(date);
+      expect(asOf.score).toBe(-1); // 신저가 우위
+      const a = assessRegimeAt(candles, i, null, DEFAULT_POSTURE_CAPS, { breadth: asOf })!;
+      expect(a).toEqual(assessRegime(candles.slice(0, i + 1), null, DEFAULT_POSTURE_CAPS, { breadth: asOf }));
+      expect(a.breakdown.breadth).toBe(-1);
+      // 최신 분석(미래 날짜)을 넘기면 과거 판정에서는 빠진다
+      const withLatest = assessRegimeAt(candles, i, null, DEFAULT_POSTURE_CAPS, { breadth: latest })!;
+      expect(withLatest.breakdown.breadth).toBe(0);
+      expect(withLatest.score).toBe(assessRegimeAt(candles, i)!.score);
+    }
   });
 });
