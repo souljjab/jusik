@@ -1,6 +1,6 @@
 import {
   buildMacroSnapshot, disclosureNotes, flowSignals, sectorStrength,
-  type Disclosure, type InvestorFlow, type MacroSeriesId, type MacroSeriesPoint, type MacroSnapshot, type SectorRow, type StockExtras,
+  type Candle, type Disclosure, type InvestorFlow, type MacroSeriesId, type MacroSeriesPoint, type MacroSnapshot, type SectorRow, type StockExtras,
 } from "@jusik/shared";
 import type { Http } from "./http";
 import { fetchDisclosures, fetchInvestorFlows, fetchItemSector, fetchSectors } from "./naverExtra";
@@ -98,24 +98,30 @@ const SAMPLE_TITLES = ["단일판매ㆍ공급계약체결", "주식등의대량�
 /** 종목 코드로 항상 같은 값이 나오는 가짜 수급·공시·업종(샘플 모드 전용, 실제 값이 아니다) */
 export class MockExtras implements ExtrasSource {
   readonly sample = true;
-  constructor(private now: () => Date = () => new Date()) {}
+  /** candles를 주면 수급 표의 날짜·종가·거래량을 샘플 일봉과 맞춘다 */
+  constructor(private now: () => Date = () => new Date(), private candles?: (code: string, count: number) => Promise<Candle[]>) {}
 
   async investorFlows(code: string): Promise<InvestorFlow[]> {
     if (!/^\d{6}$/.test(code)) return [];
     const r = rng(hash(code + "flow"));
     const bias = r() - 0.4;
-    const out: InvestorFlow[] = [];
-    let close = 10_000 + Math.floor(r() * 90) * 1000;
-    for (let i = 39; i >= 0; i--) {
-      const d = new Date(this.now().getTime() - i * 86_400_000);
-      if (d.getUTCDay() === 0 || d.getUTCDay() === 6) continue;
-      close = Math.max(100, Math.round(close * (1 + (r() - 0.5) * 0.04)));
-      out.push({
-        date: d.toISOString().slice(0, 10), close, volume: Math.round(100_000 + r() * 900_000),
-        institutionNet: Math.round((r() - 0.5 + bias) * 50_000), foreignNet: Math.round((r() - 0.5 + bias) * 80_000), foreignHoldPct: Math.round(r() * 5000) / 100,
-      });
+    let bars: { date: string; close: number; volume: number }[] = (await this.candles?.(code, 30).catch(() => [])) ?? [];
+    if (!bars.length) {
+      let close = 10_000 + Math.floor(r() * 90) * 1000;
+      for (let i = 39; i >= 0; i--) {
+        const d = new Date(this.now().getTime() - i * 86_400_000);
+        if (d.getUTCDay() === 0 || d.getUTCDay() === 6) continue;
+        close = Math.max(100, Math.round(close * (1 + (r() - 0.5) * 0.04)));
+        bars.push({ date: d.toISOString().slice(0, 10), close, volume: Math.round(100_000 + r() * 900_000) });
+      }
     }
-    return out;
+    let hold = 10 + r() * 40;
+    return bars.map((b) => {
+      hold = Math.min(90, Math.max(1, hold + (r() - 0.5 + bias) * 0.4));
+      return {
+        ...b, institutionNet: Math.round((r() - 0.5 + bias) * b.volume * 0.1), foreignNet: Math.round((r() - 0.5 + bias) * b.volume * 0.15), foreignHoldPct: Math.round(hold * 100) / 100,
+      };
+    });
   }
 
   async disclosures(code: string): Promise<Disclosure[]> {

@@ -91,7 +91,9 @@ export function loadStock(code: string): Promise<StockData> {
 }
 
 // ---- 서버(스캔·설정·모의계좌·일지·내보내기) ----
-const send = (method: string, body?: unknown): RequestInit => ({ method, headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+// 본문이 없을 때 content-type: application/json을 붙이면 서버(Fastify)가 빈 JSON 본문으로 거절한다
+const send = (method: string, body?: unknown): RequestInit =>
+  body === undefined ? { method } : { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) };
 
 export const getState = () => getJson<ServerState>("/api/state");
 export const saveSettings = (s: Partial<Settings>) => {

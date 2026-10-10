@@ -16,7 +16,10 @@ const env = process.env;
 const dataDir = resolve(env.DATA_DIR ?? resolve(process.cwd(), "../data"));
 
 function makeSources(): { provider: MarketDataProvider; macro: MacroSource; extras: ExtrasSource } {
-  if ((env.PROVIDER ?? "web").toLowerCase() === "mock") return { provider: new MockProvider(), macro: new MockMacro(), extras: new MockExtras() };
+  if ((env.PROVIDER ?? "web").toLowerCase() === "mock") {
+    const provider = new MockProvider();
+    return { provider, macro: new MockMacro(), extras: new MockExtras(undefined, (code, n) => provider.getCandles(code, n)) };
+  }
   // 모든 사이트 요청이 같은 직렬 큐를 지나가게 HTTP 클라이언트 하나를 같이 쓴다
   const http = createHttp({ minIntervalMs: Number(env.HTTP_MIN_INTERVAL_MS ?? 500), userAgent: env.HTTP_USER_AGENT || undefined });
   return { provider: new WebProvider(http), macro: new MacroProvider(http), extras: new NaverExtras(http) };

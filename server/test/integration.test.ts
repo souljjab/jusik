@@ -226,6 +226,13 @@ describe("HTTP API — new endpoints", () => {
     expect(st.paperTracking.US.startedAt).toBeNull();
   });
 
+  it("answers malformed requests with 4xx instead of a data-site 502", async () => {
+    const { app } = api();
+    const r = await app.inject({ method: "POST", url: "/api/paper/reset", headers: { "content-type": "application/json" }, payload: "" });
+    expect(r.statusCode).toBe(400);
+    expect((await app.inject({ method: "POST", url: "/api/paper/reset" })).statusCode).toBe(200);
+  });
+
   it("clamps posture caps and guard settings", async () => {
     const { app } = api();
     const s = (
@@ -246,6 +253,15 @@ describe("daily review job", () => {
     expect(s.store.state.reviews.map((r) => `${r.region}:${r.date}`)).toEqual([`KR:${END}`]);
     await (scheduler as unknown as { tick: () => Promise<void> }).tick();
     expect(s.store.state.reviews).toHaveLength(1);
+  });
+
+  it("dates a review made on a weekend to the last trading day so that day's candidates count", async () => {
+    const s = setup({ paperEnabled: false });
+    await runScan(s.deps);
+    s.setNow(new Date("2024-03-23T03:00:00Z")); // 토요일 12:00 KST
+    const { review } = await buildReviewNow(s.deps, "KR");
+    expect(review.date).toBe(END);
+    expect(review.candidatesTop.length).toBeGreaterThan(0);
   });
 
   it("falls back to the universe saved by today's scan when the live list fails", async () => {

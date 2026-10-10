@@ -27,7 +27,7 @@ const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 export async function buildReviewNow(deps: ReviewDeps, region: Region): Promise<{ review: DailyReview; errors: string[] }> {
   const { provider, store } = deps;
   const at = (deps.now ?? (() => new Date()))();
-  const date = marketClock(region, at).date;
+  const today = marketClock(region, at).date;
   const markets = MARKETS_OF[region].filter((m) => store.state.settings.markets[m]);
   const errors: string[] = [];
 
@@ -39,6 +39,9 @@ export async function buildReviewNow(deps: ReviewDeps, region: Region): Promise<
       errors.push(`${INDEX_NAME[m]} 지수: ${msg(e)}`);
     }
   }
+  // 복기 날짜는 마지막 거래일: 주말·공휴일·개장 전에 만들면 지수의 마지막 봉 날짜(오늘 이전)를 쓴다
+  const lastBar = indices.flatMap((ix) => ix.candles.filter((c) => c.date <= today).slice(-1).map((c) => c.date)).sort().at(-1);
+  const date = lastBar ?? today;
 
   const universe: MarketRowLike[] = [];
   for (const m of markets) {
@@ -49,7 +52,7 @@ export async function buildReviewNow(deps: ReviewDeps, region: Region): Promise<
     } catch (e) {
       // 새로 받지 못하면 같은 날 스캔 때 받아 둔 순위표를 쓴다
       const last = store.state.lastUniverse[m];
-      if (last && marketClock(region, new Date(last.at)).date === date) universe.push(...last.rows);
+      if (last && marketClock(region, new Date(last.at)).date >= date) universe.push(...last.rows);
       errors.push(`${m} 순위표: ${msg(e)}`);
     }
   }

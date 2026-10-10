@@ -250,7 +250,9 @@ export function buildApp({ provider, store, exporter, scheduler, macro, extras, 
   });
 
   app.setErrorHandler((err, _req, reply) => {
-    reply.code(502).send({ error: err instanceof Error ? err.message : String(err) });
+    // 잘못된 요청(본문 형식 등)은 그대로 4xx, 그 밖의 실패는 데이터 사이트 문제로 보고 502
+    const status = (err as { statusCode?: number }).statusCode;
+    reply.code(status && status >= 400 && status < 500 ? status : 502).send({ error: err instanceof Error ? err.message : String(err) });
   });
 
   return app;

@@ -6,7 +6,7 @@
 .bt-modebar .seg button { padding: 6px 12px; white-space: nowrap; }
 .bt-intro { margin: 0 0 6px; }
 .bt-caption { margin: 6px 0 0; }
-.bt-chart { margin-top: 4px; }
+.bt-chart { margin-top: 14px; }
 
 /* 근거 규칙 태그 */
 .bt-rule { display: inline-block; margin: 0 4px 2px 0; padding: 0 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--muted); font-size: 11px; font-weight: 400; line-height: 18px; white-space: nowrap; vertical-align: middle; }
