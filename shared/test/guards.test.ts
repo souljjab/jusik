@@ -77,6 +77,13 @@ describe("averagingDownCheck", () => {
     expect(averagingDownCheck([], next(10_000))).toEqual({ allowed: true, lossAdds: 0, notes: [] });
     expect(averagingDownCheck([entry("1", "2024-01-02", "BUY", 10_000, 10)], next(9_000, "2024-01-10", "SELL"))).toMatchObject({ allowed: true, notes: [] });
   });
+  it("treats a same-day sell-then-rebuy as a new position (keeps the journal order within a day)", () => {
+    const day = "2024-03-18";
+    const book = [entry("1", day, "BUY", 100, 10), entry("2", day, "SELL", 90, 10), entry("3", day, "BUY", 95, 10)];
+    const r = averagingDownCheck(book, next(93, day));
+    expect(r.allowed).toBe(true);
+    expect(r.lossAdds).toBe(1);
+  });
   it("allows one add below the average price with a warning (M4-02)", () => {
     const r = averagingDownCheck([entry("1", "2024-01-02", "BUY", 10_000, 10)], next(9_000));
     expect(r).toMatchObject({ allowed: true, lossAdds: 1 });
@@ -122,17 +129,18 @@ describe("preTradeChecklist", () => {
   it("passes a complete plan", () => {
     expect(preTradeChecklist({ price: 10_000, stop: 9_300, target: 11_400, reason: "20일 고점 돌파 + 거래량 3배", weightPct: 15 })).toEqual([]);
   });
-  it("requires stop, target and reason before ordering", () => {
+  it("requires stop, target, reason and weight before ordering (5.5: 손절가·목표가·비중 필수)", () => {
     const n = preTradeChecklist({ price: 10_000 });
-    expect(n).toHaveLength(3);
+    expect(n).toHaveLength(4);
     expect(n.every((x) => x.tone === "bad")).toBe(true);
-    expect(n.map((x) => x.text).join(" ")).toMatch(/손절가.*목표가.*매수 근거/);
-    expect(preTradeChecklist({ price: 10_000, stop: 9_000, target: 11_000, reason: "   " })).toHaveLength(1);
+    expect(n.map((x) => x.text).join(" ")).toMatch(/손절가.*목표가.*매수 근거.*비중/);
+    expect(preTradeChecklist({ price: 10_000, stop: 9_000, target: 11_000, reason: "   ", weightPct: 10 })).toHaveLength(1);
+    expect(preTradeChecklist({ price: 10_000, stop: 9_000, target: 11_000, reason: "x", weightPct: 10 })).toEqual([]);
   });
   it("flags a stop at or above the price, a target at or below it, a too-wide stop and an oversized weight", () => {
     expect(preTradeChecklist({ price: 10_000, stop: 10_000, target: 11_000, reason: "x" })[0]).toMatchObject({ tone: "bad", rule: "5.1 박용선·와인스타인" });
     expect(preTradeChecklist({ price: 10_000, stop: 9_000, target: 9_900, reason: "x" })[0]!.text).toContain("목표가가 매수가보다");
-    const wide = preTradeChecklist({ price: 10_000, stop: 7_500, target: 15_000, reason: "x" });
+    const wide = preTradeChecklist({ price: 10_000, stop: 7_500, target: 15_000, reason: "x", weightPct: 10 });
     expect(wide).toEqual([expect.objectContaining({ tone: "warn", rule: "M4-01 캔들마스터" })]);
     expect(wide[0]!.text).toContain("25%");
     expect(preTradeChecklist({ price: 10_000, stop: 9_000, target: 12_000, reason: "x", weightPct: 35 })).toEqual([expect.objectContaining({ tone: "bad", rule: "M4-03 강영현" })]);

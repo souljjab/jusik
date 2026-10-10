@@ -49,6 +49,8 @@ export interface MacroFetchResult {
 export class MacroProvider {
   readonly sample = false;
   private cached: { at: number; ttl: number; value: Promise<MacroFetchResult> } | null = null;
+  /** 시리즈별 마지막으로 받은 값. 새로 받기가 실패하면 이걸로 채운다(일시 장애로 매크로 감점이 사라져 투자 상한이 올라가지 않게) */
+  private lastGood: Partial<Record<MacroSeriesId, MacroSeriesPoint[]>> = {};
   private readonly now: () => number;
 
   constructor(private http: Http, private ttlMs = 6 * 3_600_000, private opts: MacroProviderOptions = {}) {
@@ -85,13 +87,17 @@ export class MacroProvider {
     const series: Partial<Record<MacroSeriesId, MacroSeriesPoint[]>> = {};
     const errors: string[] = [];
     for (const id of MACRO_SERIES_IDS) {
+      const stale = this.lastGood[id] ? " — 지난번에 받은 값으로 대신해요" : "";
       try {
         const points = parseFredCsv(await this.http.get(FRED.csv(id, cosd)));
-        if (points.length) series[id] = points;
-        else errors.push(`${id}: 응답에서 값을 찾지 못했어요(형식이 바뀌었을 수 있어요)`);
+        if (points.length) {
+          series[id] = points;
+          this.lastGood[id] = points;
+        } else errors.push(`${id}: 응답에서 값을 찾지 못했어요(형식이 바뀌었을 수 있어요)${stale}`);
       } catch (e) {
-        errors.push(`${id}: ${e instanceof Error ? e.message : String(e)}`);
+        errors.push(`${id}: ${e instanceof Error ? e.message : String(e)}${stale}`);
       }
+      if (!series[id] && this.lastGood[id]) series[id] = this.lastGood[id];
     }
     return { series, errors, fetchedAt: new Date(this.now()).toISOString() };
   }

@@ -48,8 +48,18 @@ export class Exporter {
   }
 
   private async run() {
-    const tables = this.opts.build();
     const now = () => new Date().toISOString();
+    let tables: Table[];
+    try {
+      tables = this.opts.build();
+    } catch (e) {
+      // 표를 못 만들면 두 저장 모두 실패로 남긴다(예외를 던지면 타이머에서 처리되지 않은 거부가 되어 서버가 멈춘다)
+      const error = `표 만들기 실패: ${e instanceof Error ? e.message : String(e)}`;
+      this.status.excel = { ...this.status.excel, at: now(), ok: false, error };
+      if (this.opts.sheets) this.status.sheets = { ...this.status.sheets, at: now(), ok: false, error };
+      console.error(`[jusik] ${error}`);
+      return;
+    }
     try {
       await writeExcel(tables, this.opts.excelPath);
       this.status.excel = { ...this.status.excel, at: now(), ok: true, error: null };

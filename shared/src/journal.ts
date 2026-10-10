@@ -35,6 +35,31 @@ export interface JournalEntry {
   violations?: string[];
   /** 감정 메모(조급함·희망 보유 등) */
   emotion?: string;
+  /** 자동(모의) 매도의 수수료·세금·슬리피지 반영 순손익(현지 통화). 집계는 복기 문구보다 이 값을 먼저 쓴다 */
+  netPnl?: number;
+  /** 자동(모의) 매도의 순수익률(%) */
+  netPct?: number;
+}
+
+/**
+ * 매도 기록의 비용 반영 순손익·순수익률. 숫자 필드(netPnl·netPct)를 먼저 쓰고, 없으면(이전 버전 기록)
+ * 복기란의 "순손익 X (+x.xx%)" 문구를 읽는다. 둘 다 없으면 null.
+ */
+export function netOf(e: Pick<JournalEntry, "netPnl" | "netPct" | "review">): { pnl: number | null; pct: number | null } {
+  const text = e.review ?? "";
+  let pnl = e.netPnl != null && Number.isFinite(e.netPnl) ? e.netPnl : null;
+  let pct = e.netPct != null && Number.isFinite(e.netPct) ? e.netPct : null;
+  if (pnl == null) {
+    const m = /순손익\s*([+-]?\d[\d,]*(?:\.\d+)?(?:e[+-]?\d+)?)\s*\(/i.exec(text);
+    const n = m ? Number(m[1]!.replace(/,/g, "")) : NaN;
+    if (Number.isFinite(n)) pnl = n;
+  }
+  if (pct == null) {
+    const m = /순손익[^(]*\(([+-]?\d+(?:\.\d+)?)%\)/.exec(text) ?? /\(([+-]?\d+(?:\.\d+)?)%\)/.exec(text);
+    const n = m ? Number(m[1]) : NaN;
+    if (Number.isFinite(n)) pct = n;
+  }
+  return { pnl, pct };
 }
 
 /** 진입 시점의 신호 특성. 어떤 조건의 신호가 실제로 잘 맞았는지 나눠 보는 데 쓴다 */

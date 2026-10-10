@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import {
-  averagingDownCheck, isValidCode, macroNotes, marketClock, paperTrackingStatus, preTradeChecklist, regionOfCode,
+  averagingDownCheck, isValidCode, macroNotes, marketClock, netOf, paperTrackingStatus, preTradeChecklist, regionOfCode,
   type JournalCheck, type JournalEntry, type MacroResponse, type Market, type Note, type Region, type ServerState, type StockExtras,
 } from "@jusik/shared";
 import { TtlCache } from "./cache";
@@ -76,7 +76,11 @@ export function buildApp({ provider, store, exporter, scheduler, macro, extras, 
     const code = normCode(req.params.code);
     if (!isValidCode(code)) return reply.code(400).send(BAD_CODE);
     const today = marketClock(regionOfCode(code), now()).date;
-    return extrasCache.get<StockExtras>(`x:${code}:${today}`, () => loadStockExtras(extras, code, today));
+    const key = `x:${code}:${today}`;
+    const r = await extrasCache.get<StockExtras>(key, () => loadStockExtras(extras, code, today));
+    // 일부라도 실패한 결과는 캐시하지 않는다(사이트가 잠깐 막혔을 때 10분 동안 빈 값이 남지 않게)
+    if (r.errors.length) extrasCache.delete(key);
+    return r;
   });
 
   // 매크로(FRED): 금리차·VIX·10년물·초과 유동성·원/달러
@@ -167,10 +171,14 @@ export function buildApp({ provider, store, exporter, scheduler, macro, extras, 
     const notes: Note[] = [];
     if (b.side === "BUY") {
       notes.push(...preTradeChecklist({ stop, target, reason, price, weightPct }));
-      notes.push(...averagingDownCheck(store.state.journal, { code, side: "BUY", price, date }).notes);
+      // 모의계좌(자동) 보유분은 내 실제 보유가 아니라서 직접 쓴 기록끼리만 본다
+      const manual = store.state.journal.filter((e) => (e.source ?? "수동") === "수동");
+      notes.push(...averagingDownCheck(manual, { code, side: "BUY", price, date }).notes);
     }
     const violations = notes.filter((n) => n.tone === "bad").map((n) => n.text);
-    const regime = info ? (store.state.latestScan?.regimes[info.market] ?? null) : null;
+    // 국면은 오늘(그 시장 날짜) 기록일 때만 지금 스캔의 국면을 붙인다. 지난 날짜로 쓴 기록에는 붙이지 않는다
+    const sameDay = date === marketClock(regionOfCode(code), now()).date;
+    const regime = info && sameDay ? (store.state.latestScan?.regimes[info.market] ?? null) : null;
     const entry: JournalEntry = {
       id: globalThis.crypto.randomUUID(), code, name: info?.name ?? String(b.name ?? code), date, side: b.side, price, qty,
       stop, reason, review: optText(b.review, 1000), source: "수동",
@@ -194,6 +202,12 @@ export function buildApp({ provider, store, exporter, scheduler, macro, extras, 
     const e = store.state.journal.find((x) => x.id === req.params.id);
     if (!e) return reply.code(404).send({ error: "기록을 찾을 수 없어요." });
     const b = req.body ?? {};
+    // 자동(모의) 매도의 순손익은 복기 문구에서 읽던 값이라, 문구를 고치기 전에 숫자 필드로 옮겨 둔다
+    if (e.source === "자동(모의)" && e.side === "SELL") {
+      const n = netOf(e);
+      if (e.netPnl == null && n.pnl != null) e.netPnl = n.pnl;
+      if (e.netPct == null && n.pct != null) e.netPct = n.pct;
+    }
     if ("review" in b) e.review = optText(b.review, 1000);
     if ("emotion" in b) e.emotion = optText(b.emotion, 200);
     if ("exitReason" in b && e.side === "SELL") e.exitReason = optText(b.exitReason, 60);

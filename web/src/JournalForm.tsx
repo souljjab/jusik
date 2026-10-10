@@ -107,7 +107,9 @@ export function JournalForm({ entries, defaultCode, onChanged }: { entries: Jour
     if (side !== "BUY") return [];
     const p = optNum(price);
     const notes = preTradeChecklist({ stop: optNum(stop), target: optNum(target), reason, price: p, weightPct: optNum(weight) });
-    if (normCode && p != null && p > 0) notes.push(...averagingDownCheck(entries, { code: normCode, side: "BUY", price: p, date }).notes);
+    // 모의계좌(자동) 보유분은 내 실제 보유가 아니라서 직접 쓴 기록끼리만 본다(서버 점검과 같은 기준)
+    const manual = entries.filter((e) => (e.source ?? "수동") === "수동");
+    if (normCode && p != null && p > 0) notes.push(...averagingDownCheck(manual, { code: normCode, side: "BUY", price: p, date }).notes);
     return notes;
   }, [side, price, stop, target, reason, weight, normCode, date, entries]);
 

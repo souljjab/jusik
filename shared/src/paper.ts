@@ -133,10 +133,10 @@ export function paperCheckExits(acct: PaperAccount, prices: Record<string, numbe
     entries.push({
       id: uuid(), code: pos.code, name: pos.name, date: today, side: "SELL", price: fill, qty: pos.qty, stop: pos.stop,
       reason: `${reason}(${price.toLocaleString()})`,
-      // 이 형식("순손익 X (+x.xx%)")은 paperTradesFromJournal·todayPnl이 읽으므로 바꾸지 않는다
+      // 집계는 netPnl·netPct를 먼저 쓰고, 이 문구("순손익 X (+x.xx%)")는 이전 기록과의 호환용으로 남긴다
       review: `수수료·세금·슬리피지 반영 순손익 ${Math.round(pnl * 100) / 100} (${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%)`,
       source: "자동(모의)",
-      strategy: PAPER_STRATEGY, target: pos.target, exitReason: reason,
+      strategy: PAPER_STRATEGY, target: pos.target, exitReason: reason, netPnl: round2(pnl), netPct: round2(pct),
       ...(r != null ? { rMultiple: round2(r) } : {}),
     });
   }

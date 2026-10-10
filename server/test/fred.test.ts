@@ -99,6 +99,20 @@ describe("MacroProvider", () => {
     expect(snapshot.yieldSpread?.value).toBe(-0.2);
   });
 
+  it("serves the last good series during an outage instead of dropping the macro penalty", async () => {
+    let now = 0;
+    const routes: Record<string, string | number> = { ...ALL };
+    const p = new MacroProvider(fakeHttp(routes), 1000, { now: () => now });
+    expect((await p.getSnapshot()).snapshot.yieldSpread?.value).toBe(-0.2);
+    for (const k of Object.keys(routes)) routes[k] = 503;
+    now = 5000;
+    const out = await p.getSnapshot();
+    expect(out.errors).toHaveLength(6);
+    expect(out.errors.every((e) => e.includes("지난번에 받은 값"))).toBe(true);
+    expect(out.snapshot.yieldSpread).toEqual({ value: -0.2, date: "2024-03-15" });
+    expect(out.snapshot.vix?.value).toBe(14.5);
+  });
+
   it("caches results for the TTL and retries sooner after failures", async () => {
     let now = 0;
     const http = fakeHttp(ALL);

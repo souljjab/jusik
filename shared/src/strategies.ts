@@ -237,7 +237,17 @@ function runPrepared<P>(strategy: Strategy<P>, candles: Candle[], prep: P, o: Ru
     pendingBuy = null;
     pendingExit = null;
 
-    // 2) 장중 손절 먼저, 그다음 목표
+    // 2) 장중: 시가가 이미 목표가 위면 시가에 목표 청산부터(시가가 그날 첫 가격). 그다음 손절, 마지막으로 목표.
+    //    시가가 손절가와 목표가 사이면 장중 순서를 알 수 없어 보수적으로 손절을 먼저 본다
+    if (pos && pos.target != null && c.open >= pos.target) {
+      const t = pos.target;
+      pos = sell(pos, i, c.open, qtyOf(pos, pos.targetFraction), "TARGET", `시가가 목표가 ${px(t)} 위에서 시작`, pos.targetRule);
+      if (pos) {
+        pos.target = null;
+        pos.targetHit = true;
+        pos.partialExits++;
+      } else closedToday = true;
+    }
     if (pos && c.low <= pos.stop) {
       pos = sell(pos, i, Math.min(c.open, pos.stop), pos.shares, "STOP_LOSS", `손절가 ${px(pos.stop)} 이탈`, pos.stopRule);
       closedToday = true;
@@ -376,7 +386,8 @@ export function weinsteinStrategy(partial: Partial<WeinsteinParams> = {}): Strat
       const k = p.weekOf[i]!;
       if (p.regimes?.get(p.weekly[k]!.weekKey) === "BEAR") return null; // 지수 약세 국면: 신규 매수 중단
       const buy = BUY_ACTIONS.includes(r.action);
-      const pullback = P.usePullback && r.pullbackBuy && r.stage !== 4;
+      // 풀백도 상대강도가 0 이하면 사지 않는다(4.1·M3-01). 30주선 하락 중 풀백은 stage.ts에서 이미 뺐다(M2-11)
+      const pullback = P.usePullback && r.pullbackBuy && r.stage !== 4 && !(r.rs != null && r.rs <= 0);
       if (!buy && !pullback) return null;
       const rule = buy ? (r.breakout && r.volumeBasis ? "M3-01 와인스타인" : "4.1 와인스타인") : "M3-02 와인스타인";
       const reason = buy ? `주봉 ${STAGE_LABEL[r.stage]} 매수 신호${r.breakout && r.volumeBasis ? "(거래량 동반 돌파)" : ""}` : "돌파 후 첫 풀백 — 돌파가 위 유지";
@@ -476,7 +487,7 @@ export function rsiRecoveryStrategy(partial: Partial<RsiRecoveryParams> = {}): S
     name: "RSI 30 회복",
     source: "강영현·강동진",
     timeframe: "daily",
-    description: `RSI가 ${P.oversold} 아래에 있다가 위로 올라서고 종가가 5일선 위면 사요. 손절 −${P.stopPct}%, RSI ${P.overbought} 이상이면 팔고, ${P.maxHoldBars}봉이 지나면 정리해요.`,
+    description: `RSI가 ${P.oversold} 아래에 있다가 위로 올라서고 종가가 5일선 위면 사요. 손절 −${P.stopPct}%, RSI가 ${P.overbought} 위에 올랐다가 ${P.overbought} 아래로 내려오면 팔고, ${P.maxHoldBars}봉이 지나면 정리해요.`,
     rules: ["M3-14 강영현·강동진", "4.6 강동진", "5.1 박용선"],
     prepare: (candles) => prepareDaily(candles),
     startIndex: () => 15,
@@ -491,8 +502,10 @@ export function rsiRecoveryStrategy(partial: Partial<RsiRecoveryParams> = {}): S
       };
     },
     exit(i, pos, { ind }) {
-      const r = ind.rsi14[i];
-      if (r != null && r >= P.overbought) return { fraction: 1, kind: "SIGNAL", reason: `RSI ${r.toFixed(0)}: 과매수 — 매도`, rule: "4.6 강동진" };
+      // 4.6 강동진: RSI가 70 아래로 이탈하면 매도세 강화(70 위는 매수세가 모이는 구간이라 그대로 둔다)
+      const r = ind.rsi14[i], rp = ind.rsi14[i - 1];
+      if (r != null && rp != null && rp >= P.overbought && r < P.overbought)
+        return { fraction: 1, kind: "SIGNAL", reason: `RSI ${rp.toFixed(0)} → ${r.toFixed(0)}: ${P.overbought} 아래로 이탈 — 매도`, rule: "4.6 강동진" };
       if (i - pos.entryIndex >= P.maxHoldBars) return { fraction: 1, kind: "TIME", atClose: true, reason: `${P.maxHoldBars}봉 보유 — 종가에 정리` };
       return null;
     },
@@ -543,7 +556,7 @@ export function bbcPullbackStrategy(partial: Partial<BbcPullbackParams> = {}): S
     source: "박병창",
     timeframe: "daily",
     description: "20일선이 오르는 종목이 거래량이 줄며 5일선 아래로 눌렸다가, 거래량이 늘며 하락폭의 절반 넘게 되돌리는 양봉이 나오면 사요. 거래량 터진 장대 음봉엔 절반, 20일선을 깨면 다 팔아요.",
-    rules: ["4.4 박병창", "M3-09 박병창", "M3-10 박병창"],
+    rules: ["4.4 박병창", "M3-10 박병창"],
     prepare: (candles) => prepareDaily(candles),
     startIndex: () => 25,
     entry(i, { candles, ind }) {
@@ -571,7 +584,7 @@ export function bbcPullbackStrategy(partial: Partial<BbcPullbackParams> = {}): S
       if (!(recovered > P.reboundRatio)) return null;
       const lows = candles.slice(i - P.stopLookback + 1, i + 1).map((x) => x.low);
       const stop = Math.min(...lows) * (1 - P.stopBufferPct / 100);
-      return { stop, stopRule: "4.4 박병창", reason: `거래량 ${(c.volume / prev.volume).toFixed(1)}배 양봉이 최근 하락폭의 ${(recovered * 100).toFixed(0)}% 회복(매수 2원칙)`, rule: "M3-09 박병창" };
+      return { stop, stopRule: "4.4 박병창", reason: `거래량 ${(c.volume / prev.volume).toFixed(1)}배 양봉이 최근 하락폭의 ${(recovered * 100).toFixed(0)}% 회복(매수 2원칙)`, rule: "4.4 박병창" };
     },
     exit(i, _pos, { candles, ind }) {
       const c = candles[i]!, s5 = ind.sma5[i], s20 = ind.sma20[i];

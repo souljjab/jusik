@@ -1,7 +1,7 @@
 import { MIN_RELIABLE } from "./dayEval";
 import type { DayTradeCandidate } from "./daytrade";
 import type { SectorRow } from "./flows";
-import type { JournalEntry } from "./journal";
+import { netOf, type JournalEntry } from "./journal";
 import { REGIME_LABEL, type Regime } from "./regime";
 import { regionOf, regionOfCode, type Candle, type Market, type Note, type Region } from "./types";
 
@@ -89,6 +89,8 @@ export interface DailyReview {
   comment: string;
   /** 사용자가 덧붙이는 메모 */
   userComment?: string;
+  /** 만든 시각(ISO). 장 마감 뒤에 만든 복기인지 가리는 데 쓴다 */
+  builtAt?: string;
   rule: string;
 }
 
@@ -124,12 +126,6 @@ export function parseNetPnl(review: string | undefined): number | null {
   const n = Number(m[1]!.replace(/,/g, ""));
   return Number.isFinite(n) ? n : null;
 }
-
-/** 매도 기록 복기란의 "(+1.23%)" 순수익률. 없으면 null */
-const parseNetPct = (review: string | undefined): number | null => {
-  const m = /\(([+-]?\d+(?:\.\d+)?)%\)/.exec(review ?? "");
-  return m ? Number(m[1]) : null;
-};
 
 /**
  * 김연수의 일일 복기 6항목(지수 흐름·섹터 흐름·신고가·특징주·실적·코멘트)을 앱이 가진 데이터로 자동 작성한다.
@@ -215,7 +211,7 @@ export function buildDailyReview(input: DailyReviewInput, params: Partial<DailyR
       continue;
     }
     paper.sells++;
-    const pnl = parseNetPnl(e.review);
+    const { pnl } = netOf(e);
     if (pnl == null) {
       unparsed++;
       continue;
@@ -381,7 +377,7 @@ export function paperTrackingStatus(journal: JournalEntry[], today: string, opt:
     }
     closedTrades++;
     const buy = q.shift();
-    const net = parseNetPct(e.review);
+    const net = netOf(e).pct;
     if (net != null) returns.push(net);
     else if (buy && buy.price > 0) returns.push((e.price / buy.price - 1) * 100);
   }

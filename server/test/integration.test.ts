@@ -9,7 +9,7 @@ import { Scheduler } from "../src/scheduler";
 import { sanitizeSettings, Store } from "../src/state";
 import { buildTables } from "../src/tables";
 import { END, MON_1030_KST, StubProvider, tmp } from "./helpers";
-import type { Candle, JournalEntry, MacroSnapshot } from "@jusik/shared";
+import { todayPnl, type Candle, type JournalEntry, type MacroSnapshot } from "@jusik/shared";
 
 const DAY = 86_400_000;
 
@@ -104,6 +104,8 @@ describe("regime posture → exposure cap", () => {
 describe("risk guards", () => {
   it("blocks automatic entries after hitting the daily loss limit", async () => {
     const { deps, store } = setup({ dailyLossLimitPct: 2 });
+    // 하루 시작 자산 1,030만 원 → 오늘 손절로 30만 원 잃어 지금 1,000만 원(−2.9%)
+    store.state.dayStart.KRW = { date: END, equity: 10_300_000 };
     store.state.journal.push(...autoTrade("000009", "2024-03-15", END, -300_000, -3));
     const scan = await runScan(deps);
     expect(scan.guards?.KRW?.blocked).toBe(true);
@@ -114,18 +116,48 @@ describe("risk guards", () => {
     expect(scan.plans.KRW!.items.length).toBeGreaterThan(0);
   });
 
-  it("rests for the day after N straight losses, then only warns the next day", async () => {
-    const losses = (date: string) => [1, 2, 3].flatMap((k) => autoTrade(`00010${k}`, "2024-03-14", date, -1_000, -1));
+  it("rests on the day of the N-th straight loss and the next trading day, then only warns", async () => {
+    const losses = (date: string) => [1, 2, 3].flatMap((k) => autoTrade(`00010${k}`, "2024-03-13", date, -1_000, -1));
     const today = setup();
     today.store.state.journal.push(...losses(END));
     expect((await runScan(today.deps)).guards?.KRW?.blocked).toBe(true);
 
-    const next = setup();
-    next.store.state.journal.push(...losses("2024-03-15"));
-    const scan = await runScan(next.deps);
+    // 금요일 마감 무렵 시간 청산으로 채워진 연속 손실 → 월요일(다음 거래일)도 쉰다
+    const nextDay = setup();
+    nextDay.store.state.journal.push(...losses("2024-03-15"));
+    const rest = await runScan(nextDay.deps);
+    expect(rest.guards?.KRW?.blocked).toBe(true);
+    expect(nextDay.store.state.paper.KRW.positions).toHaveLength(0);
+
+    const later = setup();
+    later.store.state.journal.push(...losses("2024-03-14"));
+    const scan = await runScan(later.deps);
     expect(scan.guards?.KRW?.blocked).toBe(false);
-    expect(scan.guards?.KRW?.notes.some((n) => n.text.includes("하루 쉬었어요"))).toBe(true);
-    expect(next.store.state.paper.KRW.positions.length).toBeGreaterThan(0);
+    expect(scan.guards?.KRW?.notes.some((n) => n.text.includes("규모를 줄이세요"))).toBe(true);
+    expect(later.store.state.paper.KRW.positions.length).toBeGreaterThan(0);
+  });
+
+  it("measures today's loss from the day-start equity so earlier gains cannot hide it", async () => {
+    const { deps, store } = setup({ dailyLossLimitPct: 3 });
+    const acct = store.state.paper.KRW;
+    // 전날까지 +70만 원 평가이익인 보유 종목(최근가 10,700)
+    acct.positions.push({ code: "000077", name: "보유", openedAt: "2024-03-14T01:00:00Z", entryDate: "2024-03-14", entryPrice: 10_000, qty: 1_000, stop: 9_000, target: 12_000, maxHoldDays: 5, cost: 10_001_500, lastPrice: 10_700, reason: "x" });
+    acct.cash = 9_000_000 - 10_001_500 + 10_000_000;
+    // 오늘 첫 점검 전 자산을 하루 시작 자산으로 남긴 뒤, 오늘 30만 원씩 두 번 손절
+    store.state.dayStart.KRW = { date: END, equity: 10_000_000 + 9_000_000 - 10_001_500 + 10_700_000 };
+    store.state.journal.push(...autoTrade("000081", "2024-03-15", END, -300_000, -3), ...autoTrade("000082", "2024-03-15", END, -300_000, -3));
+    acct.cash -= 600_000;
+    const scan = await runScan(deps);
+    // 하루 시작 대비 −60만 원 ≈ −3.1% → 한도 3%에 걸린다(평가이익 70만 원으로 상쇄되면 안 된다)
+    expect(scan.guards?.KRW?.blocked).toBe(true);
+    expect(scan.executed).toHaveLength(0);
+  });
+
+  it("re-anchors the day-start equity when the paper account is reset", () => {
+    const { store } = setup();
+    store.state.dayStart.KRW = { date: END, equity: 1 };
+    syncPaperWithDeposit(store, true);
+    expect(store.state.dayStart.KRW).toBeUndefined();
   });
 
   it("records the account weight on automatic buys", async () => {
@@ -190,6 +222,29 @@ describe("HTTP API — new endpoints", () => {
     expect((await app.inject({ method: "PATCH", url: "/api/journal/none", payload: {} })).statusCode).toBe(404);
   });
 
+  it("keeps paper (자동) lots out of the manual averaging-down check and tags the regime only on same-day entries", async () => {
+    const { app, store, deps } = api();
+    store.state.journal.push(...autoTrade("000001", "2024-03-11", "2024-03-20", 0, 0).slice(0, 1)); // 모의 보유 10,000원
+    await runScan(deps);
+    store.state.latestScan!.regimes = { KOSPI: "BULL" };
+    const plan = { stop: 8_000, target: 11_000, reason: "계획", weightPct: 10 };
+    const first = (await app.inject({ method: "POST", url: "/api/journal", payload: { code: "000001", side: "BUY", price: 9_000, qty: 1, date: END, ...plan } })).json();
+    expect(first.check.notes).toEqual([]); // 내 첫 매수 — 모의 보유분 때문에 물타기로 보지 않는다
+    expect(first.entry.regime).toBe("BULL");
+    const old = (await app.inject({ method: "POST", url: "/api/journal", payload: { code: "000002", side: "BUY", price: 9_000, qty: 1, date: "2024-03-01", ...plan } })).json();
+    expect(old.entry.regime).toBeUndefined();
+  });
+
+  it("moves the net P&L into numeric fields before a review edit so the guards still see the loss", async () => {
+    const { app, store } = api();
+    const [, sell] = autoTrade("000009", "2024-03-15", END, -450_000, -4.5);
+    store.state.journal.push(sell!);
+    expect(todayPnl(store.state.journal, END)).toBe(-450_000);
+    const r = await app.inject({ method: "PATCH", url: `/api/journal/${sell!.id}`, payload: { review: "손절 원칙 지킴" } });
+    expect(r.json().entry).toMatchObject({ review: "손절 원칙 지킴", netPnl: -450_000, netPct: -4.5 });
+    expect(todayPnl(store.state.journal, END)).toBe(-450_000);
+  });
+
   it("builds, lists and annotates daily reviews and keeps the memo on rebuild", async () => {
     const { app, store } = api();
     const built = await app.inject({ method: "POST", url: "/api/reviews", payload: { region: "KR" } });
@@ -241,6 +296,48 @@ describe("HTTP API — new endpoints", () => {
     expect(s.postureCaps).toEqual({ ATTACK: 100, NEUTRAL: 0, DEFENSE: 20 });
     expect(s.dailyLossLimitPct).toBe(50);
     expect(s.maxConsecutiveLosses).toBe(3);
+  });
+});
+
+describe("daily review job — timing", () => {
+  it("books the closing-price exits before writing the automatic review, and replaces a review made during the session", async () => {
+    const s = setup();
+    await runScan(s.deps); // 10:30 KST 모의 진입
+    const pos = s.store.state.paper.KRW.positions[0]!;
+    const manual = await buildReviewNow(s.deps, "KR"); // 장중에 수동으로 만든 복기
+    expect(manual.review.paper.sells).toBe(0);
+    s.store.state.reviews[0]!.userComment = "장중 메모";
+    s.provider.prices[pos.code] = pos.stop - 1; // 마감가가 손절가 아래
+    s.setNow(new Date("2024-03-18T06:35:00Z")); // 15:35 KST
+    const scheduler = new Scheduler(s.deps);
+    await (scheduler as unknown as { tick: () => Promise<void> }).tick();
+    const r = s.store.state.reviews.find((x) => x.region === "KR" && x.date === END)!;
+    expect(s.store.state.reviews.filter((x) => x.region === "KR")).toHaveLength(1);
+    expect(r.paper.sells).toBe(1);
+    expect(r.userComment).toBe("장중 메모");
+    expect(r.builtAt).toBe("2024-03-18T06:35:00.000Z");
+  });
+});
+
+describe("HTTP API — extras cache", () => {
+  it("does not keep a partly failed result in the cache", async () => {
+    const s = setup({ paperEnabled: false });
+    let down = true;
+    const base = new MockExtras(() => MON_1030_KST);
+    const flaky = {
+      sample: true,
+      investorFlows: (c: string) => (down ? Promise.reject(new Error("HTTP 503")) : base.investorFlows(c)),
+      disclosures: (c: string) => base.disclosures(c),
+      itemSector: (c: string) => base.itemSector(c),
+      sectors: () => base.sectors(),
+    };
+    const exporter = new Exporter({ excelPath: join(s.dir, "x.xlsx"), sheets: null, debounceMs: 1, build: () => [] });
+    const app = buildApp({ provider: s.provider, store: s.store, exporter, scheduler: new Scheduler(s.deps), macro: new MockMacro(), extras: flaky, now: () => MON_1030_KST });
+    expect((await app.inject("/api/stocks/005930/extras")).json().errors).toHaveLength(1);
+    down = false;
+    const again = (await app.inject("/api/stocks/005930/extras")).json();
+    expect(again.errors).toEqual([]);
+    expect(again.flows.length).toBeGreaterThan(0);
   });
 });
 

@@ -1,5 +1,5 @@
 import { DEFAULT_DAYTRADE, scoreDayTrade, type DayTradeParams, type StockRef } from "./daytrade";
-import type { JournalEntry, TradeFeatures } from "./journal";
+import { netOf, type JournalEntry, type TradeFeatures } from "./journal";
 import type { Regime } from "./regime";
 import type { Candle } from "./types";
 
@@ -100,12 +100,12 @@ export function paperTradesFromJournal(entries: JournalEntry[]): EvalTrade[] {
     const buy = q.shift();
     if (!buy?.meta) continue;
     // 매도 기록의 복기란에 비용 반영 순수익률이 있으면 그것을, 없으면 가격으로 계산
-    const net = /\(([+-]?\d+(?:\.\d+)?)%\)/.exec(e.review ?? "")?.[1];
+    const net = netOf(e).pct;
     const reason = (["손절", "목표 도달", "시간 청산"] as const).find((r) => e.reason.startsWith(r)) ?? "기타";
     out.push({
       ...buy.meta, code: e.code, name: e.name, date: buy.date, exitReason: reason,
       holdDays: Math.max(0, Math.round((Date.parse(e.date) - Date.parse(buy.date)) / 86_400_000)),
-      returnPct: net != null ? Number(net) : (e.price / buy.price - 1) * 100,
+      returnPct: net != null ? net : (e.price / buy.price - 1) * 100,
     });
   }
   return out;

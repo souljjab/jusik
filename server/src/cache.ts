@@ -15,4 +15,9 @@ export class TtlCache {
     });
     return value;
   }
+
+  /** 항목을 지운다(다음 요청에서 새로 읽는다) */
+  delete(key: string) {
+    this.store.delete(key);
+  }
 }

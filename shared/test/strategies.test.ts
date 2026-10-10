@@ -122,6 +122,11 @@ describe("strategy engine", () => {
     // 시가가 목표가 위로 갭상승 → 시가 체결
     const gapUp = bars([...flat(2), [115, 116, 114, 115], ...flat(2)]);
     expect(runStrategy(scripted({ 0: { stop: 90, target: 110, reason: "x" } }).s, gapUp, {}, noCost)!.trades[0]).toMatchObject({ reason: "TARGET", sellPrice: 115 });
+    // 시가가 목표가 위에서 시작한 뒤 장중 손절가까지 밀리면: 시가에 목표 청산이 먼저(시가가 그날 첫 가격)
+    const gapThenFall = bars([...flat(2), [112, 115, 88, 95], ...flat(2)]);
+    expect(runStrategy(scripted({ 0: { stop: 90, target: 110, reason: "x" } }).s, gapThenFall, {}, noCost)!.trades).toMatchObject([{ reason: "TARGET", sellPrice: 112 }]);
+    const half = runStrategy(scripted({ 0: { stop: 90, target: 110, targetFraction: 0.5, reason: "x" } }).s, gapThenFall, {}, noCost)!;
+    expect(half.trades.map((t) => [t.reason, t.sellPrice])).toEqual([["TARGET", 112], ["STOP_LOSS", 90]]);
   });
 
   it("books partial exits with fees, tax and slippage", () => {
@@ -332,12 +337,17 @@ describe("rsi recovery strategy", () => {
   const drop = [...Array(30).fill(100), ...geo(100, 0.98, 15)];
   const bottom = 100 * 0.98 ** 15;
 
-  it("buys when RSI climbs back over 30 and sells at 70", () => {
-    const cs = daily([...drop, ...geo(bottom, 1.015, 25)]);
-    const r = runStrategy(rsiRecoveryStrategy(), cs, {}, noCost)!;
+  it("buys when RSI climbs back over 30, holds while RSI stays above 70, and sells when it drops back under 70", () => {
+    const rally = geo(bottom, 1.015, 25);
+    const held = runStrategy(rsiRecoveryStrategy({ maxHoldBars: 100 }), daily([...drop, ...rally]), {}, noCost)!;
+    expect(held.trades).toHaveLength(0);
+    expect(held.openPosition).toBe(true);
+
+    const cs = daily([...drop, ...rally, ...geo(bottom * 1.015 ** 25, 0.985, 8)]);
+    const r = runStrategy(rsiRecoveryStrategy({ maxHoldBars: 100 }), cs, {}, noCost)!;
     expect(r.trades).toHaveLength(1);
-    expect(r.trades[0]).toMatchObject({ reason: "SIGNAL", entryRule: "M3-14 강영현·강동진" });
-    expect(r.trades[0]!.exitReason).toContain("RSI");
+    expect(r.trades[0]).toMatchObject({ reason: "SIGNAL", entryRule: "M3-14 강영현·강동진", exitRule: "4.6 강동진" });
+    expect(r.trades[0]!.exitReason).toContain("아래로 이탈");
     expect(r.trades[0]!.returnPct).toBeGreaterThan(0);
   });
 
@@ -369,7 +379,7 @@ describe("bbc pullback strategy", () => {
     expect(r.trades.map((t) => t.reason)).toEqual(["PARTIAL", "SIGNAL"]);
     const [a, b] = r.trades;
     expect(a!.buyDate).toBe(cs[65]!.date); // 64일 종가 신호 → 65일 시가
-    expect(a!.entryRule).toBe("M3-09 박병창");
+    expect(a!.entryRule).toBe("4.4 박병창");
     expect(a!.exitRule).toBe("M3-10 박병창");
     expect(a!.sellDate).toBe(cs[71]!.date);
     expect(a!.fraction).toBeCloseTo(0.5, 2);

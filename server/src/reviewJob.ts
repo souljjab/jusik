@@ -20,6 +20,13 @@ const POSTURE_ORDER: Posture[] = ["DEFENSE", "NEUTRAL", "ATTACK"];
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
+/** 그 복기가 장 마감 뒤에(그날 장이 끝난 다음) 만들어졌는지. 장중·개장 전에 수동으로 만든 복기는 마감 뒤 자동 복기로 다시 쓴다 */
+export function isPostClose(r: DailyReview): boolean {
+  if (!r.builtAt) return false;
+  const c = marketClock(r.region, new Date(r.builtAt));
+  return c.date > r.date || (c.date === r.date && !c.isOpen && c.minutes >= 12 * 60);
+}
+
 /**
  * 지금 시각 기준 그 지역의 일일 복기(M5-01)를 만들어 저장한다. 같은 날짜·지역 복기가 있으면 새로 만들되 사용자 메모는 남긴다.
  * 장 마감 직후에 부르면 그날 마감 순위표·지수로 채워진다.
@@ -92,6 +99,8 @@ export async function buildReviewNow(deps: ReviewDeps, region: Region): Promise<
     candlesByCode,
     sectors,
   });
+
+  review.builtAt = at.toISOString();
 
   const list = store.state.reviews;
   const i = list.findIndex((r) => r.date === date && r.region === region);

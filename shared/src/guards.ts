@@ -1,4 +1,4 @@
-import type { JournalEntry } from "./journal";
+import { netOf, type JournalEntry } from "./journal";
 import type { Note } from "./types";
 
 /**
@@ -115,8 +115,11 @@ export function consecutiveLosses(returnsPct: number[]): number {
   return n;
 }
 
-/** summarizeJournal과 같은 정렬: 날짜순, 같은 날은 매수 먼저 */
-const chronological = (a: JournalEntry, b: JournalEntry) => a.date.localeCompare(b.date) || (a.side === b.side ? 0 : a.side === "BUY" ? -1 : 1);
+/**
+ * 날짜순, 같은 날은 기록한 순서 그대로(안정 정렬). 기록에는 시각이 없지만 매매일지는 일어난 순서대로 쌓이므로
+ * 같은 날 '매도 후 재매수'를 새 포지션으로 본다(매수를 먼저 놓으면 물타기로 잘못 센다)
+ */
+const chronological = (a: JournalEntry, b: JournalEntry) => a.date.localeCompare(b.date);
 
 const priceText = (x: number) => (Math.round(x * 100) / 100).toLocaleString();
 
@@ -211,14 +214,13 @@ export function preTradeChecklist(
 
   if (!e.reason?.trim()) notes.push({ tone: "bad", text: "매수 근거를 적어요. 분석 없이 사지 않아요.", rule: RULE.plan });
 
-  if (e.weightPct != null && P.maxWeightPct > 0 && e.weightPct > P.maxWeightPct)
+  // 5.5 구현 메모: 손절가·목표가·비중은 필수 입력
+  if (!valid(e.weightPct)) notes.push({ tone: "bad", text: "비중(계좌 대비 %)을 먼저 정해요.", rule: RULE.plan });
+  else if (P.maxWeightPct > 0 && e.weightPct > P.maxWeightPct)
     notes.push({ tone: "bad", text: `비중이 ${pctText(e.weightPct)}%예요. 한 종목에 ${P.maxWeightPct}% 넘게 싣지 않아요.`, rule: RULE.weight });
 
   return notes;
 }
-
-/** 모의매매 매도 기록 review의 "순손익 X (" 부분(paperCheckExits가 남기는 형식) */
-const NET_PNL_RE = /순손익\s+(-?\d+(?:\.\d+)?(?:e[+-]?\d+)?)\s*\(/;
 
 /**
  * 그날(date) 자동(모의) 매도 기록의 비용 반영 순손익 합계(실현 손익만, 평가손익은 따로 더한다).
@@ -228,8 +230,8 @@ export function todayPnl(entries: JournalEntry[], date: string): number {
   let sum = 0;
   for (const e of entries) {
     if (e.side !== "SELL" || e.date !== date || e.source !== "자동(모의)") continue;
-    const m = NET_PNL_RE.exec(e.review ?? "");
-    if (m) sum += Number(m[1]);
+    const { pnl } = netOf(e);
+    if (pnl != null) sum += pnl;
   }
   return sum;
 }

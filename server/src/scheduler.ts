@@ -1,5 +1,5 @@
 import { marketClock, regionOf, type Market, type Region, type SchedulerStatus } from "@jusik/shared";
-import { buildReviewNow, MARKETS_OF, type ReviewDeps } from "./reviewJob";
+import { buildReviewNow, isPostClose, MARKETS_OF, type ReviewDeps } from "./reviewJob";
 import { monitorPositions, runScan } from "./scanner";
 
 /**
@@ -98,9 +98,12 @@ export class Scheduler {
       const clock = marketClock(region, now);
       const key = `${region}:${clock.date}`;
       if (!clock.justClosed || this.reviewTried.has(key) || !MARKETS_OF[region].some((m) => s.markets[m])) continue;
-      if (this.deps.store.state.reviews.some((r) => r.region === region && r.date === clock.date)) continue;
+      if (this.deps.store.state.reviews.some((r) => r.region === region && r.date === clock.date && isPostClose(r))) continue;
       this.reviewTried.add(key);
       await this.runExclusive(async () => {
+        // 마감가로 손절·목표·시간 청산을 먼저 확인해 그날 모의매매 결과가 복기에 들어가게 한다
+        await monitorPositions(this.deps);
+        this.lastMonitorMs = this.now().getTime();
         const r = await buildReviewNow(this.deps, region);
         if (r.errors.length) console.error(`[jusik] 일일 복기(${key}) 일부 실패: ${r.errors.join(" / ")}`);
       });

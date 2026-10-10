@@ -187,11 +187,11 @@ function swingAt(weekly: WeeklyBar[], k: number): { target: number; a: number; b
 
 /**
  * 풀백 추가 매수(M3-02): 최근 1~6주 안에 거래량을 확인한 돌파가 있었고, 그 뒤 처음으로 이번 주 저가가
- * 돌파 기준가 ±3% 안에 닿았으며 종가는 기준가 이상. 30주선 아래면 보지 않는다(M2-11).
+ * 돌파 기준가 ±3% 안에 닿았으며 종가는 기준가 이상. 30주선 아래이거나 30주선이 내려가는 중이면 보지 않는다(M2-11, 3.7).
  */
-function pullbackAt(weekly: WeeklyBar[], k: number, aboveMa: boolean): { pivot: number; weeksAgo: number } | null {
+function pullbackAt(weekly: WeeklyBar[], k: number, aboveMa: boolean, slopePct: number): { pivot: number; weeksAgo: number } | null {
   const P = STAGE_PARAMS;
-  if (!aboveMa) return null;
+  if (!aboveMa || slopePct < -P.slopeFlatPct) return null;
   const w = weekly[k]!;
   const band = P.pullbackBandPct / 100;
   for (let j = k - 1; j >= Math.max(1, k - P.pullbackMaxWeeks); j--) {
@@ -242,7 +242,7 @@ export function stageAt(ctx: StageContext, k: number, rs?: (number | null)[]): S
   const stopLoss = Math.max(supportLow, capStop);
   const extended = pctFromMa > P.extendedPct;
   const swing = swingAt(weekly, k);
-  const pullback = pullbackAt(weekly, k, above);
+  const pullback = pullbackAt(weekly, k, above, slopePct);
 
   const notes: Note[] = [];
   const stageNote: Record<Stage, Note> = {
@@ -279,12 +279,21 @@ export function stageAt(ctx: StageContext, k: number, rs?: (number | null)[]): S
   else if (stage === 3) action = above ? "HOLD" : "SELL";
   else if (stage === 2) {
     if (extended) action = "HOLD";
-    else if (breakout && volOk) action = rsVal != null && rsVal < 0 ? "BUY" : "STRONG_BUY";
-    else if (rsVal != null && rsVal < 0) action = "HOLD";
+    else if (rsVal != null && rsVal <= 0) {
+      // M3-01: 돌파여도 상대강도가 0 이하면 사지 않는다(4.1 "RS가 열악한 종목은 절대 사지 않는다")
+      action = "HOLD";
+      if (breakout && volOk) notes.push({ tone: "warn", text: "돌파했지만 상대강도가 0 이하라 매수하지 않아요(지수보다 약한 종목)", rule: "M3-01 와인스타인" });
+    } else if (breakout && volOk) action = "STRONG_BUY";
     else action = "BUY";
   } else if (stage === 1 && above && breakout && volOk) {
-    action = "BUY";
-    notes.push({ tone: "good", text: "바닥권에서 거래량을 동반해 30주선 위로 돌파 — 2단계 진입 초입", rule: "M3-01 와인스타인" });
+    if (slopePct < -P.slopeFlatPct)
+      notes.push({ tone: "warn", text: "30주선 위로 돌파했지만 30주선이 아직 내려가는 중이라 매수 후보에서 빼요", rule: "M2-11 와인스타인" });
+    else if (rsVal != null && rsVal <= 0)
+      notes.push({ tone: "warn", text: "바닥권 돌파지만 상대강도가 0 이하라 매수하지 않아요", rule: "M3-01 와인스타인" });
+    else {
+      action = "BUY";
+      notes.push({ tone: "good", text: "바닥권에서 거래량을 동반해 30주선 위로 돌파 — 2단계 진입 초입", rule: "M3-01 와인스타인" });
+    }
   }
   // 하락 단계는 손절가보다 매도가 먼저라 상한 안내를 붙이지 않는다
   if (stage !== 4 && capStop > supportLow)

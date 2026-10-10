@@ -16,7 +16,8 @@ function fromWeeks(levels: number[], vol = 1000): Candle[] {
 }
 
 const bull = fromWeeks(ramp(100, 160, 80));
-const stockUp = fromWeeks(ramp(100, 160, 80));
+/** 지수보다 조금 더 올라 상대강도가 플러스(M3-01: RS > 0일 때만 매수) */
+const stockUp = fromWeeks(ramp(100, 175, 80));
 /** 30주선이 평평한 횡보 끝에 최근 몇 주 밀린 지수(중립 국면 + MACD 약세) */
 const sideways = fromWeeks([...ramp(100, 130, 30), ...Array.from({ length: 46 }, (_, i) => (i % 2 ? 131 : 129)), ...ramp(129, 124, 4)]);
 const badMacro: MacroSnapshot = { asOf: "2023-07-01", yieldSpread: { value: -0.8, date: "2023-07-01" }, vix: { value: 42, date: "2023-07-01" } };

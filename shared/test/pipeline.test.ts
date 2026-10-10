@@ -118,7 +118,8 @@ describe("Weinstein stage", () => {
 describe("market regime and gates", () => {
   const bull = fromWeeks(ramp(100, 160, 80));
   const bear = fromWeeks([...ramp(100, 140, 40), ...ramp(140, 90, 60)]);
-  const stockUp = fromWeeks(ramp(100, 160, 80));
+  // 지수보다 조금 더 올라 상대강도가 플러스(M3-01: RS > 0일 때만 매수)
+  const stockUp = fromWeeks(ramp(100, 175, 80));
   it("bull / bear regime from the index", () => {
     expect(marketRegime(bull)!.regime).toBe("BULL");
     expect(marketRegime(bear)!.regime).toBe("BEAR");

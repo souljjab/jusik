@@ -91,10 +91,10 @@ export function SettingsPanel({ s, onSaved }: { s: Settings; onSaved: () => void
       </div>
       <ul className="notes small dt-help">
         <li className="muted">
-          <RuleTag rule="M4-04 슈웨거" /> 오늘 손실(실현+평가)이 하루 시작 자산의 이 비율에 닿으면 그날은 신규 진입을 멈춰요. 기본 {GUARD_DEFAULTS.dailyLossLimitPct}%는 인터뷰에서 나온 경험칙이에요.
+          <RuleTag rule="M4-04 슈웨거" /> 오늘 손실(실현+평가, 전날 대비)이 하루 시작 자산의 이 비율에 닿으면 그날은 신규 진입을 멈춰요. 기본 {GUARD_DEFAULTS.dailyLossLimitPct}%는 인터뷰에서 나온 경험칙이에요.
         </li>
         <li className="muted">
-          <RuleTag rule="5.5 박용선·슈웨거" /> 이 횟수만큼 연속으로 손실이 나면 그날은 신규 진입을 멈추고, 다음 날부터는 규모를 줄이라는 경고만 해요. 책은 횟수를 정하지 않아 기본 {GUARD_DEFAULTS.maxConsecutiveLosses}회는 예시값이에요.
+          <RuleTag rule="5.5 박용선·슈웨거" /> 이 횟수만큼 연속으로 손실이 나면 그날과 다음 거래일은 신규 진입을 멈추고, 그 뒤로는 규모를 줄이라는 경고만 해요. 책은 횟수를 정하지 않아 기본 {GUARD_DEFAULTS.maxConsecutiveLosses}회는 예시값이에요.
         </li>
       </ul>
 

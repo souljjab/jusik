@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { dirname } from "node:path";
 import {
   DEFAULT_POSTURE_CAPS, GUARD_DEFAULTS, newPaperAccount,
-  type DailyReview, type HistoryRow, type JournalEntry, type Market, type MarketRowLike, type PaperAccount, type ReplayRun, type ScanResult, type Settings,
+  type Currency, type DailyReview, type HistoryRow, type JournalEntry, type Market, type MarketRowLike, type PaperAccount, type ReplayRun, type ScanResult, type Settings,
 } from "@jusik/shared";
 
 export type { HistoryRow, ScanResult, Settings };
@@ -68,6 +68,8 @@ export interface AppState {
   reviews: DailyReview[];
   /** 시장별 마지막 순위표(일일 복기의 특징주 재료). 스캔할 때마다 덮어쓴다 */
   lastUniverse: Partial<Record<Market, { at: string; rows: MarketRowLike[] }>>;
+  /** 통화별 '하루 시작 자산'(그 시장 날짜의 첫 점검 때 가격을 반영하기 전 모의계좌 자산). 일일 손실 한도 계산용 */
+  dayStart: Partial<Record<Currency, { date: string; equity: number }>>;
 }
 
 export const HISTORY_LIMIT = 3000;
@@ -83,6 +85,7 @@ function fresh(): AppState {
     lastReplay: null,
     reviews: [],
     lastUniverse: {},
+    dayStart: {},
   };
 }
 
@@ -104,6 +107,7 @@ export class Store {
           lastReplay: raw.lastReplay ?? null,
           reviews: Array.isArray(raw.reviews) ? raw.reviews : [],
           lastUniverse: raw.lastUniverse && typeof raw.lastUniverse === "object" ? raw.lastUniverse : {},
+          dayStart: raw.dayStart && typeof raw.dayStart === "object" ? raw.dayStart : {},
         };
       } catch (e) {
         // 파일이 깨졌으면 덮어쓰지 않고 백업해 둔다
