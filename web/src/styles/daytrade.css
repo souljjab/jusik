@@ -1,0 +1,42 @@
+/* --- 단타 추천 화면: 국면·투자 상한·리스크 가드·모의투자 기간 (dt-) --- */
+:root { --dt-good: #15803d; }
+@media (prefers-color-scheme: dark) { :root { --dt-good: #4ade80; } }
+
+/* 규칙 출처 태그 */
+.dt-rule { display: inline-block; padding: 0 6px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: var(--muted); font-size: 11px; font-weight: 500; line-height: 18px; white-space: nowrap; vertical-align: middle; }
+.dt-help { margin: 4px 0; }
+.dt-weak { font-weight: 400; }
+
+/* 국면 패널 */
+.dt-posture-ATTACK { background: #c62828; }
+.dt-posture-NEUTRAL { background: #78879b; }
+.dt-posture-DEFENSE { background: #1d4ed8; }
+.dt-markets { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.dt-market { background: var(--bg); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.dt-market-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dt-cap { margin-left: auto; font-size: 12px; }
+.dt-cap b { font-size: 15px; }
+.dt-breakdown { display: inline-flex; flex-wrap: wrap; gap: 2px 10px; }
+.dt-part { color: var(--muted); white-space: nowrap; }
+.dt-why { margin-top: 2px; }
+.dt-why .notes { font-size: 12px; }
+.dt-caps { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); }
+
+/* 리스크 가드 */
+.dt-guard { margin: 2px 0 8px; }
+.dt-guard-banner { padding: 8px 12px; margin-bottom: 4px; }
+.dt-guard .notes { font-size: 13px; }
+
+/* 매매 계획의 제외 사유 */
+.dt-skip-sum { margin: 8px 0 2px; }
+
+/* 모의투자 기간 추적 */
+.dt-tracking { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.dt-track { background: var(--bg); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.dt-track-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dt-track .notes { margin: 0; font-size: 13px; }
+.dt-progress { display: flex; flex-direction: column; gap: 3px; }
+.dt-progress-label { display: flex; justify-content: space-between; gap: 8px; }
+.dt-bar { height: 8px; border-radius: 4px; background: var(--border); overflow: hidden; }
+.dt-bar-fill { display: block; height: 100%; border-radius: 4px; background: var(--accent); transition: width .3s; }
+.dt-bar-fill.dt-bar-done { background: var(--dt-good); }

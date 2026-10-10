@@ -1,83 +1,48 @@
-import { useEffect, useState } from "react";
-import { paperEquity, regionOfCode, type Currency, type DayTradeCandidate, type PaperAccount, type PlanItem, type ServerState, type Settings } from "@jusik/shared";
-import { excelUrl, resetPaper, saveSettings, startScan, syncExport } from "./api";
+import { useState } from "react";
+import {
+  DEFAULT_PAPER_TRACKING, paperEquity, regionOfCode,
+  type Currency, type DayTradeCandidate, type PaperAccount, type PaperTrackingStatus, type Plan, type PlanItem, type Region, type ServerState,
+} from "@jusik/shared";
+import { excelUrl, resetPaper, startScan, syncExport } from "./api";
 import { kst, moneyByCurrency, num, pct, tone } from "./format";
 import { NoteList } from "./NoteList";
+import { GuardStatus, PosturePanel } from "./DayTradePosture";
+import { RuleTag, SettingsPanel } from "./DayTradeSettings";
+import "./styles/daytrade.css";
 
 const CUR_LABEL: Record<Currency, string> = { KRW: "원화(국내)", USD: "달러(해외)" };
 const REGIME_LABEL: Record<string, string> = { BULL: "강세", NEUTRAL: "중립", BEAR: "약세" };
+/** shared/daytrade.ts planWithCash가 남기는 사유 문구 */
+const CAP_REASON = "국면별 투자 상한 도달";
 
-function Num({ label, value, onChange, min, max, step, unit }: { label: string; value: number; onChange: (n: number) => void; min?: number; max?: number; step?: number; unit?: string }) {
-  return (
-    <label>
-      {label}
-      <input type="number" value={Number.isFinite(value) ? value : 0} min={min} max={max} step={step} onChange={(e) => onChange(Number(e.target.value))} />
-      {unit && <span className="muted small">{unit}</span>}
-    </label>
-  );
+/** 제외 사유별 개수(많은 순) */
+function reasonCounts(plan: Plan): [string, number][] {
+  const m = new Map<string, number>();
+  for (const x of plan.skipped) m.set(x.reason, (m.get(x.reason) ?? 0) + 1);
+  return [...m].sort((a, b) => b[1] - a[1]);
 }
 
-function SettingsPanel({ s, onSaved }: { s: Settings; onSaved: () => void }) {
-  const [draft, setDraft] = useState<Settings>(s);
-  const [dirty, setDirty] = useState(false);
-  const [msg, setMsg] = useState("");
-  // 다른 곳에서 바뀐 값은 편집 중이 아닐 때만 반영한다
-  useEffect(() => {
-    if (!dirty) setDraft(s);
-  }, [s, dirty]);
-  const set = <K extends keyof Settings>(k: K, v: Settings[K]) => {
-    setDraft((d) => ({ ...d, [k]: v }));
-    setDirty(true);
-  };
-  const save = async () => {
-    try {
-      await saveSettings(draft);
-      setDirty(false);
-      setMsg("저장했어요");
-      onSaved();
-    } catch (e) {
-      setMsg(`저장 실패: ${e instanceof Error ? e.message : e}`);
-    }
-    setTimeout(() => setMsg(""), 3000);
-  };
+function SkippedList({ plan, cap, paperEnabled }: { plan: Plan; cap: number | undefined; paperEnabled: boolean }) {
+  const counts = reasonCounts(plan);
+  const capHit = counts.some(([r]) => r === CAP_REASON);
   return (
-    <details className="card" open>
-      <summary><b>설정</b> <span className="muted small">— 예수금과 위험 한도를 정하면 그 안에서 살 수 있는 매매만 추천해요</span></summary>
-      <h4 className="group">예수금</h4>
-      <div className="form compact">
-        <Num label="원화 예수금(원)" value={draft.depositKRW} step={100000} min={0} onChange={(v) => set("depositKRW", v)} />
-        <Num label="달러 예수금($)" value={draft.depositUSD} step={100} min={0} onChange={(v) => set("depositUSD", v)} />
-      </div>
-      <h4 className="group">위험 관리</h4>
-      <div className="form compact">
-        <Num label="1회 손절 허용 손실(예수금 대비 %)" value={draft.riskPct} min={0.1} max={10} step={0.1} onChange={(v) => set("riskPct", v)} />
-        <Num label="한 종목 최대 비중(%)" value={draft.maxWeightPct} min={1} max={100} onChange={(v) => set("maxWeightPct", v)} />
-        <Num label="최대 보유 종목 수" value={draft.maxPositions} min={1} max={10} onChange={(v) => set("maxPositions", v)} />
-        <Num label="항상 남길 현금(%)" value={draft.reservePct} min={0} max={90} onChange={(v) => set("reservePct", v)} />
-      </div>
-      <h4 className="group">스캔</h4>
-      <div className="form compact">
-        <Num label="최소 점수(0~100)" value={draft.minScore} min={0} max={100} onChange={(v) => set("minScore", v)} />
-        <Num label="스캔 주기(분)" value={draft.scanIntervalMin} min={1} max={240} onChange={(v) => set("scanIntervalMin", v)} />
-        <Num label="보유 종목 점검 주기(초)" value={draft.monitorIntervalSec} min={15} max={3600} onChange={(v) => set("monitorIntervalSec", v)} />
-        <Num label="시장별 스캔 종목 수" value={draft.maxScanPerMarket} min={5} max={100} onChange={(v) => set("maxScanPerMarket", v)} />
-        <Num label="최소 거래대금(국내, 원)" value={draft.minTradeValueKRW} step={100000000} min={0} onChange={(v) => set("minTradeValueKRW", v)} />
-        <Num label="최소 거래대금(해외, $)" value={draft.minTradeValueUSD} step={1000000} min={0} onChange={(v) => set("minTradeValueUSD", v)} />
-      </div>
-      <div className="checks">
-        {(["KOSPI", "KOSDAQ", "US"] as const).map((m) => (
-          <label key={m} className="check">
-            <input type="checkbox" checked={draft.markets[m]} onChange={(e) => set("markets", { ...draft.markets, [m]: e.target.checked })} />
-            {m === "US" ? "미국" : m}
-          </label>
-        ))}
-        <label className="check strong">
-          <input type="checkbox" checked={draft.paperEnabled} onChange={(e) => set("paperEnabled", e.target.checked)} />
-          규칙대로 모의매매 자동 실행 + 매매일지 자동 작성
-        </label>
-      </div>
-      <button className="primary" disabled={!dirty} onClick={save}>설정 저장</button> <span className="muted small">{msg}</span>
-    </details>
+    <>
+      <p className="small dt-skip-sum"><span className="muted">제외 사유:</span> {counts.map(([r, n]) => `${r} ${n}개`).join(" · ")}</p>
+      {capHit && (
+        <p className="small note-warn">
+          ⚠ {paperEnabled ? "모의계좌 보유 평가액을 포함한 주식 비중이" : "예수금 대비 신규 매수액이"} 지금 국면의 투자 상한{cap != null ? `(${cap}%)` : ""}에 닿아 더 사지 않았어요.
+          상한은 설정의 「국면별 투자 상한」에서 바꿀 수 있어요. <RuleTag rule="2.5 강동진" />
+        </p>
+      )}
+      <details open={plan.items.length === 0}>
+        <summary className="muted small">제외된 후보 {plan.skipped.length}개</summary>
+        <ul className="notes small">
+          {plan.skipped.map((x) => (
+            <li key={x.candidate.code} className={x.reason === CAP_REASON ? "note-warn" : "note-info"}>{x.candidate.name}({x.candidate.code}) — {x.reason}</li>
+          ))}
+        </ul>
+      </details>
+    </>
   );
 }
 
@@ -91,6 +56,7 @@ function PlanTable({ cur, st, onOpen }: { cur: Currency; st: ServerState; onOpen
   return (
     <div className="card">
       <h3 className="h3">매매 계획 · {CUR_LABEL[cur]} <span className="muted small">— {s.paperEnabled ? "모의계좌 현금" : "예수금"} {m(cash)} 기준</span></h3>
+      <GuardStatus guard={scan?.guards?.[cur]} settings={s} hasScan={!!scan} />
       {!plan ? (
         <p className="muted">아직 스캔 결과가 없어요. 「지금 스캔」을 눌러 보세요.</p>
       ) : plan.items.length === 0 ? (
@@ -121,12 +87,7 @@ function PlanTable({ cur, st, onOpen }: { cur: Currency; st: ServerState; onOpen
       {plan && plan.items.length > 0 && (
         <p className="small">합계 투자 {m(plan.used)} · 남는 현금 {m(plan.remainingCash)} (예비 현금 {s.reservePct}% 포함) · 최대 손실 합계 {m(plan.items.reduce((a, i) => a + i.riskAmount, 0))}</p>
       )}
-      {plan && plan.skipped.length > 0 && (
-        <details>
-          <summary className="muted small">제외된 후보 {plan.skipped.length}개</summary>
-          <ul className="notes">{plan.skipped.map((x) => <li key={x.candidate.code} className="note-info">{x.candidate.name}({x.candidate.code}) — {x.reason}</li>)}</ul>
-        </details>
-      )}
+      {plan && plan.skipped.length > 0 && <SkippedList plan={plan} cap={scan?.exposureCaps?.[cur]} paperEnabled={s.paperEnabled} />}
     </div>
   );
 }
@@ -203,6 +164,64 @@ function PaperPanel({ cur, acct, deposit, onReset }: { cur: Currency; acct: Pape
   );
 }
 
+function Progress({ label, value, max, unit }: { label: string; value: number; max: number; unit: string }) {
+  const done = value >= max;
+  const width = max > 0 ? Math.max(0, Math.min(1, value / max)) * 100 : 0;
+  return (
+    <div className="dt-progress">
+      <div className="dt-progress-label small">
+        <span className="muted">{label}</span>
+        <span><b>{value.toLocaleString()}</b> / {max}{unit}{done && <span className="note-good"> ✔</span>}</span>
+      </div>
+      <div className="dt-bar" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={max} aria-valuenow={Math.min(value, max)}>
+        <span className={done ? "dt-bar-fill dt-bar-done" : "dt-bar-fill"} style={{ width: `${width}%` }} />
+      </div>
+    </div>
+  );
+}
+
+const REGION_LABEL: Record<Region, string> = { KR: "국내(원화)", US: "해외(달러)" };
+
+function TrackingRow({ region, t }: { region: Region; t: PaperTrackingStatus }) {
+  return (
+    <div className="dt-track">
+      <div className="dt-track-head">
+        <b>{REGION_LABEL[region]}</b>
+        <span className="muted small">{t.startedAt ? `첫 기록 ${t.startedAt}` : "아직 기록 없음"}</span>
+        {t.ready && <span className="chip grade-A">소액 실전 검토 가능</span>}
+      </div>
+      <Progress label="모의투자 기간" value={t.days} max={DEFAULT_PAPER_TRACKING.minDays} unit="일" />
+      <Progress label="청산 거래" value={t.closedTrades} max={DEFAULT_PAPER_TRACKING.minClosedTrades} unit="건" />
+      <div className="small">
+        <span className="muted">거래당 기대값 </span>
+        {t.expectancyPct == null ? <span className="muted">청산 거래가 없어 아직 계산할 수 없어요</span> : <b className={tone(t.expectancyPct)}>{pct(t.expectancyPct, 2)}</b>}
+        {t.expectancyPct != null && <span className="muted"> (청산 거래의 평균 순수익률)</span>}
+      </div>
+      <NoteList notes={[t.note]} />
+    </div>
+  );
+}
+
+/** 모의투자 기간 추적(M5-02 캔들마스터): 기간·청산 건수·기대값 */
+function PaperTracking({ st }: { st: ServerState }) {
+  const rows = (["KR", "US"] as const).flatMap((r) => {
+    const t = st.paperTracking?.[r];
+    return t ? [{ r, t }] : [];
+  });
+  return (
+    <div className="card">
+      <h3 className="h3">모의투자 기간 추적 <RuleTag rule="M5-02 캔들마스터" /></h3>
+      <p className="muted small dt-help">실전 전 최소 3개월 모의투자를 권해요. 자동 모의매매 기록만 세요.</p>
+      {rows.length === 0 ? (
+        <p className="muted small">서버가 아직 모의투자 기간을 계산하지 않았어요.</p>
+      ) : (
+        <div className="dt-tracking">{rows.map(({ r, t }) => <TrackingRow key={r} region={r} t={t} />)}</div>
+      )}
+      {!st.settings.paperEnabled && <p className="muted small">모의매매 자동 실행이 꺼져 있어 기록이 늘지 않아요. 설정에서 켤 수 있어요.</p>}
+    </div>
+  );
+}
+
 export function DayTradeView({ st, error, refresh, onOpen }: { st: ServerState | null; error: string | null; refresh: () => void; onOpen: (code: string) => void }) {
   const [busy, setBusy] = useState("");
   if (!st) return <div className={error ? "banner error" : "muted"}>{error ? `서버에 연결할 수 없어요: ${error}` : "불러오는 중…"}</div>;
@@ -250,6 +269,8 @@ export function DayTradeView({ st, error, refresh, onOpen }: { st: ServerState |
         </div>
       )}
 
+      {scan && <PosturePanel scan={scan} />}
+
       <PlanTable cur="KRW" st={st} onOpen={onOpen} />
       <PlanTable cur="USD" st={st} onOpen={onOpen} />
 
@@ -260,6 +281,7 @@ export function DayTradeView({ st, error, refresh, onOpen }: { st: ServerState |
 
       <PaperPanel cur="KRW" acct={st.paper.KRW} deposit={st.settings.depositKRW} onReset={() => run("reset", resetPaper)} />
       <PaperPanel cur="USD" acct={st.paper.USD} deposit={st.settings.depositUSD} onReset={() => run("reset", resetPaper)} />
+      <PaperTracking st={st} />
 
       <div className="card">
         <h3 className="h3">저장 · 내보내기</h3>
