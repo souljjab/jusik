@@ -98,7 +98,8 @@ export function realtimeToQuote(r: RealtimeItem): Quote {
  *   - '기업실적분석' 표: div.cop_analysis table, 첫 머리행의 첫 colspan 칸 = 연간 열 개수, 기간 머리행 "2023.12", 추정치 "2024.12(E)"
  *   - 실제 페이지는 기간 행 아래 'IFRS연결' 같은 머리행이 더 있을 수 있어, 날짜가 가장 많은 머리행을 기간 행으로 쓴다
  *   - 동일업종 PER: 라벨 문구("동일업종 PER")만 믿고 가장 가까운 숫자를 읽는다
- *   `npm run check:sources -w server`로 실제 페이지에서 annual·quarterly·sectorPer가 채워지는지 확인하세요.
+ *   - 시가총액: <em id="_market_sum">397조 5,616</em>억원(→ 3,975,616억 원), 없으면 '시가총액' 라벨 옆 칸. 상장주식수: '상장주식수' 라벨 옆 칸
+ *   `npm run check:sources -w server`로 실제 페이지에서 annual·quarterly·sectorPer·marketCap이 채워지는지 확인하세요.
  */
 
 const squash = (s: string) => s.replace(/\s+/g, "");
@@ -122,6 +123,52 @@ function sectorPerFrom($: cheerio.CheerioAPI): number | undefined {
   return m ? toNum(m[1]) : undefined;
 }
 
+/**
+ * "397조 5,616억원" → 3975616, "5,616억원" → 5616, "1조" → 10000(억 원). 실제 응답과 대조하지 못함(미검증).
+ * 조·억 단위가 없으면 단위를 알 수 없어 undefined — 라벨이 '시가총액(억원)'처럼 단위를 알려줄 때만 plainIsEok로 맨 숫자를 받는다.
+ */
+export function parseEok(text: string, plainIsEok = false): number | undefined {
+  const t = squash(text.replace(/\([^)]*\)/g, ""));
+  const jo = /(\d[\d,]*)조(\d[\d,]*)?/.exec(t); // 조 뒤 나머지는 억 단위
+  const eok = /(\d[\d,]*)억/.exec(t);
+  const plain = plainIsEok ? /^(\d[\d,]*)(?:원)?$/.exec(t) : null;
+  const n = jo ? (toNum(jo[1]) ?? NaN) * 10_000 + (jo[2] ? (toNum(jo[2]) ?? NaN) : 0) : eok ? toNum(eok[1]) : plain ? toNum(plain[1]) : undefined;
+  return n != null && Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+/** th/dt 라벨(공백 제거 후 re와 일치) 바로 옆 td/dd 칸 */
+function labeledCells($: cheerio.CheerioAPI, re: RegExp): { label: string; text: string }[] {
+  const out: { label: string; text: string }[] = [];
+  for (const el of $("th, dt").toArray()) {
+    const label = squash($(el).text());
+    if (re.test(label)) out.push({ label, text: $(el).nextAll("td, dd").first().text() });
+  }
+  return out;
+}
+
+/**
+ * 시가총액(억 원)과 상장주식수(주). 실제 응답과 대조하지 못함(미검증).
+ * '시가총액순위' 같은 다른 행은 라벨이 정확히 맞지 않아 걸리지 않는다. 못 읽으면 해당 값은 undefined.
+ */
+function marketFrom($: cheerio.CheerioAPI): { marketCap?: number; sharesOutstanding?: number } {
+  let marketCap: number | undefined;
+  const em = $("#_market_sum").first();
+  if (em.length) {
+    const cell = em.closest("td, dd");
+    marketCap = parseEok((cell.length ? cell : em.parent()).text());
+  }
+  for (const c of labeledCells($, /^시가총액(?:\(억원?\))?$/)) {
+    if (marketCap !== undefined) break;
+    marketCap = parseEok(c.text, c.label.includes("억"));
+  }
+  let sharesOutstanding: number | undefined;
+  for (const c of labeledCells($, /^상장주식수(?:\(주\))?$/)) {
+    const n = firstNumber(c.text);
+    if (n !== undefined && Number.isInteger(n) && n > 0) { sharesOutstanding = n; break; }
+  }
+  return { marketCap, sharesOutstanding };
+}
+
 /** 종목 메인 페이지의 '동일업종 PER'(배). 못 찾으면 undefined */
 export function parseNaverSectorPer(html: string): number | undefined {
   return sectorPerFrom(cheerio.load(html));
@@ -130,13 +177,16 @@ export function parseNaverSectorPer(html: string): number | undefined {
 /**
  * 종목 메인 페이지 '기업실적분석' 표.
  * 단일 값(PER·부채비율 등)은 가장 최근 확정(비추정) 연간 값, annual·quarterly는 기간별 매출액·영업이익·당기순이익·EPS(금액은 억 원).
- * 동일업종 PER(sectorPer)도 같은 페이지에서 읽는다.
+ * 동일업종 PER(sectorPer)·시가총액(marketCap, 억 원)·상장주식수(sharesOutstanding)도 같은 페이지에서 읽고,
+ * 금액(시가총액·매출·이익)이 하나라도 있으면 amountUnit "억원"을 붙인다.
  */
 export function parseNaverFundamentals(html: string): Fundamentals {
   const $ = cheerio.load(html);
   const sectorPer = sectorPerFrom($);
+  const market = marketFrom($);
+  const clean = (f: Fundamentals) => Object.fromEntries(Object.entries(f).filter(([, v]) => v !== undefined)) as Fundamentals;
   const table = $("div.cop_analysis table").first();
-  if (!table.length) return sectorPer !== undefined ? { sectorPer } : {};
+  if (!table.length) return clean({ sectorPer, ...market, amountUnit: market.marketCap !== undefined ? "억원" : undefined });
   const headRows = table.find("thead tr").toArray();
   const annualCount = Number($(headRows[0]).find("th[colspan]").first().attr("colspan")) || 4;
   // 기간 머리행: 날짜 칸이 가장 많은 행(없으면 예전처럼 마지막 머리행). 앞쪽에 날짜 아닌 칸이 있으면 떼어 td 위치와 맞춘다
@@ -193,6 +243,9 @@ export function parseNaverFundamentals(html: string): Fundamentals {
     debtRatio: latest("부채비율"), quickRatio: latest("당좌비율"), reserveRatio: latest("유보율"),
     revenueGrowth: growth("매출액"), opIncomeGrowth: growth("영업이익"), sectorPer,
     annual: annual.length ? annual : undefined, quarterly: quarterly.length ? quarterly : undefined,
+    ...market,
   };
-  return Object.fromEntries(Object.entries(f).filter(([, v]) => v !== undefined)) as Fundamentals;
+  const hasAmount = market.marketCap !== undefined || [...annual, ...quarterly].some((p) => p.revenue !== undefined || p.opIncome !== undefined || p.netIncome !== undefined);
+  if (hasAmount) f.amountUnit = "억원";
+  return clean(f);
 }
