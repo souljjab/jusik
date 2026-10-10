@@ -5,6 +5,7 @@ import {
   DISCLOSURE_RECENT_DAYS,
   FLOW_RULES,
   flowSignals,
+  normalizeDisclosureTitle,
   sectorStrength,
   type Disclosure,
   type InvestorFlow,
@@ -50,6 +51,72 @@ describe("classifyDisclosure", () => {
     expect(classifyDisclosure("자기주식처분결정")).toEqual({ type: "기타", tone: "info" });
     expect(classifyDisclosure("기업설명회(IR)개최(안내공시)")).toEqual({ type: "기타", tone: "info" });
     expect(classifyDisclosure("")).toEqual({ type: "기타", tone: "info" });
+  });
+});
+
+describe("DART report names", () => {
+  it("normalizes tags, (자율공시) and the 주요사항보고서 wrapper", () => {
+    expect(normalizeDisclosureTitle("[기재정정]단일판매ㆍ공급계약체결")).toBe("단일판매공급계약체결");
+    expect(normalizeDisclosureTitle("[기재정정][첨부추가] 단일판매ㆍ공급계약체결(자율공시)")).toBe("단일판매공급계약체결");
+    expect(normalizeDisclosureTitle("[발행조건확정]증권신고서(지분증권)")).toBe("증권신고서(지분증권)");
+    expect(normalizeDisclosureTitle("[첨부정정]현금ㆍ현물배당결정")).toBe("현금현물배당결정");
+    expect(normalizeDisclosureTitle("투자판단관련주요경영사항(자율공시)(자율공시)")).toBe("투자판단관련주요경영사항");
+    expect(normalizeDisclosureTitle("주요사항보고서(유상증자결정)")).toBe("유상증자결정");
+    expect(normalizeDisclosureTitle("[기재정정] 주요사항보고서 (유상증자결정)")).toBe("유상증자결정");
+    expect(normalizeDisclosureTitle("주요사항보고서(유상증자결정(제3자배정))")).toBe("유상증자결정(제3자배정)");
+    expect(normalizeDisclosureTitle("주요사항보고서(전환사채권발행결정) (철회)")).toBe("전환사채권발행결정(철회)");
+    // 짝이 안 맞는 괄호는 그대로 둔다
+    expect(normalizeDisclosureTitle("주요사항보고서(유상증자결정")).toBe("주요사항보고서(유상증자결정");
+    // 되돌림 표현이 든 꼬리표는 남긴다
+    expect(normalizeDisclosureTitle("[철회]유상증자결정")).toBe("[철회]유상증자결정");
+    expect(normalizeDisclosureTitle("")).toBe("");
+  });
+
+  it("classifies DART-style names like the matching Naver titles", () => {
+    const cases: [string, ReturnType<typeof classifyDisclosure>][] = [
+      ["주요사항보고서(자기주식취득결정)", { type: "자사주", tone: "good" }],
+      ["주요사항보고서(자기주식처분결정)", { type: "기타", tone: "info" }],
+      ["주요사항보고서(무상증자결정)", { type: "무상증자", tone: "good" }],
+      ["주요사항보고서(유무상증자결정)", { type: "유상증자", tone: "bad" }],
+      ["[기재정정]주요사항보고서(유상증자결정)", { type: "유상증자", tone: "bad" }],
+      ["주요사항보고서(감자결정)", { type: "감자", tone: "bad" }],
+      ["주요사항보고서(전환사채권발행결정)", { type: "전환사채", tone: "bad" }],
+      ["주요사항보고서(교환사채권발행결정)", { type: "전환사채", tone: "bad" }],
+      ["주요사항보고서(자기주식취득신탁계약해지결정)", { type: "자사주", tone: "info" }],
+      ["주요사항보고서(전환사채권발행결정) (철회)", { type: "전환사채", tone: "info" }],
+      ["[철회]주요사항보고서(유상증자결정)", { type: "유상증자", tone: "info" }],
+      ["단일판매ㆍ공급계약체결(자율공시)", { type: "공급계약", tone: "good" }],
+      ["[기재정정]단일판매ㆍ공급계약해지", { type: "공급계약", tone: "bad" }],
+      ["[첨부정정]현금ㆍ현물배당결정", { type: "배당", tone: "good" }],
+      ["주식등의대량보유상황보고서(일반)", { type: "대량보유", tone: "good" }],
+      ["[기재정정]매출액또는손익구조30%(대규모법인은15%)이상변경", { type: "손익구조변동", tone: "info" }],
+      ["[발행조건확정]증권신고서(지분증권)", { type: "기타", tone: "info" }],
+      ["사업보고서 (2023.12)", { type: "기타", tone: "info" }],
+      ["임원ㆍ주요주주특정증권등소유상황보고서", { type: "기타", tone: "info" }],
+    ];
+    for (const [title, want] of cases) expect([title, classifyDisclosure(title)]).toEqual([title, want]);
+  });
+
+  it("keeps Naver-style results unchanged when the same title gets a DART tag or wrapper", () => {
+    const naver = ["단일판매ㆍ공급계약체결", "자기주식취득결정", "유상증자결정(제3자배정)", "전환사채권발행결정", "감자결정", "무상증자결정", "현금ㆍ현물배당결정", "자기주식처분결정"];
+    for (const t of naver) {
+      const base = classifyDisclosure(t);
+      expect(classifyDisclosure(`[기재정정]${t}`)).toEqual(base);
+      expect(classifyDisclosure(`${t}(자율공시)`)).toEqual(base);
+      expect(classifyDisclosure(`주요사항보고서(${t})`)).toEqual(base);
+    }
+  });
+
+  it("counts a same-day correction or (자율공시) variant once in the notes", () => {
+    const notes = disclosureNotes([
+      { date: "2024-03-15", title: "단일판매ㆍ공급계약체결" },
+      { date: "2024-03-15", title: "[기재정정]단일판매ㆍ공급계약체결" },
+      { date: "2024-03-15", title: "단일판매ㆍ공급계약체결(자율공시)" },
+      { date: "2024-03-14", title: "[기재정정]단일판매ㆍ공급계약체결" }, // 다른 날 정정은 따로 센다
+    ], "2024-03-15");
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toMatchObject({ tone: "good", rule: "M2-15 설춘환" });
+    expect(notes[0]!.text).toContain("외 1건");
   });
 });
 

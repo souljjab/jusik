@@ -30,13 +30,18 @@ export interface GetOptions {
   headers?: Record<string, string>;
 }
 
+/** 바이너리 요청 옵션(글자로 해석하지 않으므로 encoding은 없다) */
+export type BytesOptions = Pick<GetOptions, "headers">;
+
 export interface Http {
   get(url: string, opt?: GetOptions): Promise<string>;
   /** 응답 헤더까지 필요할 때(쿠키 등) */
   getResponse(url: string, opt?: GetOptions): Promise<{ status: number; headers: Headers; text: string }>;
+  /** 응답 본문을 바이트 그대로(ZIP 등). 2xx가 아니면 HttpError. 테스트용 가짜 클라이언트가 구현하지 않아도 되게 선택 항목이다 */
+  getBytes?(url: string, opt?: BytesOptions): Promise<Uint8Array>;
 }
 
-/** 직렬 큐 + 최소 간격 + 429/5xx 지수 백오프를 가진 아주 단순한 HTTP 클라이언트 */
+/** 직렬 큐 + 최소 간격 + 429/5xx 지수 백오프를 가진 아주 단순한 HTTP 클라이언트. 글자·바이트 요청이 같은 큐를 쓴다 */
 export function createHttp(o: HttpOptions = {}): Http {
   const minInterval = o.minIntervalMs ?? 500;
   const retries = o.retries ?? 2;
@@ -46,7 +51,7 @@ export function createHttp(o: HttpOptions = {}): Http {
   let chain: Promise<unknown> = Promise.resolve();
   let last = 0;
 
-  const once = async (url: string, opt: GetOptions) => {
+  const once = async (url: string, opt: BytesOptions) => {
     const wait = last + minInterval - Date.now();
     if (wait > 0) await sleep(wait);
     last = Date.now();
@@ -61,15 +66,14 @@ export function createHttp(o: HttpOptions = {}): Http {
         const why = ctl.signal.aborted ? "시간 초과" : (cause?.code ?? cause?.message ?? (e instanceof Error ? e.message : String(e)));
         throw new Error(`접속 실패(${new URL(url).host}): ${why} — 네트워크가 막혀 있거나 사이트가 응답하지 않아요`);
       }
-      const buf = await res.arrayBuffer();
-      const text = decode(buf, opt.encoding ?? "utf-8");
-      return { status: res.status, headers: res.headers, text };
+      const body = await res.arrayBuffer();
+      return { status: res.status, headers: res.headers, body };
     } finally {
       clearTimeout(timer);
     }
   };
 
-  const run = async (url: string, opt: GetOptions) => {
+  const run = async (url: string, opt: BytesOptions) => {
     for (let attempt = 0; ; attempt++) {
       const r = await once(url, opt);
       const retryable = r.status === 429 || r.status >= 500;
@@ -78,10 +82,16 @@ export function createHttp(o: HttpOptions = {}): Http {
     }
   };
 
-  const getResponse = (url: string, opt: GetOptions = {}) => {
+  /** 한 번에 하나씩 보낸다(앞 요청이 실패해도 다음 요청은 진행) */
+  const enqueue = (url: string, opt: BytesOptions) => {
     const p = chain.then(() => run(url, opt));
     chain = p.catch(() => undefined);
     return p;
+  };
+
+  const getResponse = async (url: string, opt: GetOptions = {}) => {
+    const r = await enqueue(url, opt);
+    return { status: r.status, headers: r.headers, text: decode(r.body, opt.encoding ?? "utf-8") };
   };
 
   return {
@@ -90,6 +100,11 @@ export function createHttp(o: HttpOptions = {}): Http {
       const r = await getResponse(url, opt);
       if (r.status < 200 || r.status >= 300) throw new HttpError(r.status, url);
       return r.text;
+    },
+    async getBytes(url, opt = {}) {
+      const r = await enqueue(url, opt);
+      if (r.status < 200 || r.status >= 300) throw new HttpError(r.status, url);
+      return new Uint8Array(r.body);
     },
   };
 }
