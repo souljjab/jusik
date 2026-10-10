@@ -84,9 +84,33 @@ const DISCLOSURE_RULES: { type: DisclosureType; re: RegExp; tone: DisclosureTone
 /** 비교 전에 공백과 가운뎃점(ㆍ·・ 등)을 지운다. DART 제목은 '단일판매ㆍ공급계약체결'처럼 붙여 쓴다 */
 const squash = (s: string) => s.replace(/[\s·ㆍ・‧∙•]/g, "");
 
+/** 공시 성격과 무관한 꼬리표(앞에서 지우는 접미사). 공시 구분일 뿐 내용이 아니다 */
+const TAIL_TAGS = /\((?:자율공시|안내공시)\)$/;
+
+/**
+ * 분류용 제목 정규화(DART 보고서명 대응). 공백·가운뎃점을 지우고
+ *  - 앞의 [기재정정]·[첨부정정]·[발행조건확정]·[첨부추가] 같은 꼬리표를 떼고(단, [철회]처럼 되돌림 표현이 든 꼬리표는 남긴다)
+ *  - 끝의 (자율공시)·(안내공시)를 떼고
+ *  - '주요사항보고서(유상증자결정)'은 괄호 안의 결정 이름만 본다(괄호 뒤에 붙은 말은 남긴다).
+ * 네이버 제목은 키워드가 그대로 남으므로 분류 결과가 달라지지 않는다.
+ */
+export function normalizeDisclosureTitle(title: string): string {
+  let t = squash(title);
+  for (let m = /^\[([^\]]*)\]/.exec(t); m && !UNDO.test(m[1]!); m = /^\[([^\]]*)\]/.exec(t)) t = t.slice(m[0].length);
+  while (TAIL_TAGS.test(t)) t = t.replace(TAIL_TAGS, "");
+  const HEAD = "주요사항보고서(";
+  if (t.startsWith(HEAD)) {
+    // 짝이 맞는 닫는 괄호까지가 결정 이름(안쪽 괄호 허용)
+    let depth = 1, k = HEAD.length;
+    for (; k < t.length && depth > 0; k++) depth += t[k] === "(" ? 1 : t[k] === ")" ? -1 : 0;
+    if (depth === 0) t = t.slice(HEAD.length, k - 1) + t.slice(k);
+  }
+  return t;
+}
+
 /** 공시 제목 키워드로 유형과 톤을 정한다(3.6 설춘환). 본문은 보지 않으므로 방향이 애매하면 info. */
 export function classifyDisclosure(title: string): { type: DisclosureType; tone: DisclosureTone } {
-  const t = squash(title);
+  const t = normalizeDisclosureTitle(title);
   for (const r of DISCLOSURE_RULES) {
     if (!r.re.test(t)) continue;
     return { type: r.type, tone: (r.undoRe ?? UNDO).test(t) ? r.undo : r.tone };
@@ -133,8 +157,9 @@ export function disclosureNotes(list: Disclosure[], today: string, days = DISCLO
     if (c.type === "기타") continue;
     const key = `${c.type}|${c.tone}`;
     const g = groups.get(key) ?? { ...c, items: [] };
-    // 정정 공시 등으로 같은 날 같은 제목이 겹치면 한 건으로 센다
-    if (!g.items.some((x) => x.date === d.date && squash(x.title) === squash(d.title))) g.items.push(d);
+    // 정정 공시 등으로 같은 날 같은 제목이 겹치면 한 건으로 센다([기재정정] 꼬리표·(자율공시)는 무시)
+    const key2 = normalizeDisclosureTitle(d.title);
+    if (!g.items.some((x) => x.date === d.date && normalizeDisclosureTitle(x.title) === key2)) g.items.push(d);
     groups.set(key, g);
   }
 
