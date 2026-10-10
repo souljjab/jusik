@@ -1,5 +1,6 @@
 import type { JournalEntry, TradeFeatures } from "./journal";
 import type { PlanItem } from "./daytrade";
+import { rMultiple } from "./risk";
 import type { Region } from "./types";
 import type { MarketClock } from "./sessions";
 
@@ -58,9 +59,18 @@ export function weekdaysBetween(from: string, to: string): number {
 }
 
 const uuid = () => globalThis.crypto.randomUUID();
+const round2 = (x: number) => Math.round(x * 100) / 100;
 
-/** 모의 매수. 예수금이 모자라면 null */
-export function paperOpen(acct: PaperAccount, item: PlanItem, now: Date, clock: MarketClock, costs: PaperCosts, regime: string | null = null): { acct: PaperAccount; entry: JournalEntry } | null {
+/** 모의매매가 쓰는 전략 이름(매매일지 '사용한 전략' 칸) */
+export const PAPER_STRATEGY = "단타 돌파";
+
+/**
+ * 모의 매수. 예수금이 모자라면 null.
+ * equity(계좌 총자산)를 넘기면 매매일지에 계좌 대비 비중(체결 금액 ÷ equity × 100)을 남긴다.
+ */
+export function paperOpen(
+  acct: PaperAccount, item: PlanItem, now: Date, clock: MarketClock, costs: PaperCosts, regime: string | null = null, equity?: number,
+): { acct: PaperAccount; entry: JournalEntry } | null {
   const c = item.candidate;
   const fill = Number((c.entry * (1 + costs.slippage)).toFixed(costs.decimals));
   const cost = item.qty * fill * (1 + costs.feeRate);
@@ -76,6 +86,8 @@ export function paperOpen(acct: PaperAccount, item: PlanItem, now: Date, clock: 
       id: uuid(), code: c.code, name: c.name, date: pos.entryDate, side: "BUY", price: fill, qty: item.qty, stop: c.stop,
       reason, review: `계획: 손절 ${c.stop.toLocaleString()} / 목표 ${c.target.toLocaleString()} / 최대 ${c.maxHoldDays}일 보유`, source: "자동(모의)",
       meta: { score: c.score, volumeRatio: c.volumeRatio, changePct: c.changePct, stopPct: c.stopPct, market: c.market, regime } satisfies TradeFeatures,
+      strategy: PAPER_STRATEGY, target: c.target, regime,
+      ...(equity != null && equity > 0 ? { weightPct: round2(((fill * item.qty) / equity) * 100) } : {}),
     },
   };
 }
@@ -116,11 +128,16 @@ export function paperCheckExits(acct: PaperAccount, prices: Record<string, numbe
     realizedPnl += pnl;
     closed += 1;
     if (pnl > 0) wins += 1;
+    // R은 체결가 기준(비용 제외): (청산 체결가 − 진입 체결가) ÷ (진입 체결가 − 계획 손절가)
+    const r = rMultiple(pos.entryPrice, fill, pos.stop);
     entries.push({
       id: uuid(), code: pos.code, name: pos.name, date: today, side: "SELL", price: fill, qty: pos.qty, stop: pos.stop,
       reason: `${reason}(${price.toLocaleString()})`,
+      // 이 형식("순손익 X (+x.xx%)")은 paperTradesFromJournal·todayPnl이 읽으므로 바꾸지 않는다
       review: `수수료·세금·슬리피지 반영 순손익 ${Math.round(pnl * 100) / 100} (${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%)`,
       source: "자동(모의)",
+      strategy: PAPER_STRATEGY, target: pos.target, exitReason: reason,
+      ...(r != null ? { rMultiple: round2(r) } : {}),
     });
   }
   return { acct: { cash, positions, realizedPnl, closed, wins }, entries };
@@ -129,4 +146,12 @@ export function paperCheckExits(acct: PaperAccount, prices: Record<string, numbe
 /** 평가금액 포함 총자산 */
 export function paperEquity(acct: PaperAccount): number {
   return acct.cash + acct.positions.reduce((a, p) => a + p.qty * (p.lastPrice ?? p.entryPrice), 0);
+}
+
+/**
+ * 보유 포지션의 평가손익 합계(최근가 × 수량 − 수수료 포함 매수 원가). 매도 비용은 빼지 않는다.
+ * 진입 이후 누적이라 전날부터 들고 있던 손실도 들어간다(일일 손실 한도 판단에서는 보수적으로 작동).
+ */
+export function paperUnrealizedPnl(acct: PaperAccount): number {
+  return acct.positions.reduce((a, p) => a + p.qty * (p.lastPrice ?? p.entryPrice) - p.cost, 0);
 }

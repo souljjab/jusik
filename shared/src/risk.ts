@@ -68,3 +68,14 @@ export function expectancy(i: { winRate: number; avgWinPct: number; avgLossPct: 
 export function expectedPortfolioProfit(capital: number, weightPct: number, e: Expectancy): number {
   return capital * (weightPct / 100) * (e.expectancyPct / 100);
 }
+
+/**
+ * 손실 단위(R) 배수 = (청산가 − 진입가) ÷ (진입가 − 계획 손절가).
+ * 계획한 1회 손실(1R) 대비 얼마를 벌었는지/잃었는지. 손절가가 없거나 진입가 이상이면 계산할 수 없어 null.
+ * 매매일지 필드 '손익과 손실 단위(R) 배수'(자료집 6장)와 기대값을 R로 보는 관점(5.4)에 쓴다.
+ */
+export function rMultiple(entry: number, exit: number, stop: number | undefined): number | null {
+  if (stop == null || !Number.isFinite(stop) || !Number.isFinite(entry) || !Number.isFinite(exit)) return null;
+  const risk = entry - stop;
+  return risk > 0 ? (exit - entry) / risk : null;
+}
