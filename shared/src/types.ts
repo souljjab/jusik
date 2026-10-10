@@ -71,4 +71,6 @@ export interface ScoreResult {
 export interface Note {
   tone: "good" | "bad" | "warn" | "info";
   text: string;
+  /** 근거가 된 규칙 ID와 출처(예: "M3-01 와인스타인"). 기초 자료집 부록 A의 규칙 카탈로그 기준 */
+  rule?: string;
 }
