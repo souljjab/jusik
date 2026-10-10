@@ -1,8 +1,10 @@
-import { type Analysis, type CheckStatus, type Fundamentals, type PeriodFinancials, type ScreeningResult } from "@jusik/shared";
+import { type AmountUnit, type Analysis, type Candle, type CheckStatus, type Fundamentals, type PeriodFinancials, type Region, type ScreeningResult } from "@jusik/shared";
 import { ScreeningChips } from "./AnalysisCard";
 import { NoteList, RuleTag } from "./NoteList";
-import { num, pct } from "./format";
+import { ValuationPanel, amountText } from "./ValuationPanel";
+import { money, num, pct } from "./format";
 import "./styles/analysis.css";
+import "./styles/valuation.css";
 
 const GROUPS = ["안정성", "저평가", "실적"] as const;
 const MARK = { pass: "✔", fail: "✖", unknown: "?" } as const;
@@ -53,10 +55,23 @@ function Metrics({ s }: { s: ScreeningResult }) {
   );
 }
 
-/** 실적 표. KR은 억 원, US는 출처 단위를 그대로 보여 준다 */
-function PeriodTable({ title, rows, region }: { title: string; rows: PeriodFinancials[]; region: "KR" | "US" }) {
+/** SEC 분기 행은 4분기를 연간 − 1~3분기로 계산했으면 derived: true를 달고 와요(공용 타입에는 없는 필드) */
+type PeriodRow = PeriodFinancials & { derived?: boolean };
+
+/** 금액 소수 자릿수: 억 원은 정수, 백만 달러는 한 자리. 단위를 모르면 예전처럼 지역 기준 */
+const amountDigits = (unit: AmountUnit | undefined, region: Region) => (unit === "억원" ? 0 : unit === "백만달러" ? 1 : region === "US" ? 2 : 0);
+
+/** 표 단위 안내 */
+function unitCaption(unit: AmountUnit | undefined, region: Region): string {
+  if (unit === "백만달러") return "단위: 백만 달러(EPS는 달러)";
+  if (unit === "억원") return "단위: 억 원(EPS는 원)";
+  return region === "US" ? "단위: 원자료(출처 단위 그대로, EPS는 달러)" : "단위: 억 원(EPS는 원)";
+}
+
+/** 실적 표. 금액은 Fundamentals.amountUnit 단위(국내 억 원, 미국 백만 달러) */
+function PeriodTable({ title, rows, region, unit }: { title: string; rows: PeriodRow[]; region: Region; unit: AmountUnit | undefined }) {
   if (!rows.length) return null;
-  const d = region === "US" ? 2 : 0;
+  const d = amountDigits(unit, region);
   const amt = (v: number | undefined) => (v == null ? "-" : num(v, d));
   const neg = (v: number | undefined) => (v != null && v < 0 ? "down" : "");
   return (
@@ -71,16 +86,26 @@ function PeriodTable({ title, rows, region }: { title: string; rows: PeriodFinan
               <th>영업이익</th>
               <th>순이익</th>
               <th>EPS</th>
+              <th title="실제 공시(제출)일. 모르면 -로 표시해요">제출일</th>
             </tr>
           </thead>
           <tbody>
             {[...rows].reverse().map((p) => (
               <tr key={p.period} className={p.estimate ? "an-est" : ""}>
-                <td className="left">{p.period}{p.estimate && " (추정)"}</td>
+                <td className="left">
+                  {p.period}
+                  {p.estimate && " (추정)"}
+                  {p.derived && (
+                    <span className="va-derived" title="연간 − 1~3분기로 계산한 4분기">
+                      (계산)
+                    </span>
+                  )}
+                </td>
                 <td>{amt(p.revenue)}</td>
                 <td className={p.estimate ? "" : neg(p.opIncome)}>{amt(p.opIncome)}</td>
                 <td className={p.estimate ? "" : neg(p.netIncome)}>{amt(p.netIncome)}</td>
                 <td className={p.estimate ? "" : neg(p.eps)}>{p.eps == null ? "-" : num(p.eps, region === "US" ? 2 : 0)}</td>
+                <td className="va-filed">{p.filed ?? "-"}</td>
               </tr>
             ))}
           </tbody>
@@ -90,9 +115,10 @@ function PeriodTable({ title, rows, region }: { title: string; rows: PeriodFinan
   );
 }
 
-function Financials({ f, region }: { f: Fundamentals; region: "KR" | "US" }) {
-  const annual = f.annual ?? [];
-  const quarterly = f.quarterly ?? [];
+function Financials({ f, region }: { f: Fundamentals; region: Region }) {
+  const annual: PeriodRow[] = f.annual ?? [];
+  const quarterly: PeriodRow[] = f.quarterly ?? [];
+  const derived = quarterly.some((p) => p.derived);
   return (
     <>
       <h4 className="group">연간·분기 실적</h4>
@@ -101,11 +127,12 @@ function Financials({ f, region }: { f: Fundamentals; region: "KR" | "US" }) {
       ) : (
         <>
           <p className="an-caption">
-            {region === "US" ? "단위: 원자료(출처 단위 그대로)" : "단위: 억 원(EPS는 원)"} · 최신 기간이 위에 있어요. 추정치(추정)는 스크리닝 판단에서 빼요.
+            {unitCaption(f.amountUnit, region)} · 최신 기간이 위에 있어요. 추정치(추정)는 스크리닝 판단에서 빼요.
+            {derived && " (계산)은 공시에 4분기 단독 값이 없어 연간에서 1~3분기를 빼서 구한 값이에요."}
           </p>
           <div className="an-extras-grid">
-            <PeriodTable title="연간" rows={annual} region={region} />
-            <PeriodTable title="분기" rows={quarterly} region={region} />
+            <PeriodTable title="연간" rows={annual} region={region} unit={f.amountUnit} />
+            <PeriodTable title="분기" rows={quarterly} region={region} unit={f.amountUnit} />
           </div>
         </>
       )}
@@ -113,15 +140,45 @@ function Financials({ f, region }: { f: Fundamentals; region: "KR" | "US" }) {
   );
 }
 
-export function FundamentalsTab({ f, a, region }: { f: Fundamentals; a: Analysis | null; region: "KR" | "US" }) {
-  const s = a?.screening;
-  const cur = region === "US" ? "$" : "원";
-  const ref: [string, number | undefined, string][] = [
-    ["EPS", f.eps, cur],
-    ["BPS", f.bps, cur],
-    ["ROE", f.roe, "%"],
-    ["동일업종 PER", f.sectorPer, "배"],
+/** 참고 지표 한 줄: [이름, 값, 보조 설명] */
+type RefRow = [string, string | null, string | null];
+
+function refRows(f: Fundamentals, region: Region): RefRow[] {
+  const rows: RefRow[] = [
+    ["EPS", f.eps == null ? null : money(f.eps, region), null],
+    ["BPS", f.bps == null ? null : money(f.bps, region), null],
+    ["ROE", f.roe == null ? null : `${num(f.roe, 1)}%`, null],
+    ["동일업종 PER", f.sectorPer == null ? null : `${num(f.sectorPer, 1)}배`, null],
   ];
+  if (f.marketCap != null) {
+    if (f.amountUnit) {
+      const t = amountText(f.marketCap, f.amountUnit);
+      rows.push(["시가총액", t.main, t.approx]);
+    } else {
+      rows.push(["시가총액", num(f.marketCap, 0), "금액 단위를 몰라요"]);
+    }
+  }
+  if (f.sharesOutstanding != null) rows.push(["상장주식수", `${num(f.sharesOutstanding, 0)}주`, null]);
+  return rows;
+}
+
+export function FundamentalsTab({
+  f,
+  a,
+  region,
+  candles,
+  sample,
+}: {
+  f: Fundamentals;
+  a: Analysis | null;
+  region: Region;
+  /** 일봉(App의 data.candles). 있으면 PER 밴드 차트를 그려요. 없으면 밴드 통계만 보여요 */
+  candles?: Candle[];
+  /** 샘플 데이터(health.sample)면 true — 시가총액·상장주식수가 만들어 낸 값이라는 표시를 붙여요 */
+  sample?: boolean;
+}) {
+  const s = a?.screening;
+  const ref = refRows(f, region);
   return (
     <div className="card">
       <h3 className="h3">재무 체크리스트 {s && <span className={`chip grade-${s.grade.replace("/", "")}`}>{s.grade}</span>}</h3>
@@ -155,11 +212,23 @@ export function FundamentalsTab({ f, a, region }: { f: Fundamentals; a: Analysis
         <p className="muted">분석 데이터가 부족해요.</p>
       )}
       <Financials f={f} region={region} />
+      <ValuationPanel a={a} f={f} candles={candles} region={region} sample={sample} />
       <h4 className="group">참고 지표</h4>
       <table className="kv">
         <tbody>
-          {ref.map(([l, v, u]) => (
-            <tr key={l}><th>{l}</th><td>{v == null ? "-" : `${num(v, 1)}${u}`}</td><td /></tr>
+          {ref.map(([l, v, note]) => (
+            <tr key={l}>
+              <th>{l}</th>
+              <td>{v ?? <span className="muted">-</span>}</td>
+              <td className="muted small">
+                {note}
+                {sample && (l === "시가총액" || l === "상장주식수") && (
+                  <span className="pill warn-pill va-ref-sample" title="샘플 데이터라 샘플 실적으로 만들어 낸 값이에요(실제 값 아님)">
+                    샘플
+                  </span>
+                )}
+              </td>
+            </tr>
           ))}
         </tbody>
       </table>
