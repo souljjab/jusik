@@ -1,4 +1,5 @@
-import { regionOfCode, type Candle, type Fundamentals, type Market, type PeriodFinancials, type Quote, type StockInfo } from "@jusik/shared";
+import { regionOfCode, sampleMarketFields, type Candle, type Fundamentals, type Market, type PeriodFinancials, type Quote, type StockInfo } from "@jusik/shared";
+import { sampleSecFinancials } from "./mockUs";
 import type { MarketDataProvider, UniverseRow } from "./provider";
 import { findStock, searchStocks, STOCKS } from "./stocks";
 
@@ -86,7 +87,7 @@ export class MockProvider implements MarketDataProvider {
     const eps = Math.round(1000 + r() * 9000);
     const bps = Math.round(eps * (3 + r() * 12));
     const price = this.build(code).at(-1)!.close;
-    return {
+    const base: Fundamentals = {
       per: round1(price / eps),
       pbr: round1(price / bps),
       eps,
@@ -100,6 +101,17 @@ export class MockProvider implements MarketDataProvider {
       sectorPer: round1(6 + r() * 20),
       ...this.periods(code, eps),
     };
+    if (regionOfCode(code) !== "US") return { ...base, ...sampleMarketFields(base, price, "억원") };
+    // 미국: SEC 형식의 샘플 실적(백만 달러, 제출일 포함)과 그에 맞춘 EPS·PER. 업종 PER·유보율은 미국 자료에 없다
+    const sec = sampleSecFinancials(code, new Date());
+    const lastEps = [...sec.annual].reverse().find((p) => !p.estimate && p.eps != null && p.eps > 0)?.eps;
+    const usEps = lastEps ?? round1(price / (8 + r() * 20));
+    const usBps = round1(usEps * (3 + r() * 12));
+    const us: Fundamentals = {
+      ...base, eps: usEps, bps: usBps, per: round1(price / usEps), pbr: round1(price / usBps), roe: round1((usEps / usBps) * 100),
+      sectorPer: undefined, reserveRatio: undefined, annual: sec.annual, quarterly: sec.quarterly,
+    };
+    return { ...us, ...sampleMarketFields(us, price, "백만달러") };
   }
 
   /** 가짜 연간(최근 3년 + 추정 1년)·분기(최근 5분기 + 추정 1분기) 실적. 단위: 억 원 */

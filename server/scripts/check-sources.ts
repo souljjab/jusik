@@ -4,7 +4,12 @@
  * 사이트 구조가 바뀌었거나 접속이 차단됐을 때 어떤 항목이 깨졌는지 바로 알 수 있다.
  */
 import { MACRO_SERIES_IDS } from "@jusik/shared";
+import { BreadthSource, NAVER_BREADTH, parseNaverBreadthToday, parseNaverMarketSum } from "../src/breadthSource";
+import { DartClient } from "../src/dart";
 import { MacroProvider } from "../src/fred";
+import { IsmSource } from "../src/ism";
+import { WebMinuteSource } from "../src/minute";
+import { SecClient } from "../src/sec";
 import { createHttp } from "../src/http";
 import { fetchDisclosures, fetchInvestorFlows, fetchItemSector, fetchSectors } from "../src/naverExtra";
 import { WebProvider } from "../src/webProvider";
@@ -96,10 +101,72 @@ await check("재무(AAPL)", async () => {
 console.log("[매크로 — 미국 FRED]");
 await check(`FRED 시계열 ${MACRO_SERIES_IDS.length}개`, async () => {
   const m = await new MacroProvider(http).getSnapshot();
+  // ISM은 아래에서 따로 확인한다
   if (m.errors.length) throw new Error(m.errors.join(" / "));
   const s = m.snapshot;
   return `기준일 ${s.asOf}, 금리차 ${s.yieldSpread?.value ?? "-"}, VIX ${s.vix?.value ?? "-"}, 10년물 ${s.us10y?.value ?? "-"}, 초과유동성 ${s.excessLiquidity?.toFixed(2) ?? "-"}, 원/달러 ${s.krwPerUsd?.value ?? "-"}`;
 });
 
-console.log(failed ? `\n${failed}개 항목 실패 — 해당 사이트의 접속 가능 여부와 파서(server/src/naver.ts, naverExtra.ts, yahoo.ts, fred.ts)를 확인하세요.` : "\n모든 항목이 정상이에요.");
+await check("ISM 제조업지수(ismworld.org)", async () => {
+  const src = new IsmSource(http);
+  const r = await src.getLatest();
+  if (!r) throw new Error(src.lastError ?? "값을 찾지 못했어요(사이트가 자바스크립트로 그리거나 봇을 막을 수 있어요 — 설정에서 직접 입력하세요)");
+  return `${r.month} ${r.value} (발표 ${r.date})`;
+});
+
+console.log("[시장 폭 — 네이버 금융]");
+await check("시가총액 순위(코스피)", async () => {
+  const rows = need(parseNaverMarketSum(await http.get(NAVER_BREADTH.marketSum("KOSPI", 1), { encoding: "auto" })), "시가총액 순위");
+  return `${rows.length}종목, 예: ${rows.slice(0, 3).map((r) => r.name).join(", ")}`;
+});
+await check("거래소 전체 상승·하락 종목 수(코스피)", async () => {
+  const t = parseNaverBreadthToday(await http.get(NAVER_BREADTH.index("KOSPI"), { encoding: "auto" }), "KOSPI");
+  if (!t) throw new Error("상승·보합·하락 종목 수를 찾지 못했어요");
+  return `상한 ${t.upperLimit} · 상승 ${t.up} · 보합 ${t.unchanged} · 하락 ${t.down} · 하한 ${t.lowerLimit}`;
+});
+await check("A/D선·MI 계산(코스피 상위 20종목, 시간이 걸려요)", async () => {
+  const r = await new BreadthSource(p, http, { basketSize: 20 }).getBreadth("KOSPI");
+  if (!r.analysis) throw new Error(r.errors.join(" / ") || "분석 결과가 없어요");
+  return `${r.basket.length}종목 기준, ${r.analysis.asOf}, 점수 ${r.analysis.score}, MI ${r.analysis.mi.at(-1)?.value ?? "-(200일 부족)"}`;
+});
+
+console.log("[분봉]");
+const minute = new WebMinuteSource(http);
+await check("1분봉(삼성전자, 네이버)", async () => `${need(await minute.getMinuteBars("005930", 1), "분봉").length}개`);
+await check("1분봉(AAPL, 야후)", async () => `${need(await minute.getMinuteBars("AAPL", 1), "분봉").length}개`);
+
+console.log("[미국 보유 현황·공시·실적]");
+await check("기관·내부자·공매도(AAPL, 야후)", async () => {
+  const h = await p.getUsHolders("AAPL");
+  if (!Object.keys(h).length) throw new Error("보유 현황이 비어 있어요(crumb 인증 실패일 수 있어요)");
+  return `기관 ${h.institutionsPct ?? "-"}% · 내부자 ${h.insidersPct ?? "-"}% · 공매도 ${h.shortPctFloat ?? "-"}%`;
+});
+if (process.env.SEC_USER_AGENT) {
+  const sec = new SecClient(http, { userAgent: process.env.SEC_USER_AGENT });
+  await check("SEC 공시(AAPL)", async () => {
+    const f = need(await sec.filings("AAPL", 120), "공시 목록");
+    return `${f.length}건, 최근: ${f[0]!.date} ${f[0]!.title}`;
+  });
+  await check("SEC 실적(AAPL, XBRL)", async () => {
+    const f = await sec.financials("AAPL");
+    if (!f.annual.length) throw new Error("연간 실적이 비어 있어요");
+    return `연간 ${f.annual.length}개(${f.annual.at(-1)!.period} 매출 ${f.annual.at(-1)!.revenue ?? "-"}백만 달러), 분기 ${f.quarterly.length}개`;
+  });
+} else console.log("  - SEC: SEC_USER_AGENT가 없어 건너뛰었어요(server/.env.example 참고)");
+
+console.log("[DART 오픈API]");
+if (process.env.DART_API_KEY) {
+  const dart = new DartClient(http, process.env.DART_API_KEY);
+  await check("회사 고유번호(삼성전자)", async () => (await dart.corpCodeOf("005930")) ?? "못 찾음");
+  await check("DART 공시 목록(삼성전자)", async () => {
+    const d = need(await dart.disclosures("005930", 30), "공시 목록");
+    return `${d.length}건, 최근: ${d[0]!.date} ${d[0]!.title}`;
+  });
+  await check("DART 연간 주요 계정(삼성전자)", async () => {
+    const a = need(await dart.annual("005930", 3), "연간 실적");
+    return a.map((x) => `${x.period} 매출 ${x.revenue ?? "-"}억`).join(", ");
+  });
+} else console.log("  - DART: DART_API_KEY가 없어 건너뛰었어요(server/.env.example 참고)");
+
+console.log(failed ? `\n${failed}개 항목 실패 — 해당 사이트의 접속 가능 여부와 파서(server/src/naver.ts, naverExtra.ts, yahoo.ts, fred.ts, ism.ts, breadthSource.ts, minute.ts, sec.ts, dart.ts)를 확인하세요.` : "\n모든 항목이 정상이에요.");
 process.exit(failed ? 1 : 0);

@@ -3,16 +3,55 @@ import {
   paperTradesFromJournal, paperUnrealizedPnl, planWithCash, regionOf, regionOfCode, scoreDayTrade, todayPnl, tradingGuards, weekdaysBetween,
   type Currency, type DayTradeParams, type GuardResult, type JournalEntry, type MacroSnapshot, type Market, type PaperAccount, type Region,
 } from "@jusik/shared";
+import type { BreadthResult, BreadthSource } from "./breadthSource";
 import type { MacroSource } from "./extras";
+import { minuteDecision, minuteFor } from "./intradayCheck";
+import type { MinuteSource } from "./minute";
 import type { MarketDataProvider, UniverseRow } from "./provider";
-import { HISTORY_LIMIT, type ScanResult, type Settings, type Store } from "./state";
+import { BREADTH_LOG_LIMIT, HISTORY_LIMIT, type ScanResult, type Settings, type Store } from "./state";
 
 export interface Deps {
   provider: MarketDataProvider;
   store: Store;
   /** 매크로(FRED) 스냅숏. 없으면 국면 점수에서 매크로를 뺀다 */
   macro?: MacroSource | null;
+  /** 시장 폭(A/D선·MI). 없거나 아직 계산 중이면 국면 점수에서 뺀다 */
+  breadth?: BreadthSource | null;
+  /** 분봉(모의 자동매매 진입 전 확인) */
+  minute?: MinuteSource | null;
   now?: () => Date;
+}
+
+/** 시장 폭은 처음 계산할 때 바스켓 종목 일봉을 모두 받아 오래 걸린다. 스캔은 이만큼만 기다리고, 계산은 뒤에서 계속돼 다음 스캔부터 쓰인다 */
+export const BREADTH_WAIT_MS = 1500;
+
+/** p가 ms 안에 끝나면 그 값, 아니면 null(p는 계속 진행된다) */
+export function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
+  return new Promise((resolve) => {
+    const t = setTimeout(() => resolve(null), ms);
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      () => {
+        clearTimeout(t);
+        resolve(null);
+      },
+    );
+  });
+}
+
+/** 거래소 전체 상승·하락 종목 수를 그 시장 날짜로 쌓는다(같은 날은 최신 값으로 덮어쓴다) */
+export function logBreadthToday(store: Store, market: Market, date: string, today: BreadthResult["today"]) {
+  if (!today) return;
+  const log = (store.state.breadthLog[market] ??= []);
+  const row = { date, ...today };
+  const i = log.findIndex((r) => r.date === date);
+  if (i >= 0) log[i] = row;
+  else log.push(row);
+  log.sort((a, b) => a.date.localeCompare(b.date));
+  if (log.length > BREADTH_LOG_LIMIT) log.splice(0, log.length - BREADTH_LOG_LIMIT);
 }
 
 const nowOf = (d: Deps) => (d.now ?? (() => new Date()))();
@@ -118,9 +157,13 @@ export function guardsFor(store: Store, region: Region, today: string, pending: 
 async function loadMacro(deps: Deps, result: ScanResult): Promise<MacroSnapshot | null> {
   if (!deps.macro) return null;
   try {
-    const m = await deps.macro.getSnapshot();
-    if (m.errors.length) result.errors.push(`매크로(FRED) ${m.errors.length}개 시리즈 실패: ${m.errors[0]}`);
+    const m = await deps.macro.getSnapshot({ ism: deps.store.state.settings.ismManual });
+    if (m.errors.length) result.errors.push(`매크로 자료 ${m.errors.length}건 문제: ${m.errors[0]}`);
     result.macroAsOf = m.snapshot.asOf;
+    const i = m.snapshot.ism;
+    result.macroSummary = {
+      ism: i ? { value: i.value, month: i.month, source: i.source } : null, rateRising: m.snapshot.rateRising ?? null, us10yChange6m: m.snapshot.us10yChange6m ?? null,
+    };
     return m.snapshot.asOf ? m.snapshot : null;
   } catch (e) {
     result.errors.push(`매크로(FRED): ${msg(e)}`);
@@ -136,7 +179,7 @@ export async function runScan(deps: Deps): Promise<ScanResult> {
   const markets = MARKETS.filter((m) => s.markets[m]);
   const result: ScanResult = {
     id: globalThis.crypto.randomUUID(), at: at.toISOString(), markets, universeCount: 0, scannedCount: 0, rejected: {}, regimes: {},
-    postures: {}, exposureCaps: {}, guards: {}, macroAsOf: null,
+    postures: {}, exposureCaps: {}, guards: {}, macroAsOf: null, breadth: {}, minuteSkips: [],
     candidates: [], plans: {}, executed: [], errors: [],
   };
   const reject = (r: string) => (result.rejected[r] = (result.rejected[r] ?? 0) + 1);
@@ -145,10 +188,24 @@ export async function runScan(deps: Deps): Promise<ScanResult> {
   for (const market of markets) {
     const region = regionOf(market);
     const params = paramsFor(region, s);
+    let breadth: BreadthResult | null = null;
+    if (deps.breadth) {
+      breadth = await withTimeout(deps.breadth.getBreadth(market), BREADTH_WAIT_MS);
+      if (breadth) {
+        logBreadthToday(store, market, marketClock(region, at).date, breadth.today);
+        const a = breadth.analysis;
+        result.breadth![market] = a
+          ? {
+            asOf: a.asOf, basis: a.basis, sampleSize: a.sampleSize, score: a.score, divergence: a.divergence, miSignal: a.miSignal, hiLoState: a.hiLoState, hiLo: a.hiLo,
+            mi: a.mi.at(-1)?.value ?? null, adLine: a.adLine.at(-1)?.value ?? null,
+          }
+          : null;
+      } else result.breadth![market] = null;
+    }
     try {
       const idx = await provider.getIndexCandles(market, 250);
       result.regimes[market] = marketRegime(idx)?.regime ?? null;
-      result.postures![market] = assessRegime(idx, macro, s.postureCaps, { region });
+      result.postures![market] = assessRegime(idx, macro, s.postureCaps, { region, breadth: breadth?.analysis ?? null });
     } catch (e) {
       result.regimes[market] = null;
       result.postures![market] = null;
@@ -236,6 +293,15 @@ async function autoTrade(deps: Deps, scan: ScanResult, at: Date) {
       const equity = paperEquity(acct);
       if (!guard.blocked)
         for (const item of plan.items) {
+          // 분봉 확인(4.7·M3-18): 시초가 갭 추격·회피 자리면 이번 스캔에서는 들어가지 않는다(다음 스캔에서 다시 본다)
+          if (store.state.settings.minuteMode !== "off" && deps.minute) {
+            const m = await minuteFor({ provider, minute: deps.minute }, item.candidate.code, at).catch(() => null);
+            const d = minuteDecision(store.state.settings.minuteMode, m?.assessment ?? null);
+            if (!d.enter) {
+              scan.minuteSkips!.push({ code: item.candidate.code, name: item.candidate.name, verdict: m?.assessment?.entry.verdict ?? "wait", reason: d.reason });
+              continue;
+            }
+          }
           const o = paperOpen(acct, item, at, clock, PAPER_COSTS[region], scan.regimes[item.candidate.market] ?? null, equity);
           if (o) {
             acct = o.acct;

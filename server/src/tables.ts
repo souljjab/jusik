@@ -40,6 +40,18 @@ export function buildTables(state: AppState, meta: { provider: string; sample: b
     ["적용 투자 상한(%)", scan?.exposureCaps ? (["KRW", "USD"] as const).map((c) => `${c}:${scan.exposureCaps?.[c] ?? "-"}`).join("  ") : "-"],
     ["매크로 기준일", scan?.macroAsOf ?? "-"],
     [
+      "ISM 제조업지수",
+      scan?.macroSummary?.ism ? `${scan.macroSummary.ism.value} (${scan.macroSummary.ism.month}, ${scan.macroSummary.ism.source === "수동" ? "직접 입력" : "ISM"})` : s.ismManual ? `${s.ismManual.value} (${s.ismManual.month}, 직접 입력)` : "-",
+    ],
+    ["금리 추세(미 10년물 6개월)", scan?.macroSummary?.us10yChange6m != null ? `${r2(scan.macroSummary.us10yChange6m)}%p${scan.macroSummary.rateRising ? " · 금리 상승기" : ""}` : "-"],
+    [
+      "시장 폭(점수·괴리·MI)",
+      scan?.breadth
+        ? Object.entries(scan.breadth).map(([m, b]) => (b ? `${m}:${b.score > 0 ? "+" : ""}${b.score}${b.divergence ? ` ${b.divergence === "BEARISH" ? "약세 괴리" : "강세 괴리"}` : ""} MI ${b.mi ?? "-"}` : `${m}:계산 중`)).join("  ") || "-"
+        : "-",
+    ],
+    ["분봉 확인(모의 진입)", s.minuteMode === "off" ? "끔" : s.minuteMode === "strict" ? "매수 신호일 때만" : "갭 추격·회피만 거름"],
+    [
       "리스크 가드",
       scan?.guards
         ? (["KRW", "USD"] as const).map((c) => { const g = scan.guards?.[c]; return `${c}:${!g ? "-" : g.blocked ? "신규 진입 중지" : g.notes.length ? "경고" : "통과"}`; }).join("  ")
@@ -62,6 +74,7 @@ export function buildTables(state: AppState, meta: { provider: string; sample: b
   tables.push({ name: "요약", headers: ["항목", "값"], rows });
 
   // 2) 추천(최신) + 예수금 기반 계획
+  const minuteSkip = new Map((scan?.minuteSkips ?? []).map((m) => [m.code, m.reason]));
   const planItems = new Map<string, { qty: number; amount: number; risk: number }>();
   const skipped = new Map<string, string>();
   for (const cur of ["KRW", "USD"] as const) {
@@ -71,12 +84,12 @@ export function buildTables(state: AppState, meta: { provider: string; sample: b
   }
   tables.push({
     name: "추천(최신)",
-    headers: ["순위", "시장", "종목코드", "종목명", "점수", "현재가", "등락률(%)", "거래량배수", "거래대금", "진입가", "손절가", "목표가", "손절폭(%)", "목표폭(%)", "순손익비", "최대보유일", "권장수량", "투자금액", "최대손실", "계획 제외 사유", "근거", "스캔시각"],
+    headers: ["순위", "시장", "종목코드", "종목명", "점수", "현재가", "등락률(%)", "거래량배수", "거래대금", "진입가", "손절가", "목표가", "손절폭(%)", "목표폭(%)", "순손익비", "최대보유일", "권장수량", "투자금액", "최대손실", "계획 제외 사유", "분봉 확인(진입 보류)", "근거", "스캔시각"],
     rows: (scan?.candidates ?? []).map((c, i) => {
       const it = planItems.get(c.code);
       return [
         i + 1, c.market, c.code, c.name, c.score, c.price, r2(c.changePct), r2(c.volumeRatio), Math.round(c.tradeValue), c.entry, c.stop, c.target,
-        r2(c.stopPct), r2(c.targetPct), r2(c.netRR), c.maxHoldDays, it?.qty ?? 0, it?.amount ?? 0, it?.risk ?? 0, it ? "" : (skipped.get(c.code) ?? ""),
+        r2(c.stopPct), r2(c.targetPct), r2(c.netRR), c.maxHoldDays, it?.qty ?? 0, it?.amount ?? 0, it?.risk ?? 0, it ? "" : (skipped.get(c.code) ?? ""), minuteSkip.get(c.code) ?? "",
         c.notes.map((n) => n.text).join(" / "), scan ? fmtKst(scan.at) : "",
       ];
     }),
@@ -133,7 +146,19 @@ export function buildTables(state: AppState, meta: { provider: string; sample: b
   if (state.lastReplay) dump(`과거 재현(${fmtKst(state.lastReplay.at)}, ${state.lastReplay.codesTested}종목)`, state.lastReplay.evaluation);
   tables.push({ name: "규칙점검", headers: ["출처", "구분", "조건", "거래 수", "승률(%)", "기대값(%)", "기대값 하한(%)", "손익비(PF)", "비고"], rows: evalRows });
 
-  // 8) 일일 복기(M5-01): 최근 것부터, 한 복기를 (항목, 내용) 여러 줄로
+  // 8) 시장 폭: 거래소 전체 상승·하락 종목 수 일별 기록(국내, 네이버). A/D선은 (상승+상한) − (하락+하한)의 누적
+  const breadthRows: Cell[][] = [];
+  for (const [market, log] of Object.entries(state.breadthLog ?? {})) {
+    let ad = 0;
+    for (const r of log ?? []) {
+      const net = r.up + r.upperLimit - r.down - r.lowerLimit;
+      ad += net;
+      breadthRows.push([market, r.date, r.upperLimit, r.up, r.unchanged, r.down, r.lowerLimit, net, ad]);
+    }
+  }
+  tables.push({ name: "시장폭", headers: ["시장", "날짜", "상한", "상승", "보합", "하락", "하한", "순상승", "A/D(기록 시작 후 누적)"], rows: breadthRows.reverse() });
+
+  // 9) 일일 복기(M5-01): 최근 것부터, 한 복기를 (항목, 내용) 여러 줄로
   const reviewRows: Cell[][] = [];
   for (const r of [...state.reviews].reverse().slice(0, REVIEW_EXPORT_LIMIT))
     for (const [k, v] of reviewToRows(r).slice(2)) reviewRows.push([r.date, r.region === "KR" ? "국내" : "미국", k ?? "", v ?? ""]);

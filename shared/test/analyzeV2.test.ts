@@ -60,4 +60,20 @@ describe("analyze — posture, daily signals, hard exclusions", () => {
     const b = analyze({ candles: stockUp, indexCandles: bull })!;
     expect(b.action).toBe(a.action);
   });
+
+  it("adds the valuation block (PER band·PSR) and the candle-master weekly result without changing the action", () => {
+    const f: Fundamentals = {
+      amountUnit: "억원", marketCap: 30_000,
+      annual: [
+        { period: "2022.12", estimate: false, revenue: 9_000, eps: 900 },
+        { period: "2023.12", estimate: false, revenue: 10_000, eps: 1_000 },
+      ],
+    };
+    const a = analyze({ candles: stockUp, indexCandles: bull, fundamentals: f, macro: { asOf: "2023-07-01", rateRising: true } })!;
+    expect(a.valuation.psr).toMatchObject({ psr: 3, basis: "연간" });
+    expect(a.valuation.band.n).toBeGreaterThan(0);
+    expect(Array.isArray(a.valuation.notes)).toBe(true);
+    expect(a.candleMaster === null || typeof a.candleMaster.valid === "boolean").toBe(true);
+    expect(a.action).toBe(analyze({ candles: stockUp, indexCandles: bull })!.action);
+  });
 });

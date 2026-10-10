@@ -166,7 +166,7 @@ describe("export", () => {
     await writeExcel(tables, file);
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.readFile(file);
-    expect(wb.worksheets.map((w) => w.name)).toEqual(["요약", "추천(최신)", "추천이력", "모의포지션", "매매일지", "성과", "규칙점검", "일일복기"]);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(["요약", "추천(최신)", "추천이력", "모의포지션", "매매일지", "성과", "규칙점검", "시장폭", "일일복기"]);
     const rec = wb.getWorksheet("추천(최신)")!;
     expect(rec.rowCount).toBe(1 + store.state.latestScan!.candidates.length);
     expect(rec.getRow(1).getCell(4).value).toBe("종목명");
@@ -214,7 +214,7 @@ describe("export", () => {
     }) as typeof fetch;
     const r = await syncSheets(tables, { spreadsheetId: "SID", getToken: async () => "TOKEN", fetchImpl });
     const add = calls.find((c) => c.url.endsWith(":batchUpdate"))!;
-    expect(add.body.requests.map((x: any) => x.addSheet.properties.title)).toEqual(["추천(최신)", "추천이력", "모의포지션", "매매일지", "성과", "규칙점검", "일일복기"]);
+    expect(add.body.requests.map((x: any) => x.addSheet.properties.title)).toEqual(["추천(최신)", "추천이력", "모의포지션", "매매일지", "성과", "규칙점검", "시장폭", "일일복기"]);
     expect(calls.filter((c) => c.url.includes(":clear"))).toHaveLength(tables.length);
     const puts = calls.filter((c) => c.method === "PUT");
     expect(puts).toHaveLength(tables.length);

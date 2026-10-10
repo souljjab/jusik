@@ -1,5 +1,7 @@
 import { computeIndicators } from "./indicators";
 import { BUY_ACTIONS, downgradeBuy } from "./action";
+import type { BreadthAnalysis } from "./breadth";
+import { candleMaster, type CandleMasterResult } from "./candleMaster";
 import { detectCandlePatterns, type CandlePattern } from "./candles";
 import { dailySignals, type DailySignal } from "./dailySignals";
 import type { MacroSnapshot } from "./macro";
@@ -8,6 +10,7 @@ import { assessRegime, DEFAULT_POSTURE_CAPS, POSTURE_LABEL, type Posture, type R
 import { screenFundamentals, screeningNotes, type ScreeningResult } from "./screening";
 import { MIN_WEEKS, prepareStage, relativeStrength, stageAt, STAGE_LABEL, type StageResult } from "./stage";
 import { technicalScoreAt } from "./technical";
+import { perBand, psr, valuationNotes, type PerBand, type PsrResult } from "./valuation";
 import type { Action, Candle, Fundamentals, Note, Region, ScoreResult } from "./types";
 import { completedWeeks, toWeekly } from "./weekly";
 
@@ -38,6 +41,10 @@ export interface Analysis {
   shortTerm: ScoreResult;
   /** 보조: 마지막 봉 기준 일봉 매매 신호(M3-05~M3-18 등). 의견을 바꾸지 않는 참고 신호 */
   dailySignals: DailySignal[];
+  /** 밸류에이션: PER 밴드(M2-09)·PSR(M2-10). 의견을 바꾸지 않는 참고 정보 */
+  valuation: { band: PerBand; psr: PsrResult | null; notes: Note[] };
+  /** 캔들마스터 주봉 캔들(4.5·M3-12·M3-13). 별도 매매법이라 의견을 바꾸지 않는다. 주봉이 모자라면 null */
+  candleMaster: CandleMasterResult | null;
 }
 
 export interface AnalyzeInput {
@@ -51,10 +58,12 @@ export interface AnalyzeInput {
   region?: Region;
   /** 국면별 투자 상한(%) */
   postureCaps?: Record<Posture, number>;
+  /** 시장 폭(A/D선·MI). 있으면 국면 점수에 보조 신호로 더한다 */
+  breadth?: BreadthAnalysis | null;
 }
 
 /** 4단계 파이프라인: 시장 국면 → 종목 스크리닝 → 진입·청산 → (리스크는 risk.ts에서 계산) */
-export function analyze({ candles, fundamentals, indexCandles, macro, region, postureCaps }: AnalyzeInput): Analysis | null {
+export function analyze({ candles, fundamentals, indexCandles, macro, region, postureCaps, breadth }: AnalyzeInput): Analysis | null {
   const weekly = completedWeeks(toWeekly(candles));
   if (weekly.length < MIN_WEEKS) return null;
 
@@ -64,7 +73,7 @@ export function analyze({ candles, fundamentals, indexCandles, macro, region, po
   if (!timing) return null;
 
   const regime = indexCandles?.length ? marketRegime(indexCandles) : null;
-  const posture = indexCandles?.length ? assessRegime(indexCandles, macro, postureCaps ?? DEFAULT_POSTURE_CAPS, { region }) : null;
+  const posture = indexCandles?.length ? assessRegime(indexCandles, macro, postureCaps ?? DEFAULT_POSTURE_CAPS, { region, breadth }) : null;
   const screening = screenFundamentals(fundamentals);
 
   let action = timing.action;
@@ -110,7 +119,20 @@ export function analyze({ candles, fundamentals, indexCandles, macro, region, po
     candlePatterns: detectCandlePatterns(candles),
     shortTerm: technicalScoreAt(candles, ind, candles.length - 1),
     dailySignals: dailySignals(candles, { regime: regime?.regime ?? null }),
+    valuation: valuationOf(candles, fundamentals, screening, macro),
+    candleMaster: candleMaster(candles),
   };
+}
+
+function valuationOf(candles: Candle[], f: Fundamentals | undefined, screening: ScreeningResult, macro: MacroSnapshot | null | undefined): Analysis["valuation"] {
+  const band = perBand(candles, f ?? {});
+  const p = f ? psr(f) : null;
+  const g = screening.metrics.epsGrowth;
+  const notes = valuationNotes({
+    band, psr: p, rateRising: macro?.rateRising ?? null, growthGroup: screening.growthGroup,
+    epsGrowthPositive: g != null ? g > 0 : undefined,
+  });
+  return { band, psr: p, notes };
 }
 
 export { STAGE_LABEL };

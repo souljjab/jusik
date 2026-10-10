@@ -1,6 +1,6 @@
 import {
   analyze, regionOf,
-  type Analysis, type Candle, type DailyReview, type Evaluation, type Fundamentals, type JournalCheck, type JournalEntry, type MacroResponse, type Market, type Posture,
+  type Analysis, type BreadthResponse, type Candle, type DailyReview, type MinuteResponse, type Evaluation, type Fundamentals, type JournalCheck, type JournalEntry, type MacroResponse, type Market, type Posture,
   type Quote, type Region, type ReplayRun, type ServerState, type Settings, type StockExtras, type StockInfo,
 } from "@jusik/shared";
 
@@ -32,6 +32,8 @@ export interface StockData {
   /** 종목이 속한 시장 지수 일봉(없으면 null) */
   indexCandles: Candle[] | null;
   analysis: Analysis | null;
+  /** 시장 폭(국면 점수에 반영됐는지 화면에서 알려 주려고 같이 둔다) */
+  breadth: BreadthResponse | null;
 }
 
 const TTL = 60_000;
@@ -67,6 +69,21 @@ function loadCaps(): Promise<Record<Posture, number> | undefined> {
   return p;
 }
 
+const breadthCache = new Map<Market, { at: number; p: Promise<BreadthResponse | null> }>();
+/** 시장 폭(A/D선·MI). 서버가 아직 계산 중이면 pending=true — 잠시 뒤 다시 부르면 채워진다 */
+export function getBreadth(market: Market, fresh = false): Promise<BreadthResponse | null> {
+  const hit = breadthCache.get(market);
+  if (!fresh && hit && Date.now() - hit.at < TTL) return hit.p;
+  const p = getJson<BreadthResponse>(`/api/breadth/${market}`).catch(() => null);
+  breadthCache.set(market, { at: Date.now(), p });
+  // 계산 중 응답은 오래 두지 않는다
+  p.then((r) => r?.pending && breadthCache.delete(market));
+  return p;
+}
+
+/** 분봉(1분봉)과 분봉 규칙 판단 */
+export const getMinute = (code: string) => getJson<MinuteResponse>(`/api/stocks/${code}/minute`);
+
 export function loadStock(code: string): Promise<StockData> {
   const hit = cache.get(code);
   if (hit && Date.now() - hit.at < TTL) return hit.p;
@@ -74,15 +91,16 @@ export function loadStock(code: string): Promise<StockData> {
     getJson<{ info: StockInfo; quote: Quote; fundamentals: Fundamentals }>(`/api/stocks/${code}/overview`),
     getJson<{ candles: Candle[] }>(`/api/stocks/${code}/candles?count=${CANDLE_COUNT}`),
   ]).then(async ([o, c]) => {
-    const [indexCandles, macro, postureCaps] = await Promise.all([loadIndex(o.info.market), getMacro(), loadCaps()]);
+    const [indexCandles, macro, postureCaps, breadth] = await Promise.all([loadIndex(o.info.market), getMacro(), loadCaps(), getBreadth(o.info.market)]);
     return {
       ...o,
       candles: c.candles,
       indexCandles,
       analysis: analyze({
         candles: c.candles, fundamentals: o.fundamentals, indexCandles: indexCandles ?? undefined,
-        macro: macro?.snapshot ?? null, region: regionOf(o.info.market), postureCaps,
+        macro: macro?.snapshot ?? null, region: regionOf(o.info.market), postureCaps, breadth: breadth?.analysis ?? null,
       }),
+      breadth,
     };
   });
   cache.set(code, { at: Date.now(), p });

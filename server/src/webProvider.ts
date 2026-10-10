@@ -1,5 +1,6 @@
 import { regionOfCode, type Candle, type Fundamentals, type Market, type PeriodFinancials, type Quote, type StockInfo } from "@jusik/shared";
-import type { UsHolders } from "@jusik/shared";
+import type { Disclosure, UsHolders } from "@jusik/shared";
+import { attachFiledDates, periodicReports, type DartSource, type PeriodicReport } from "./dart";
 import type { Http } from "./http";
 import { HttpError } from "./http";
 import { NAVER, parseFchart, parseNaverFundamentals, parseRankingTable, parseRealtime, realtimeToQuote } from "./naver";
@@ -19,7 +20,7 @@ export class WebProvider implements MarketDataProvider {
   private crumb: { value: string; cookie: string } | null = null;
 
   /** sec를 주면 미국 종목 실적(연간·분기)을 SEC EDGAR에서 채운다(SecClient 또는 같은 모양의 원천) */
-  constructor(private http: Http, private sec?: SecSource) {}
+  constructor(private http: Http, private sec?: SecSource, private dart?: DartSource) {}
 
   async search(q: string): Promise<StockInfo[]> {
     const local = searchStocks(q);
@@ -100,11 +101,12 @@ export class WebProvider implements MarketDataProvider {
 
   async getFundamentals(code: string): Promise<Fundamentals> {
     if (regionOfCode(code) === "KR") {
-      try {
-        return parseNaverFundamentals(await this.http.get(NAVER.main(code), AUTO));
-      } catch {
-        return {}; // 재무는 없어도 분석은 계속한다(스크리닝에서 '데이터 없음')
-      }
+      // 재무는 없어도 분석은 계속한다(스크리닝에서 '데이터 없음')
+      const naver = await this.http.get(NAVER.main(code), AUTO).then(parseNaverFundamentals, (): Fundamentals => ({}));
+      if (!this.dart) return naver;
+      // DART 키가 있으면 연간 실적의 실제 제출일(과거 시점 판단용)과 네이버에 없는 이전 연도를 채운다
+      const [annual, list] = await Promise.all([this.dart.annual(code).catch((): PeriodFinancials[] => []), this.dart.disclosures(code, 400).catch((): Disclosure[] => [])]);
+      return mergeDartAnnual(naver, annual, periodicReports(list));
     }
     // 미국: 야후(밸류에이션·시가총액) + SEC(연간·분기 실적). 어느 한쪽이 실패해도 나머지로 계속한다
     const [yahoo, sec] = await Promise.all([
@@ -195,4 +197,21 @@ export function mergeSecFinancials(yahoo: Fundamentals, sec: SecFinancials | nul
     if (g != null) f.opIncomeGrowth = g;
   }
   return f;
+}
+
+/**
+ * 네이버 재무에 DART 연간 실적을 합친다. 같은 결산 기간은 네이버 값을 두고 제출일(filed)만 붙이며,
+ * 네이버에 없는 기간(이전 연도)은 DART 값(억 원)으로 더한다. 추정치(E)는 그대로 둔다.
+ */
+export function mergeDartAnnual(naver: Fundamentals, dart: PeriodFinancials[], reports: PeriodicReport[]): Fundamentals {
+  if (!dart.length && !reports.length) return naver;
+  const byPeriod = new Map(dart.map((p) => [p.period, p]));
+  const base = (naver.annual ?? []).map((p) => {
+    const d = byPeriod.get(p.period);
+    return !p.estimate && !p.filed && d?.filed ? { ...p, filed: d.filed } : p;
+  });
+  const have = new Set(base.map((p) => p.period));
+  const extra = dart.filter((p) => !have.has(p.period));
+  const annual = attachFiledDates([...base, ...extra], reports).sort((a, b) => a.period.localeCompare(b.period));
+  return { ...naver, annual, amountUnit: naver.amountUnit ?? (annual.length ? "억원" : undefined) };
 }

@@ -25,6 +25,8 @@ export const DEFAULT_SETTINGS: Settings = {
   postureCaps: { ...DEFAULT_POSTURE_CAPS },
   dailyLossLimitPct: GUARD_DEFAULTS.dailyLossLimitPct,
   maxConsecutiveLosses: GUARD_DEFAULTS.maxConsecutiveLosses,
+  ismManual: null,
+  minuteMode: "filter",
 };
 
 const RANGES: Record<string, [number, number]> = {
@@ -53,6 +55,14 @@ export function sanitizeSettings(input: unknown, base: Settings = DEFAULT_SETTIN
   out.maxPositions = Math.round(out.maxPositions);
   out.maxScanPerMarket = Math.round(out.maxScanPerMarket);
   out.maxConsecutiveLosses = Math.round(out.maxConsecutiveLosses);
+  if (src.ismManual === null) out.ismManual = null;
+  else if (src.ismManual && typeof src.ismManual === "object") {
+    const m = src.ismManual as Record<string, unknown>;
+    // 형식만 본다(20~80, YYYY-MM). 아직 끝나지 않은 달인지는 쓸 때 ism.ts manualIsm이 다시 확인한다
+    if (typeof m.value === "number" && Number.isFinite(m.value) && m.value >= 20 && m.value <= 80 && typeof m.month === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(m.month))
+      out.ismManual = { value: Math.round(m.value * 10) / 10, month: m.month };
+  }
+  if (src.minuteMode === "off" || src.minuteMode === "filter" || src.minuteMode === "strict") out.minuteMode = src.minuteMode;
   return out;
 }
 
@@ -70,7 +80,20 @@ export interface AppState {
   lastUniverse: Partial<Record<Market, { at: string; rows: MarketRowLike[] }>>;
   /** 통화별 '하루 시작 자산'(그 시장 날짜의 첫 점검 때 가격을 반영하기 전 모의계좌 자산). 일일 손실 한도 계산용 */
   dayStart: Partial<Record<Currency, { date: string; equity: number }>>;
+  /** 거래소 전체 상승·하락 종목 수 일별 기록(네이버, 국내). 쌓이면 바스켓 근사 대신 실제 A/D선을 그릴 수 있다 */
+  breadthLog: Partial<Record<Market, BreadthLogRow[]>>;
 }
+
+export interface BreadthLogRow {
+  date: string;
+  up: number;
+  upperLimit: number;
+  unchanged: number;
+  down: number;
+  lowerLimit: number;
+}
+
+export const BREADTH_LOG_LIMIT = 600;
 
 export const HISTORY_LIMIT = 3000;
 export const REVIEW_LIMIT = 500;
@@ -86,6 +109,7 @@ function fresh(): AppState {
     reviews: [],
     lastUniverse: {},
     dayStart: {},
+    breadthLog: {},
   };
 }
 
@@ -108,6 +132,7 @@ export class Store {
           reviews: Array.isArray(raw.reviews) ? raw.reviews : [],
           lastUniverse: raw.lastUniverse && typeof raw.lastUniverse === "object" ? raw.lastUniverse : {},
           dayStart: raw.dayStart && typeof raw.dayStart === "object" ? raw.dayStart : {},
+          breadthLog: raw.breadthLog && typeof raw.breadthLog === "object" ? raw.breadthLog : {},
         };
       } catch (e) {
         // 파일이 깨졌으면 덮어쓰지 않고 백업해 둔다

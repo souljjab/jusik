@@ -97,7 +97,7 @@ describe("regime posture → exposure cap", () => {
     const scan = await runScan(deps);
     expect(scan.macroAsOf).toBe("2024-03-15");
     expect(scan.postures?.KOSPI?.breakdown.macro).toBeLessThan(0);
-    expect(scan.errors.join()).toContain("매크로(FRED) 1개 시리즈 실패");
+    expect(scan.errors.join()).toContain("매크로 자료 1건 문제");
   });
 });
 

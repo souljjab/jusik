@@ -2,15 +2,18 @@ import { existsSync, readFileSync } from "node:fs";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import {
-  averagingDownCheck, isValidCode, macroNotes, marketClock, netOf, paperTrackingStatus, preTradeChecklist, regionOfCode,
-  type JournalCheck, type JournalEntry, type MacroResponse, type Market, type Note, type Region, type ServerState, type StockExtras,
+  averagingDownCheck, isValidCode, macroNotes, marketClock, netOf, paperTrackingStatus, preTradeChecklist, regionOf, regionOfCode,
+  type BreadthResponse, type JournalCheck, type JournalEntry, type MacroResponse, type Market, type MinuteResponse, type Note, type Region, type ServerState, type StockExtras,
 } from "@jusik/shared";
 import { TtlCache } from "./cache";
 import type { Exporter } from "./exporter";
+import type { BreadthSource } from "./breadthSource";
 import { loadStockExtras, type ExtrasSource, type MacroSource } from "./extras";
+import { minuteFor } from "./intradayCheck";
+import type { MinuteSource } from "./minute";
 import type { MarketDataProvider } from "./provider";
 import { evaluatePaper, runReplay } from "./evaluate";
-import { syncPaperWithDeposit } from "./scanner";
+import { BREADTH_WAIT_MS, logBreadthToday, syncPaperWithDeposit, withTimeout } from "./scanner";
 import type { Scheduler } from "./scheduler";
 import { sanitizeSettings, type Store } from "./state";
 
@@ -20,6 +23,10 @@ export interface AppDeps {
   exporter: Exporter;
   scheduler: Scheduler;
   macro: MacroSource;
+  /** 시장 폭(A/D선·MI). 없으면 /api/breadth가 빈 값 */
+  breadth?: BreadthSource | null;
+  /** 분봉 */
+  minute?: MinuteSource | null;
   extras: ExtrasSource;
   now?: () => Date;
 }
@@ -33,11 +40,12 @@ const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const optNum = (v: unknown) => (v != null && v !== "" && Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : undefined);
 const optText = (v: unknown, max: number) => (v != null && String(v).trim() ? String(v).trim().slice(0, max) : undefined);
 
-export function buildApp({ provider, store, exporter, scheduler, macro, extras, now = () => new Date() }: AppDeps) {
+export function buildApp({ provider, store, exporter, scheduler, macro, extras, breadth, minute, now = () => new Date() }: AppDeps) {
   const app = Fastify({ logger: false });
   const cache = new TtlCache(60_000);
   const slowCache = new TtlCache(30 * 60_000);
   const extrasCache = new TtlCache(10 * 60_000);
+  const minuteCache = new TtlCache(30_000);
 
   // 같은 PC의 화면(5173)과 로컬 서버만 쓰는 도구라 localhost 계열만 허용한다. 배포할 때는 허용 도메인을 직접 지정하세요.
   app.register(cors, { origin: [/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/, /^capacitor:\/\/localhost$/, /^https?:\/\/localhost$/] });
@@ -83,10 +91,10 @@ export function buildApp({ provider, store, exporter, scheduler, macro, extras, 
     return r;
   });
 
-  // 매크로(FRED): 금리차·VIX·10년물·초과 유동성·원/달러
+  // 매크로(FRED·ISM): 금리차·VIX·10년물·초과 유동성·원/달러·ISM(직접 입력값이 있으면 그 값)
   app.get("/api/macro", async (): Promise<MacroResponse> => {
     try {
-      const m = await macro.getSnapshot();
+      const m = await macro.getSnapshot({ ism: store.state.settings.ismManual });
       const ok = m.snapshot.asOf != null;
       return {
         snapshot: ok ? m.snapshot : null,
@@ -96,6 +104,30 @@ export function buildApp({ provider, store, exporter, scheduler, macro, extras, 
     } catch (e) {
       return { snapshot: null, notes: { KR: [], US: [] }, errors: [errText(e)], fetchedAt: null, sample: macro.sample };
     }
+  });
+
+  // 시장 폭(A/D선·시장 탄력지수 MI·신고가-신저가). 처음 계산은 오래 걸려 기다리지 않고 pending을 돌려준다
+  app.get<{ Params: { market: string } }>("/api/breadth/:market", async (req, reply) => {
+    const market = req.params.market.toUpperCase() as Market;
+    if (!MARKETS.includes(market)) return reply.code(400).send({ error: "시장은 KOSPI, KOSDAQ, US 중 하나여야 해요." });
+    const log = (store.state.breadthLog[market] ?? []).slice(-250);
+    const empty: BreadthResponse = { market, pending: false, analysis: null, today: null, log, basketSize: 0, errors: [], sample: provider.sample };
+    if (!breadth) return { ...empty, errors: ["시장 폭 공급자가 없어요"] };
+    const r = await withTimeout(breadth.getBreadth(market), BREADTH_WAIT_MS);
+    if (!r) return { ...empty, pending: true };
+    logBreadthToday(store, market, marketClock(regionOf(market), now()).date, r.today);
+    const out: BreadthResponse = {
+      market, pending: false, analysis: r.analysis, today: r.today, log: (store.state.breadthLog[market] ?? []).slice(-250), basketSize: r.basket.length, errors: r.errors, sample: r.sample,
+    };
+    return out;
+  });
+
+  // 분봉(1분봉)과 강창권 분봉 규칙 판단(4.7·M3-18)
+  app.get<{ Params: { code: string } }>("/api/stocks/:code/minute", async (req, reply) => {
+    const code = normCode(req.params.code);
+    if (!isValidCode(code)) return reply.code(400).send(BAD_CODE);
+    if (!minute) return reply.code(503).send({ error: "분봉 공급자가 없어요." });
+    return minuteCache.get<MinuteResponse>(`m:${code}`, () => minuteFor({ provider, minute }, code, now()));
   });
 
   // ---- 단타 스캔 / 설정 / 모의계좌 ----
