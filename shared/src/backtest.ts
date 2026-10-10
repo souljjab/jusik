@@ -34,7 +34,10 @@ export interface Trade {
   shares: number;
   /** 수수료·세금 반영 손익률 */
   returnPct: number;
-  reason: "SIGNAL" | "STOP_LOSS";
+  /** 신호 매도 / 손절 / 목표가 도달 / 신호에 따른 일부 매도 / 보유 기간 만료 */
+  reason: "SIGNAL" | "STOP_LOSS" | "TARGET" | "PARTIAL" | "TIME";
+  /** 처음 산 수량 중 이번에 판 비율(0~1). 없으면 전량 */
+  fraction?: number;
 }
 
 export interface EquityPoint {
