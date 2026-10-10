@@ -1,3 +1,4 @@
+import type { BreadthAnalysis } from "./breadth";
 import { macd, rsi } from "./indicators";
 import { macroNotes, macroPressure, type MacroSnapshot } from "./macro";
 import { marketRegime, REGIME_LABEL, type Regime } from "./regime";
@@ -6,7 +7,7 @@ import type { Candle, Note, Region } from "./types";
 
 /*
  * 시장 국면 점수(자료집 2장 구현 메모, 규칙 M1-01~03·M1-06~08, 2.5절).
- * 지수 추세(주봉 30주선 단계, 일봉 MACD)를 1차 신호로, RSI와 매크로를 보조 신호로 더해
+ * 지수 추세(주봉 30주선 단계, 일봉 MACD)를 1차 신호로, RSI·매크로·시장 폭(2.2, M1-04·05)을 보조 신호로 더해
  * 공격·중립·방어 3단계와 그에 맞는 주식 투자 상한을 낸다.
  */
 
@@ -40,6 +41,10 @@ export const REGIME_SCORE_PARAMS = {
   /** 점수가 이 이상이면 공격, 이 이하면 방어 */
   attackScore: 2,
   defenseScore: -2,
+  /** 시장 폭 보조 점수 상한(±). 2장 구현 메모: 시장 내부 지표는 보조 신호(배점은 앱 기본값) */
+  breadthMaxPoints: 1,
+  /** 시장 폭 분석일이 지수 마지막 봉보다 이 달력일 넘게 이르면 오래된 자료로 보고 뺀다(앱 기본값) */
+  breadthMaxLagDays: 7,
 } as const;
 
 export interface RegimeAssessment {
@@ -55,8 +60,8 @@ export interface RegimeAssessment {
   choppy: boolean;
   /** 지수 일봉 RSI(14) */
   rsi: number | null;
-  /** 점수 구성(합이 score) */
-  breakdown: { stage: number; macd: number; rsi: number; macro: number };
+  /** 점수 구성(합이 score). breadth는 시장 폭을 넘기지 않으면 0 */
+  breakdown: { stage: number; macd: number; rsi: number; macro: number; breadth: number };
   /** 마지막 봉 날짜 */
   asOf: string;
   notes: Note[];
@@ -65,6 +70,12 @@ export interface RegimeAssessment {
 export interface AssessRegimeOptions {
   /** 지수의 지역. US면 원화 약세 신호를 매크로 감점에서 뺀다 */
   region?: Region;
+  /**
+   * 시장 폭 분석(2.2 와인스타인, M1-04·05). 보조 신호로 score(-1~+1)를 더하고 신호를 notes에 붙인다.
+   * 지수 마지막 봉보다 늦은 날짜의 분석(미래 참조)이나 breadthMaxLagDays보다 오래된 분석은 쓰지 않고 그 사실만 notes에 남긴다.
+   * 과거 시점은 analyzeBreadthAt으로 같은 날짜에 맞추세요.
+   */
+  breadth?: BreadthAnalysis | null;
 }
 
 const POSTURE_TEXT: Record<Posture, string> = {
@@ -99,7 +110,7 @@ export function assessRegime(
   if (stageRegime == null && macdBullish == null) return null;
 
   const notes: Note[] = [];
-  const breakdown = { stage: 0, macd: 0, rsi: 0, macro: 0 };
+  const breakdown = { stage: 0, macd: 0, rsi: 0, macro: 0, breadth: 0 };
 
   if (st) {
     breakdown.stage = stageRegime === "BULL" ? P.stagePoints : stageRegime === "BEAR" ? -P.stagePoints : 0;
@@ -153,7 +164,23 @@ export function assessRegime(
     if (pressure > 0) notes.push({ tone: "warn", text: `매크로 부정 신호 ${pressure}개 → 국면 점수 ${breakdown.macro}점`, rule: "2.3 강영현" });
   }
 
-  const score = breakdown.stage + breakdown.macd + breakdown.rsi + breakdown.macro;
+  // 5) 시장 폭 보조 신호(2.2 와인스타인, M1-04·05). -1~+1점
+  const br = opts.breadth;
+  if (br) {
+    const asOf = indexCandles[i]!.date;
+    const lagDays = (Date.parse(asOf) - Date.parse(br.asOf)) / 86_400_000;
+    if (br.asOf > asOf) {
+      notes.push({ tone: "info", text: `시장 폭 자료(${br.asOf})가 지수 마지막 봉(${asOf})보다 늦어 이번 판정에서는 뺐어요`, rule: "2.2 와인스타인" });
+    } else if (!(lagDays <= P.breadthMaxLagDays)) {
+      notes.push({ tone: "info", text: `시장 폭 자료(${br.asOf})가 지수 마지막 봉(${asOf})보다 ${P.breadthMaxLagDays}일 넘게 오래돼 이번 판정에서는 뺐어요`, rule: "2.2 와인스타인" });
+    } else {
+      breakdown.breadth = Math.max(-P.breadthMaxPoints, Math.min(P.breadthMaxPoints, Math.round(br.score) || 0));
+      notes.push(...br.signals.map((n) => ({ ...n })));
+      if (breakdown.breadth !== 0) notes.push({ tone: breakdown.breadth > 0 ? "good" : "warn", text: `시장 폭 신호 → 국면 점수 ${breakdown.breadth > 0 ? "+" : ""}${breakdown.breadth}점`, rule: "2.2 와인스타인" });
+    }
+  }
+
+  const score = breakdown.stage + breakdown.macd + breakdown.rsi + breakdown.macro + breakdown.breadth;
   let posture: Posture = score >= P.attackScore ? "ATTACK" : score <= P.defenseScore ? "DEFENSE" : "NEUTRAL";
   // 지수가 30주선 아래 하락 국면이면 점수와 상관없이 방어(M1-02: 신규 매수 중단)
   if (stageRegime === "BEAR") posture = "DEFENSE";
@@ -172,7 +199,8 @@ export function assessRegime(
 
 /**
  * 백테스트·재현용: i번째 봉 종가 시점의 판정. i 이후 데이터는 쓰지 않는다.
- * macro도 그 시점 것(buildMacroSnapshot의 asOf 옵션)을 넘겨야 미래 참조가 없다.
+ * macro도 그 시점 것(buildMacroSnapshot의 asOf 옵션)을, opts.breadth도 그 날짜의 것(analyzeBreadthAt)을 넘겨야 미래 참조가 없다.
+ * 그 날짜보다 늦은 breadth는 assessRegime이 빼므로 최신 분석을 그대로 넘겨도 과거 판정에 섞이지 않는다.
  */
 export function assessRegimeAt(
   indexCandles: Candle[],
