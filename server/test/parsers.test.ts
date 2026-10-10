@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseFchart, parseNaverFundamentals, parseNaverSectorPer, parseRankingTable, parseRealtime } from "../src/naver";
+import { parseEok, parseFchart, parseNaverFundamentals, parseNaverSectorPer, parseRankingTable, parseRealtime } from "../src/naver";
 import { parseYahooChart, parseYahooFundamentals, parseYahooScreener, parseYahooSearch } from "../src/yahoo";
 
 // ⚠ 아래 샘플은 사이트 응답 형식을 기억대로 흉내 낸 것이다. 실제 응답과 같은지는 `npm run check:sources`로 확인해야 한다.
@@ -146,6 +146,86 @@ describe("naver fundamentals — 연간·분기 실적, 당좌비율, 동일업�
     expect(parseNaverSectorPer(`<table><tr><th>동일업종 PER <span>(2024.06)</span></th><td>-</td></tr></table>`)).toBeUndefined();
     expect(parseNaverSectorPer(`<table><tr><th>동일업종 PER</th><td>N/A</td></tr></table>`)).toBeUndefined();
     expect(parseNaverSectorPer(`<p>동일업종 PER은 업종 평균이에요. 2024년 기준</p>`)).toBeUndefined();
+  });
+});
+
+// ⚠ 시가총액·상장주식수 샘플도 네이버 종목 메인 페이지 '투자정보' 마크업을 기억대로 흉내 낸 것이다 — 실제 응답과 대조하지 못함(미검증). 숫자는 임의 값.
+describe("naver fundamentals — 시가총액·상장주식수·금액 단위", () => {
+  const aside = (sum: string, shares = "5,969,782,550") => `<div class="aside_invest_info"><div class="tab_con1"><div class="first">
+    <table summary="시가총액 정보"><tbody>
+      <tr class="strong"><th scope="row"><a href="#" class="link_site">시가총액</a></th><td><em id="_market_sum">
+		${sum}</em>억원</td></tr>
+      <tr><th scope="row">시가총액순위</th><td>코스피 <em>1</em>위</td></tr>
+      <tr><th scope="row">상장주식수</th><td><em>${shares}</em></td></tr>
+      <tr><th scope="row">액면가<span class="bar">l</span>매매단위</th><td><em>100</em>원 <span class="bar">l</span> <em>1</em>주</td></tr>
+    </tbody></table></div></div></div>`;
+  const tr = (label: string, cells: string) => `<tr><th scope="row" class="h_th2"><strong>${label}</strong></th>${cells.split("|").map((c) => `<td>${c}</td>`).join("")}</tr>`;
+  const table = `<div class="section cop_analysis"><table class="tb_type1 tb_num"><thead>
+    <tr><th rowspan="3">주요재무정보</th><th colspan="3">최근 연간 실적</th><th colspan="2">최근 분기 실적</th></tr>
+    <tr><th>2022.12</th><th>2023.12</th><th>2024.12<em>(E)</em></th><th>2024.03</th><th>2024.06</th></tr></thead><tbody>
+    ${tr("매출액", "3,000|3,300|3,600|800|850")}${tr("영업이익", "300|330|360|80|85")}${tr("부채비율", "40.0|38.0||37.0|36.0")}
+    ${tr("EPS(원)", "1,000|1,100|1,200|270|290")}${tr("PER(배)", "10.0|9.5|9.0||")}</tbody></table></div>`;
+  const page = (sum: string) => `<html><body>${aside(sum)}${table}</body></html>`;
+
+  it("reads the market cap in 억 원 from #_market_sum (조 + 억)", () => {
+    const f = parseNaverFundamentals(page("397조 5,616"));
+    expect(f.marketCap).toBe(3_975_616);
+    expect(f.sharesOutstanding).toBe(5_969_782_550);
+    expect(f.amountUnit).toBe("억원");
+  });
+  it("reads a plain 억원 market cap", () => {
+    expect(parseNaverFundamentals(page("5,616")).marketCap).toBe(5616);
+    expect(parseNaverFundamentals(page("1조")).marketCap).toBe(10_000);
+  });
+  it("does not change the other parsed fields", () => {
+    const withAside = parseNaverFundamentals(page("397조 5,616"));
+    const { marketCap, sharesOutstanding, amountUnit, ...rest } = withAside;
+    expect([marketCap, sharesOutstanding, amountUnit]).toEqual([3_975_616, 5_969_782_550, "억원"]);
+    const plain = parseNaverFundamentals(`<html><body>${table}</body></html>`);
+    expect(plain.amountUnit).toBe("억원"); // 매출·이익 금액이 있으니 단위는 붙는다
+    expect(plain.marketCap).toBeUndefined();
+    const { amountUnit: _u, ...plainRest } = plain;
+    expect(rest).toEqual(plainRest);
+    expect(rest).toMatchObject({ per: 9.5, eps: 1100, debtRatio: 38 });
+    expect(rest.quarterly).toEqual([
+      { period: "2024.03", estimate: false, revenue: 800, opIncome: 80, eps: 270 },
+      { period: "2024.06", estimate: false, revenue: 850, opIncome: 85, eps: 290 },
+    ]);
+  });
+  it("falls back to a '시가총액' label cell and ignores the 순위 row", () => {
+    const html = `<table><tr><th>시가총액순위</th><td>코스닥 15위</td></tr><tr><th>시가총액</th><td>1조 2,345억원</td></tr></table>`;
+    expect(parseNaverFundamentals(html)).toEqual({ marketCap: 12_345, amountUnit: "억원" });
+    const dl = `<dl><dt>시가총액(억원)</dt><dd>8,765</dd><dt>상장주식수(주)</dt><dd>12,345,678주</dd></dl>`;
+    expect(parseNaverFundamentals(dl)).toEqual({ marketCap: 8765, sharesOutstanding: 12_345_678, amountUnit: "억원" });
+  });
+  it("leaves the market cap empty when the format is not recognized", () => {
+    // 단위 없는 맨 숫자는 억 원인지 알 수 없다
+    expect(parseNaverFundamentals(`<table><tr><th>시가총액</th><td>397,561,600,000,000</td></tr></table>`)).toEqual({});
+    expect(parseNaverFundamentals(`<html><body>${aside("-", "-")}</body></html>`)).toEqual({});
+    expect(parseNaverFundamentals(`<html><body>${aside("N/A", "1.5")}${table}</body></html>`)).not.toHaveProperty("marketCap");
+    expect(parseNaverFundamentals(`<html><body>${aside("N/A", "1.5")}${table}</body></html>`)).not.toHaveProperty("sharesOutstanding");
+    expect(parseNaverFundamentals(`<p>시가총액 5,000억원 이상 기업만 골라요</p>`)).toEqual({}); // 설명 문구는 읽지 않는다
+  });
+  it("adds amountUnit only when an amount is present", () => {
+    const ratiosOnly = `<div class="cop_analysis"><table><thead><tr><th colspan="2">연간</th></tr><tr><th>2022.12</th><th>2023.12</th></tr></thead><tbody>
+      ${tr("부채비율", "50|45")}${tr("EPS(원)", "100|120")}</tbody></table></div>`;
+    const f = parseNaverFundamentals(ratiosOnly);
+    expect(f.debtRatio).toBe(45);
+    expect(f).not.toHaveProperty("amountUnit");
+    expect(parseNaverFundamentals(`<table><tr><th>동일업종 PER</th><td>9.87배</td></tr></table>`)).toEqual({ sectorPer: 9.87 });
+  });
+  it("parseEok handles 조·억 notation and refuses unit-less numbers", () => {
+    expect(parseEok("397조 5,616억원")).toBe(3_975_616);
+    expect(parseEok("\n\t397조 5,616\n억원")).toBe(3_975_616);
+    expect(parseEok("2조")).toBe(20_000);
+    expect(parseEok("2조 50")).toBe(20_050);
+    expect(parseEok("5,616억원")).toBe(5616);
+    expect(parseEok("5,616억원 (2024.06.28 기준)")).toBe(5616);
+    expect(parseEok("5,616")).toBeUndefined();
+    expect(parseEok("5,616", true)).toBe(5616);
+    expect(parseEok("-")).toBeUndefined();
+    expect(parseEok("0억원")).toBeUndefined();
+    expect(parseEok("")).toBeUndefined();
   });
 });
 
