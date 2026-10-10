@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio";
-import type { Candle, Fundamentals, Market, Quote } from "@jusik/shared";
+import type { Candle, Fundamentals, Market, PeriodFinancials, Quote } from "@jusik/shared";
 import type { UniverseRow } from "./provider";
 
 /*
@@ -93,22 +93,69 @@ export function realtimeToQuote(r: RealtimeItem): Quote {
   return { code: r.code, price: r.price, change: r.change, changePct: r.changePct, volume: r.volume };
 }
 
-/** 종목 메인 페이지 '기업실적분석' 표에서 가장 최근 확정(비추정) 연간 값을 읽는다. */
+/*
+ * ⚠ 아래 재무·업종 PER 파서는 네이버 종목 메인 페이지 마크업을 기억대로 가정해 짰고, 실제 응답과 대조하지 못했다(이 환경은 외부 접속 불가).
+ *   - '기업실적분석' 표: div.cop_analysis table, 첫 머리행의 첫 colspan 칸 = 연간 열 개수, 기간 머리행 "2023.12", 추정치 "2024.12(E)"
+ *   - 실제 페이지는 기간 행 아래 'IFRS연결' 같은 머리행이 더 있을 수 있어, 날짜가 가장 많은 머리행을 기간 행으로 쓴다
+ *   - 동일업종 PER: 라벨 문구("동일업종 PER")만 믿고 가장 가까운 숫자를 읽는다
+ *   `npm run check:sources -w server`로 실제 페이지에서 annual·quarterly·sectorPer가 채워지는지 확인하세요.
+ */
+
+const squash = (s: string) => s.replace(/\s+/g, "");
+const PERIOD = /\d{4}[./-]\d{1,2}/;
+
+/** 괄호 속(날짜 등)은 건너뛰고 첫 숫자를 읽는다 */
+const firstNumber = (s: string): number | undefined => {
+  const m = /-?\d[\d,]*(?:\.\d+)?/.exec(s.replace(/\([^)]*\)/g, ""));
+  return m ? toNum(m[0]) : undefined;
+};
+
+function sectorPerFrom($: cheerio.CheerioAPI): number | undefined {
+  // 1) 표·정의 목록: 라벨 칸(th/dt) 바로 옆 값 칸(td/dd)
+  for (const el of $("th, dt").toArray()) {
+    if (!squash($(el).text()).includes("동일업종PER")) continue;
+    const n = firstNumber($(el).nextAll("td, dd").first().text());
+    if (n !== undefined) return n;
+  }
+  // 2) 그 밖의 마크업: 라벨 바로 뒤에 붙은 '숫자배'(설명 문구 속 라벨은 숫자가 바로 붙지 않아 걸리지 않는다)
+  const m = /동일업종PER(?:\([^)]*\))?[:：]?(-?\d[\d,]*(?:\.\d+)?)배/.exec(squash($.root().text()));
+  return m ? toNum(m[1]) : undefined;
+}
+
+/** 종목 메인 페이지의 '동일업종 PER'(배). 못 찾으면 undefined */
+export function parseNaverSectorPer(html: string): number | undefined {
+  return sectorPerFrom(cheerio.load(html));
+}
+
+/**
+ * 종목 메인 페이지 '기업실적분석' 표.
+ * 단일 값(PER·부채비율 등)은 가장 최근 확정(비추정) 연간 값, annual·quarterly는 기간별 매출액·영업이익·당기순이익·EPS(금액은 억 원).
+ * 동일업종 PER(sectorPer)도 같은 페이지에서 읽는다.
+ */
 export function parseNaverFundamentals(html: string): Fundamentals {
   const $ = cheerio.load(html);
+  const sectorPer = sectorPerFrom($);
   const table = $("div.cop_analysis table").first();
-  if (!table.length) return {};
-  const headRows = table.find("thead tr");
-  const annualCount = Number(headRows.first().find("th[colspan]").first().attr("colspan")) || 4;
-  const periods = headRows.last().find("th").map((_, e) => $(e).text().trim()).get();
+  if (!table.length) return sectorPer !== undefined ? { sectorPer } : {};
+  const headRows = table.find("thead tr").toArray();
+  const annualCount = Number($(headRows[0]).find("th[colspan]").first().attr("colspan")) || 4;
+  // 기간 머리행: 날짜 칸이 가장 많은 행(없으면 예전처럼 마지막 머리행). 앞쪽에 날짜 아닌 칸이 있으면 떼어 td 위치와 맞춘다
+  const dated = (texts: string[]) => texts.filter((t) => PERIOD.test(t)).length;
+  const heads = headRows.map((tr) => $(tr).find("th").toArray().map((e) => squash($(e).text())));
+  const best = heads.reduce<string[]>((b, r) => (dated(r) > dated(b) ? r : b), []);
+  const periodRow = dated(best) > 0 ? best : (heads.at(-1) ?? []);
+  const firstDate = periodRow.findIndex((t) => PERIOD.test(t));
+  const periods = firstDate > 0 ? periodRow.slice(firstDate) : periodRow;
   const rows = new Map<string, (number | undefined)[]>();
   table.find("tbody tr").each((_, tr) => {
-    const label = $(tr).find("th").first().text().replace(/\s+/g, "");
+    const label = squash($(tr).find("th").first().text());
     // cheerio의 map()은 undefined를 버려서 '-' 칸이 있으면 열이 밀린다 → toArray()로 위치를 유지한다
-    if (label) rows.set(label, $(tr).find("td").toArray().map((td) => toNum($(td).text())));
+    if (label && !rows.has(label)) rows.set(label, $(tr).find("td").toArray().map((td) => toNum($(td).text())));
   });
-  const confirmed = periods.slice(0, annualCount).map((p, i) => ({ i, ok: !/\(E\)/.test(p) })).filter((x) => x.ok).map((x) => x.i);
-  const row = (prefix: string) => [...rows.entries()].find(([k]) => k.startsWith(prefix))?.[1];
+  const isEstimate = (p: string) => /\(E\)/.test(p);
+  const confirmed = periods.slice(0, annualCount).map((p, i) => ({ i, ok: !isEstimate(p) })).filter((x) => x.ok).map((x) => x.i);
+  // 같은 접두어 행(영업이익/영업이익률)이 있어 정확히 같은 라벨을 먼저 쓴다
+  const row = (name: string) => rows.get(name) ?? [...rows.entries()].find(([k]) => k.startsWith(name))?.[1];
   const latest = (prefix: string): number | undefined => {
     const r = row(prefix);
     if (!r) return undefined;
@@ -126,9 +173,26 @@ export function parseNaverFundamentals(html: string): Fundamentals {
     const prev = vals[vals.length - 2]!, cur = vals[vals.length - 1]!;
     return prev > 0 ? ((cur - prev) / prev) * 100 : undefined;
   };
+  const ITEMS = [["revenue", "매출액"], ["opIncome", "영업이익"], ["netIncome", "당기순이익"], ["eps", "EPS"]] as const;
+  const series = (from: number, to: number): PeriodFinancials[] => {
+    const out: PeriodFinancials[] = [];
+    for (let i = from; i < Math.min(to, periods.length); i++) {
+      const p: PeriodFinancials = { period: periods[i]!.replace(/\(E\)/g, ""), estimate: isEstimate(periods[i]!) };
+      for (const [k, label] of ITEMS) {
+        const v = row(label)?.[i];
+        if (v !== undefined) p[k] = v;
+      }
+      if (ITEMS.some(([k]) => p[k] !== undefined)) out.push(p); // 값이 하나도 없는 기간('-'뿐인 추정 열 등)은 뺀다
+    }
+    return out;
+  };
+  const annual = series(0, annualCount);
+  const quarterly = series(annualCount, periods.length);
   const f: Fundamentals = {
     per: latest("PER"), pbr: latest("PBR"), eps: latest("EPS"), bps: latest("BPS"), roe: latest("ROE"),
-    debtRatio: latest("부채비율"), reserveRatio: latest("유보율"), revenueGrowth: growth("매출액"), opIncomeGrowth: growth("영업이익"),
+    debtRatio: latest("부채비율"), quickRatio: latest("당좌비율"), reserveRatio: latest("유보율"),
+    revenueGrowth: growth("매출액"), opIncomeGrowth: growth("영업이익"), sectorPer,
+    annual: annual.length ? annual : undefined, quarterly: quarterly.length ? quarterly : undefined,
   };
   return Object.fromEntries(Object.entries(f).filter(([, v]) => v !== undefined)) as Fundamentals;
 }
