@@ -8,3 +8,4 @@ dist/
 data/
 *.corrupt-*
 *service-account*.json
+.claude/worktrees/
