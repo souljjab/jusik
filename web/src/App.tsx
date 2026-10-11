@@ -119,12 +119,12 @@ export default function App() {
 
                 {tab === "signal" && (
                   <>
-                    <AnalysisCard a={data.analysis} code={data.info.code} journal={journal} region={region} settings={server.state?.settings ?? null} />
+                    <AnalysisCard a={data.analysis} code={data.info.code} journal={journal} region={region} settings={server.state?.settings ?? null} breadth={data.breadth} sample={health?.sample} />
                     <div className="card"><ChartPanel candles={data.candles} /></div>
                   </>
                 )}
                 {tab === "minute" && <MinutePanel code={data.info.code} region={region} />}
-                {tab === "fundamentals" && <FundamentalsTab f={data.fundamentals} a={data.analysis} region={region} />}
+                {tab === "fundamentals" && <FundamentalsTab f={data.fundamentals} a={data.analysis} region={region} candles={data.candles} sample={health?.sample} />}
                 {tab === "backtest" && <BacktestTab candles={data.candles} indexCandles={data.indexCandles} region={region} info={data.info} />}
               </>
             )}
