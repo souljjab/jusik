@@ -130,8 +130,9 @@
 @media (min-width: 1200px) {
   .disc-st { display: grid; grid-template-columns: 248px minmax(0, 1fr); gap: var(--space-6); align-items: start; }
   .disc-st-list {
-    position: sticky; top: var(--space-4); display: flex; flex-direction: column; gap: var(--space-4);
-    padding-right: var(--space-4); border-right: 1px solid var(--color-border);
+    position: sticky; top: calc(var(--topbar-h) + var(--space-4)); max-height: calc(100dvh - var(--topbar-h) - var(--space-6)); overflow-y: auto;
+    display: flex; flex-direction: column; gap: var(--space-4);
+    padding: 2px var(--space-4) 2px 2px; border-right: 1px solid var(--color-border); /* 포커스 테두리가 잘리지 않게 */
   }
 }
 .disc-st-group { display: flex; flex-direction: column; gap: var(--space-1); }
