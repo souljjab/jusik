@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { dirname } from "node:path";
 import {
   DEFAULT_POSTURE_CAPS, GUARD_DEFAULTS, newPaperAccount,
-  type Currency, type DailyReview, type HistoryRow, type JournalEntry, type Market, type MarketRowLike, type PaperAccount, type ReplayRun, type ScanResult, type Settings,
+  type AlertItem, type Currency, type DailyReview, type HistoryRow, type JournalEntry, type Market, type MarketRowLike, type PaperAccount, type ReplayRun, type ScanResult, type Settings,
 } from "@jusik/shared";
 
 export type { HistoryRow, ScanResult, Settings };
@@ -82,7 +82,11 @@ export interface AppState {
   dayStart: Partial<Record<Currency, { date: string; equity: number }>>;
   /** 거래소 전체 상승·하락 종목 수 일별 기록(네이버, 국내). 쌓이면 바스켓 근사 대신 실제 A/D선을 그릴 수 있다 */
   breadthLog: Partial<Record<Market, BreadthLogRow[]>>;
+  /** 알림(신호·리스크·공시·국면). 오래된 순, ALERT_LIMIT까지 */
+  alerts: AlertItem[];
 }
+
+export const ALERT_LIMIT = 500;
 
 export interface BreadthLogRow {
   date: string;
@@ -110,6 +114,7 @@ function fresh(): AppState {
     lastUniverse: {},
     dayStart: {},
     breadthLog: {},
+    alerts: [],
   };
 }
 
@@ -133,6 +138,7 @@ export class Store {
           lastUniverse: raw.lastUniverse && typeof raw.lastUniverse === "object" ? raw.lastUniverse : {},
           dayStart: raw.dayStart && typeof raw.dayStart === "object" ? raw.dayStart : {},
           breadthLog: raw.breadthLog && typeof raw.breadthLog === "object" ? raw.breadthLog : {},
+          alerts: Array.isArray(raw.alerts) ? raw.alerts : [],
         };
       } catch (e) {
         // 파일이 깨졌으면 덮어쓰지 않고 백업해 둔다

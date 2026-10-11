@@ -209,3 +209,31 @@ export interface BreadthResponse {
   errors: string[];
   sample: boolean;
 }
+
+// ───────────────────────── 알림(UI 지도서 7.4·5.1 G) ─────────────────────────
+
+/** 알림 범주: 신호·리스크·공시·국면 */
+export type AlertCategory = "signal" | "risk" | "disclosure" | "regime";
+
+export const ALERT_CATEGORY_LABEL: Record<AlertCategory, string> = { signal: "신호", risk: "리스크", disclosure: "공시", regime: "국면" };
+
+/** 서버가 스캔·보유 점검 때 남기는 알림. 문장은 '무엇이, 얼마나' 순서의 사실 문장 */
+export interface AlertItem {
+  id: string;
+  /** ISO 시각 */
+  at: string;
+  category: AlertCategory;
+  code?: string;
+  name?: string;
+  /** 알림 문장(예: "누리에너지 손절가까지 1.8% 남았어요") */
+  text: string;
+  /** 같은 종목의 같은 신호는 하루 한 번만: 이 키가 이미 있으면 다시 만들지 않는다 */
+  key: string;
+  /** 누르면 갈 화면(해시 경로, 예: "/stocks/005930") */
+  route?: string;
+}
+
+/** GET /api/alerts 응답(최신 → 오래된) */
+export interface AlertsResponse {
+  alerts: AlertItem[];
+}

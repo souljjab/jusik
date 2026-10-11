@@ -1,10 +1,11 @@
 import {
   assessRegime, consecutiveLosses, currencyOfRegion, DAYTRADE_BY_REGION, marketClock, marketRegime, newPaperAccount, PAPER_COSTS, paperCheckExits, paperEquity, paperOpen,
   paperTradesFromJournal, paperUnrealizedPnl, planWithCash, regionOf, regionOfCode, scoreDayTrade, todayPnl, tradingGuards, weekdaysBetween,
-  type Currency, type DayTradeParams, type GuardResult, type JournalEntry, type MacroSnapshot, type Market, type PaperAccount, type Region,
+  type Currency, type DayTradeParams, type Disclosure, type GuardResult, type JournalEntry, type MacroSnapshot, type Market, type PaperAccount, type Region,
 } from "@jusik/shared";
 import type { BreadthResult, BreadthSource } from "./breadthSource";
-import type { MacroSource } from "./extras";
+import { disclosureAlerts, positionAlerts, scanAlerts } from "./alerts";
+import type { ExtrasSource, MacroSource } from "./extras";
 import { minuteDecision, minuteFor } from "./intradayCheck";
 import type { MinuteSource } from "./minute";
 import type { MarketDataProvider, UniverseRow } from "./provider";
@@ -19,6 +20,8 @@ export interface Deps {
   breadth?: BreadthSource | null;
   /** 분봉(모의 자동매매 진입 전 확인) */
   minute?: MinuteSource | null;
+  /** 보유 종목 공시 알림용(국내 DART·네이버, 미국 SEC). 없으면 공시 알림을 만들지 않는다 */
+  extras?: ExtrasSource | null;
   now?: () => Date;
 }
 
@@ -263,7 +266,11 @@ export async function runScan(deps: Deps): Promise<ScanResult> {
     result.guards![cur] ??= guardsFor(store, region, marketClock(region, at).date);
   }
 
+  const prevScan = store.state.latestScan;
   store.state.latestScan = result;
+  scanAlerts(store, prevScan, result, at);
+  positionAlerts(store, at);
+  if (deps.extras) await disclosureAlerts(store, at, (code) => alertDisclosures(deps.extras!, code));
   for (const c of result.candidates.slice(0, 10))
     store.state.history.push({ at: result.at, market: c.market, code: c.code, name: c.name, score: c.score, price: c.price, entry: c.entry, stop: c.stop, target: c.target });
   if (store.state.history.length > HISTORY_LIMIT) store.state.history.splice(0, store.state.history.length - HISTORY_LIMIT);
@@ -339,8 +346,15 @@ export async function monitorPositions(deps: Deps): Promise<number> {
     store.state.journal.push(...r.entries);
     closed += r.entries.length;
   }
-  if (closed || store.state.paper.KRW.positions.length || store.state.paper.USD.positions.length) store.save();
+  const alerts = positionAlerts(store, at);
+  if (closed || alerts || store.state.paper.KRW.positions.length || store.state.paper.USD.positions.length) store.save();
   return closed;
+}
+
+/** 공시 알림에 쓸 최근 공시: 국내는 DART(키가 있으면)·네이버, 미국은 SEC(설정했으면) */
+export function alertDisclosures(src: ExtrasSource, code: string): Promise<Disclosure[]> {
+  if (regionOfCode(code) === "KR") return src.dart ? src.dart.disclosures(code, 7) : src.disclosures(code);
+  return src.sec ? src.sec.filings(code, 7) : Promise.resolve([]);
 }
 
 /** 설정이 바뀌었을 때 모의계좌를 예수금에 맞춘다(보유 포지션이 없을 때만). */

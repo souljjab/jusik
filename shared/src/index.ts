@@ -31,3 +31,4 @@ export * from "./valuation";
 export * from "./candleMaster";
 export * from "./intraday";
 export * from "./usFlows";
+export * from "./evidence";

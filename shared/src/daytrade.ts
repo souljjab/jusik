@@ -54,6 +54,9 @@ export interface StockRef {
   market: Market;
 }
 
+/** 단타 후보 근거 칸(근거 스트립 순서와 같다) */
+export type DayTradeCheckId = "volume2x" | "breakout20" | "trend" | "closeHigh" | "momentum" | "regime";
+
 export interface DayTradeCandidate extends StockRef {
   /** 마지막 일봉 날짜 */
   asOf: string;
@@ -73,6 +76,8 @@ export interface DayTradeCandidate extends StockRef {
   netRR: number;
   maxHoldDays: number;
   notes: Note[];
+  /** 규칙별 충족 여부(true 충족, false 미충족, null 데이터 없음). 이전 버전 저장분에는 없다 */
+  checks?: Record<DayTradeCheckId, boolean | null>;
 }
 
 export type DayTradeResult = { ok: true; candidate: DayTradeCandidate } | { ok: false; reason: string };
@@ -163,11 +168,20 @@ export function scoreDayTrade(ref: StockRef, candles: Candle[], regime: Regime |
   const targetPct = ((target - entry) / entry) * 100;
   const netRR = (targetPct - P.roundTripCostPct) / (stopPct + P.roundTripCostPct);
 
+  const checks: Record<DayTradeCheckId, boolean | null> = {
+    volume2x: volumeRatio >= 2,
+    breakout20: c.close > prevHigh,
+    trend: trend >= 15,
+    closeHigh: c.close > c.open && pos >= 0.8,
+    momentum: changePct >= 3 && changePct <= 10,
+    regime: regime == null ? null : regime !== "BEAR",
+  };
+
   return {
     ok: true,
     candidate: {
       ...ref, asOf: c.date, price: c.close, changePct, volume: c.volume, tradeValue, volumeRatio, score,
-      entry, stop, target, stopPct, targetPct, netRR, maxHoldDays: P.maxHoldDays, notes,
+      entry, stop, target, stopPct, targetPct, netRR, maxHoldDays: P.maxHoldDays, notes, checks,
     },
   };
 }

@@ -3,7 +3,7 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import {
   averagingDownCheck, isValidCode, macroNotes, marketClock, netOf, paperTrackingStatus, preTradeChecklist, regionOf, regionOfCode,
-  type BreadthResponse, type JournalCheck, type JournalEntry, type MacroResponse, type Market, type MinuteResponse, type Note, type Region, type ServerState, type StockExtras,
+  type AlertsResponse, type BreadthResponse, type JournalCheck, type JournalEntry, type MacroResponse, type Market, type MinuteResponse, type Note, type Region, type ServerState, type StockExtras,
 } from "@jusik/shared";
 import { TtlCache } from "./cache";
 import type { Exporter } from "./exporter";
@@ -39,6 +39,14 @@ const REGIONS: Region[] = ["KR", "US"];
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const optNum = (v: unknown) => (v != null && v !== "" && Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : undefined);
 const optText = (v: unknown, max: number) => (v != null && String(v).trim() ? String(v).trim().slice(0, max) : undefined);
+/** 스스로 표시한 규칙 체크(세 칸 모두 참·거짓일 때만) */
+const optSelfCheck = (v: unknown): JournalEntry["selfCheck"] | undefined => {
+  if (!v || typeof v !== "object") return undefined;
+  const o = v as Record<string, unknown>;
+  return typeof o.stopSet === "boolean" && typeof o.weightOk === "boolean" && typeof o.unplanned === "boolean"
+    ? { stopSet: o.stopSet, weightOk: o.weightOk, unplanned: o.unplanned }
+    : undefined;
+};
 
 export function buildApp({ provider, store, exporter, scheduler, macro, extras, breadth, minute, now = () => new Date() }: AppDeps) {
   const app = Fastify({ logger: false });
@@ -186,15 +194,18 @@ export function buildApp({ provider, store, exporter, scheduler, macro, extras, 
   // ---- 매매일지 ----
   app.get("/api/journal", async () => ({ entries: store.state.journal }));
 
-  app.post<{ Body: Partial<JournalEntry> }>("/api/journal", async (req, reply) => {
-    const b = req.body ?? {};
+  // ---- 알림(신호·리스크·공시·국면) ----
+  app.get("/api/alerts", async (): Promise<AlertsResponse> => ({ alerts: [...store.state.alerts].reverse().slice(0, 200) }));
+
+  /** 일지 입력 검사 + 매수 점검(주문 전 체크리스트·손실 중 추가 매수). 저장(POST)과 미리 보기(check)가 같이 쓴다 */
+  type JournalBody = Partial<JournalEntry> & { plannedAdd?: boolean };
+  function checkJournal(b: JournalBody): { error: string } | { code: string; side: "BUY" | "SELL"; date: string; price: number; qty: number; stop?: number; target?: number; reason: string; weightPct?: number; notes: Note[] } {
     const code = normCode(String(b.code ?? ""));
     const price = Number(b.price), qty = Number(b.qty);
-    if (!isValidCode(code)) return reply.code(400).send(BAD_CODE);
-    if (b.side !== "BUY" && b.side !== "SELL") return reply.code(400).send({ error: "구분은 BUY 또는 SELL 이어야 해요." });
-    if (!(price > 0) || !(qty > 0) || !Number.isInteger(qty)) return reply.code(400).send({ error: "가격은 0보다 크고 수량은 1 이상의 정수여야 해요." });
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(b.date ?? ""))) return reply.code(400).send({ error: "날짜 형식은 YYYY-MM-DD 예요." });
-    const info = await provider.getInfo(code).catch(() => undefined);
+    if (!isValidCode(code)) return BAD_CODE;
+    if (b.side !== "BUY" && b.side !== "SELL") return { error: "구분은 BUY 또는 SELL 이어야 해요." };
+    if (!(price > 0) || !(qty > 0) || !Number.isInteger(qty)) return { error: "가격은 0보다 크고 수량은 1 이상의 정수여야 해요." };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(b.date ?? ""))) return { error: "날짜 형식은 YYYY-MM-DD 예요." };
     const date = String(b.date);
     const stop = optNum(b.stop), target = optNum(b.target), reason = String(b.reason ?? "").slice(0, 500);
     const weightPct = optNum(b.weightPct) != null ? Math.min(100, optNum(b.weightPct)!) : undefined;
@@ -205,22 +216,45 @@ export function buildApp({ provider, store, exporter, scheduler, macro, extras, 
       notes.push(...preTradeChecklist({ stop, target, reason, price, weightPct }));
       // 모의계좌(자동) 보유분은 내 실제 보유가 아니라서 직접 쓴 기록끼리만 본다
       const manual = store.state.journal.filter((e) => (e.source ?? "수동") === "수동");
-      notes.push(...averagingDownCheck(manual, { code, side: "BUY", price, date }).notes);
+      const avg = averagingDownCheck(manual, { code, side: "BUY", price, date }).notes;
+      // 사전에 계획한 분할 매수라고 확인했으면 위반 대신 기록으로 남긴다(UI 지도서 9.3 계획 외 추가 매수 확인)
+      if (b.plannedAdd === true && avg.some((n) => n.tone !== "info"))
+        notes.push({ tone: "info", text: "손실 중 추가 매수지만 처음부터 계획한 분할 매수라고 확인했어요.", rule: avg.find((n) => n.rule)?.rule });
+      else notes.push(...avg);
     }
+    return { code, side: b.side, date, price, qty, stop, target, reason, weightPct, notes };
+  }
+
+  // 주문 검토 시트가 확인 전에 부르는 미리 보기(저장하지 않음)
+  app.post<{ Body: JournalBody }>("/api/journal/check", async (req, reply) => {
+    const c = checkJournal(req.body ?? {});
+    if ("error" in c) return reply.code(400).send(c);
+    const check: JournalCheck = { notes: c.notes, violations: c.notes.filter((n) => n.tone === "bad").map((n) => n.text) };
+    return { check };
+  });
+
+  app.post<{ Body: JournalBody }>("/api/journal", async (req, reply) => {
+    const b = req.body ?? {};
+    const c = checkJournal(b);
+    if ("error" in c) return reply.code(400).send(c);
+    const { code, side, date, price, qty, stop, target, reason, weightPct, notes } = c;
+    const info = await provider.getInfo(code).catch(() => undefined);
     const violations = notes.filter((n) => n.tone === "bad").map((n) => n.text);
+    const selfCheck = optSelfCheck(b.selfCheck);
     // 국면은 오늘(그 시장 날짜) 기록일 때만 지금 스캔의 국면을 붙인다. 지난 날짜로 쓴 기록에는 붙이지 않는다
     const sameDay = date === marketClock(regionOfCode(code), now()).date;
     const regime = info && sameDay ? (store.state.latestScan?.regimes[info.market] ?? null) : null;
     const entry: JournalEntry = {
-      id: globalThis.crypto.randomUUID(), code, name: info?.name ?? String(b.name ?? code), date, side: b.side, price, qty,
+      id: globalThis.crypto.randomUUID(), code, name: info?.name ?? String(b.name ?? code), date, side, price, qty,
       stop, reason, review: optText(b.review, 1000), source: "수동",
       ...(optText(b.strategy, 60) ? { strategy: optText(b.strategy, 60) } : {}),
       ...(target != null ? { target } : {}),
       ...(weightPct != null ? { weightPct } : {}),
-      ...(b.side === "BUY" && regime ? { regime } : {}),
-      ...(b.side === "SELL" && optText(b.exitReason, 60) ? { exitReason: optText(b.exitReason, 60) } : {}),
+      ...(side === "BUY" && regime ? { regime } : {}),
+      ...(side === "SELL" && optText(b.exitReason, 60) ? { exitReason: optText(b.exitReason, 60) } : {}),
       ...(optText(b.emotion, 200) ? { emotion: optText(b.emotion, 200) } : {}),
       ...(violations.length ? { violations } : {}),
+      ...(selfCheck ? { selfCheck } : {}),
     };
     store.state.journal.push(entry);
     store.save();
@@ -244,6 +278,11 @@ export function buildApp({ provider, store, exporter, scheduler, macro, extras, 
     if ("emotion" in b) e.emotion = optText(b.emotion, 200);
     if ("exitReason" in b && e.side === "SELL") e.exitReason = optText(b.exitReason, 60);
     if ("strategy" in b) e.strategy = optText(b.strategy, 60);
+    if ("selfCheck" in b) {
+      const sc = optSelfCheck(b.selfCheck);
+      if (sc) e.selfCheck = sc;
+      else delete e.selfCheck;
+    }
     store.save();
     exporter.request();
     return { entry: e };

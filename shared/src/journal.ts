@@ -39,6 +39,20 @@ export interface JournalEntry {
   netPnl?: number;
   /** 자동(모의) 매도의 순수익률(%) */
   netPct?: number;
+  /**
+   * 스스로 표시한 규칙 체크(UI 지도서 7.2 G): 손절가를 미리 정했다·비중 상한을 지켰다·계획에 없던 매수다.
+   * 규칙 준수율 = 손절가·비중을 지키고 계획에 없던 매수가 아닌 기록의 비율
+   */
+  selfCheck?: { stopSet: boolean; weightOk: boolean; unplanned: boolean };
+}
+
+/** 규칙을 지킨 기록인가: 서버가 찾은 위반이 없고, 스스로 표시한 체크가 있으면 셋 다 지켰는지. 판단할 근거가 없으면 null */
+export function followedRules(e: Pick<JournalEntry, "violations" | "selfCheck" | "source">): boolean | null {
+  if (e.violations?.length) return false;
+  const c = e.selfCheck;
+  if (c) return c.stopSet && c.weightOk && !c.unplanned;
+  // 자동(모의) 기록은 규칙 엔진이 낸 주문이라 위반이 없으면 지킨 것으로 본다
+  return e.source === "자동(모의)" ? true : null;
 }
 
 /**
