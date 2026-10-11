@@ -28,3 +28,9 @@ export function useChartColors(): ChartColors {
   }, []);
   return dark ? DARK : LIGHT;
 }
+
+/**
+ * 차트 날짜 눈금 언어. 정하지 않으면 lightweight-charts가 브라우저 언어(navigator.language)를 쓰는데,
+ * "en-US@posix"처럼 Intl이 받지 않는 값이면 눈금을 그리다 예외가 나 차트가 비어 버린다
+ */
+export const CHART_LOCALE = "ko-KR";

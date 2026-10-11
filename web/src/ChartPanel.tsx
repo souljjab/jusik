@@ -8,7 +8,7 @@ import {
   type Time,
 } from "lightweight-charts";
 import { computeIndicators, type Candle, type Series } from "@jusik/shared";
-import { useChartColors, type ChartColors } from "./theme";
+import { useChartColors, type ChartColors, CHART_LOCALE } from "./theme";
 
 const toLine = (candles: Candle[], s: Series) =>
   candles.flatMap((c, i) => (s[i] != null ? [{ time: c.date as Time, value: s[i] as number }] : []));
@@ -21,7 +21,7 @@ function baseOptions(c: ChartColors, height: number) {
     rightPriceScale: { borderColor: c.grid },
     timeScale: { borderColor: c.grid, rightOffset: 4 },
     crosshair: { mode: CrosshairMode.Normal },
-    localization: { priceFormatter: (p: number) => (Math.abs(p) >= 1000 ? Math.round(p).toLocaleString("ko-KR") : p.toFixed(2)) },
+    localization: { locale: CHART_LOCALE, priceFormatter: (p: number) => (Math.abs(p) >= 1000 ? Math.round(p).toLocaleString("ko-KR") : p.toFixed(2)) },
   } as const;
 }
 

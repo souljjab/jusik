@@ -14,7 +14,7 @@ import {
 import { DcaSimulator } from "./DcaSimulator";
 import { money, num, pct, tone } from "./format";
 import { Metric, StrategyCompare } from "./StrategyCompare";
-import { useChartColors } from "./theme";
+import { useChartColors, CHART_LOCALE } from "./theme";
 import "./styles/backtest.css";
 
 type Mode = "single" | "compare" | "dca";
@@ -91,7 +91,7 @@ function SingleBacktest({ candles, indexCandles, region }: { candles: Candle[]; 
       grid: { vertLines: { color: colors.grid }, horzLines: { color: colors.grid } },
       rightPriceScale: { borderColor: colors.grid },
       timeScale: { borderColor: colors.grid },
-      localization: { priceFormatter: (p: number) => Math.round(p).toLocaleString("ko-KR") },
+      localization: { locale: CHART_LOCALE, priceFormatter: (p: number) => Math.round(p).toLocaleString("ko-KR") },
     });
     chart.addLineSeries({ color: colors.accent, lineWidth: 2, title: "전략" }).setData(result.equity.map((p) => ({ time: p.date as Time, value: p.equity })));
     chart.addLineSeries({ color: colors.muted, lineWidth: 1, title: "단순보유" }).setData(result.equity.map((p) => ({ time: p.date as Time, value: p.buyHold })));

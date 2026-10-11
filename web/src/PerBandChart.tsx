@@ -11,7 +11,7 @@ import {
 } from "lightweight-charts";
 import { PER_BAND_PARAMS, type BandLevel, type Candle, type PerBand, type Region } from "@jusik/shared";
 import { num } from "./format";
-import { useChartColors, type ChartColors } from "./theme";
+import { useChartColors, type ChartColors, CHART_LOCALE } from "./theme";
 import "./styles/valuation.css";
 
 /** 범례·통계 표시 순서(비싼 쪽 → 싼 쪽, 차트 위 → 아래와 같다) */
@@ -52,6 +52,7 @@ function chartOptions(c: ChartColors, region: Region) {
     timeScale: { borderColor: c.grid },
     crosshair: { mode: CrosshairMode.Normal },
     localization: {
+      locale: CHART_LOCALE,
       priceFormatter: (p: number) => (region === "US" || Math.abs(p) < 1000 ? p.toFixed(2) : Math.round(p).toLocaleString("ko-KR")),
     },
   } as const;

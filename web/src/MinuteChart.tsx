@@ -11,7 +11,7 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 import { aggregateBars, INTRADAY_SESSIONS, smaOf, type IntradayBar, type Region } from "@jusik/shared";
-import { useChartColors, type ChartColors } from "./theme";
+import { useChartColors, type ChartColors, CHART_LOCALE } from "./theme";
 import "./styles/minute.css";
 
 /** 차트에 가로선으로 그릴 가격(판단 결과에서 온 값만) */
@@ -106,7 +106,7 @@ export function MinuteChart({ bars, region, levels = NO_LEVELS }: { bars: Intrad
       rightPriceScale: { borderColor: colors.grid },
       timeScale: { borderColor: colors.grid, rightOffset: 3, timeVisible: true, secondsVisible: false },
       crosshair: { mode: CrosshairMode.Normal },
-      localization: { priceFormatter: priceText(region), timeFormatter: hhmm },
+      localization: { locale: CHART_LOCALE, priceFormatter: priceText(region), timeFormatter: hhmm },
     });
     const candle = chart.addCandlestickSeries({
       upColor: colors.up, downColor: colors.down, borderUpColor: colors.up, borderDownColor: colors.down,

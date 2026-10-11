@@ -16,7 +16,7 @@ import {
   type StrategyTrade,
 } from "@jusik/shared";
 import { money, num, pct, tone } from "./format";
-import { useChartColors, type ChartColors } from "./theme";
+import { useChartColors, type ChartColors, CHART_LOCALE } from "./theme";
 import "./styles/backtest.css";
 
 // ───────── 백테스트 탭 공용 도우미(전략 비교·적립식에서 같이 써요) ─────────
@@ -47,7 +47,7 @@ export function btChartOptions(c: ChartColors, height: number) {
     grid: { vertLines: { color: c.grid }, horzLines: { color: c.grid } },
     rightPriceScale: { borderColor: c.grid },
     timeScale: { borderColor: c.grid },
-    localization: { priceFormatter: (p: number) => (Math.abs(p) >= 1000 ? Math.round(p).toLocaleString("ko-KR") : p.toFixed(2)) },
+    localization: { locale: CHART_LOCALE, priceFormatter: (p: number) => (Math.abs(p) >= 1000 ? Math.round(p).toLocaleString("ko-KR") : p.toFixed(2)) },
   } as const;
 }
 

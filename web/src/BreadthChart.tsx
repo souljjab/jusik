@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ColorType, LineStyle, createChart, type Time } from "lightweight-charts";
 import { BREADTH_PARAMS, BREADTH_SERIES_LABEL, type BreadthAnalysis, type BreadthPoint, type BreadthResponse, type Candle } from "@jusik/shared";
-import { useChartColors, type ChartColors } from "./theme";
+import { useChartColors, type ChartColors, CHART_LOCALE } from "./theme";
 import { RuleTag } from "./DayTradeSettings";
 import "./styles/market.css";
 
@@ -42,7 +42,7 @@ function chartOptions(c: ChartColors, width: number, left: boolean) {
     rightPriceScale: { borderColor: c.grid },
     leftPriceScale: { visible: left, borderColor: c.grid },
     timeScale: { borderColor: c.grid },
-    localization: { priceFormatter: fmt },
+    localization: { locale: CHART_LOCALE, priceFormatter: fmt },
   };
 }
 
