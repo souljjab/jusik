@@ -71,7 +71,7 @@ export function StockPicker({ code, onPick }: { code: string; onPick: (code: str
   return (
     <div className="disc-picker">
       <div className="disc-search" ref={wrap}>
-        <Search size={16} className="disc-search-ico" aria-hidden="true" />
+        <Search size={16} strokeWidth={1.5} className="disc-search-ico" aria-hidden="true" />
         <input
           className="ui-input"
           role="combobox"

@@ -38,7 +38,7 @@ export function RecommendTab() {
       return n;
     });
   const scanButton = (
-    <Button variant="primary" size={bp === "compact" ? "lg" : "md"} block={bp === "compact"} busy={scanCtl.scanning} onClick={() => void scanCtl.start()} icon={<RefreshCw size={16} aria-hidden="true" />}>
+    <Button variant="primary" size={bp === "compact" ? "lg" : "md"} block={bp === "compact"} busy={scanCtl.scanning} onClick={() => void scanCtl.start()} icon={<RefreshCw size={16} strokeWidth={1.5} aria-hidden="true" />}>
       {scanCtl.scanning ? "스캔 중" : "지금 스캔"}
     </Button>
   );
@@ -166,7 +166,7 @@ function PlanBlock({ server, scan }: { server: ServerState; scan: ScanResult }) 
   const executed = scan.executed.length;
   const capHit = curs.some((c) => scan.plans[c]!.skipped.some((x) => x.reason === EXPOSURE_CAP_REASON));
   return (
-    <Section title="오늘의 계획" actions={<Link to="/trade/plan" className="disc-more">계획 보기 <ArrowRight size={14} aria-hidden="true" /></Link>}>
+    <Section title="오늘의 계획" actions={<Link to="/trade/plan" className="disc-more">계획 보기 <ArrowRight size={14} strokeWidth={1.5} aria-hidden="true" /></Link>}>
       {curs.length === 0 ? (
         <p className="t-2">스캔하면 {s.paperEnabled ? "모의계좌 현금" : "예수금"}과 위험 한도 안에서 살 수 있는 조합을 만들어요.</p>
       ) : (
@@ -196,7 +196,8 @@ function PlanBlock({ server, scan }: { server: ServerState; scan: ScanResult }) 
           ? executed > 0
             ? `모의매매가 이번 스캔에서 ${executed}종목에 모의 진입했어요.`
             : "모의매매가 켜져 있어 장중에는 계획대로 모의계좌에 진입해요."
-          : "모의매매 자동 실행은 설정에서 켤 수 있어요."}
+          : "모의매매 자동 실행은 설정에서 켤 수 있어요."}{" "}
+        단타 규칙은 경험칙이라 수익이 검증되지 않았어요. 모의매매 결과가 충분히 쌓이기 전에는 실제 자금으로 따라 하지 마세요.
       </p>
     </Section>
   );

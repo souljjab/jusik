@@ -89,7 +89,7 @@ export function ScreenerTab() {
     </Button>
   );
   const scanBtn = (
-    <Button variant="primary" size={bp === "compact" ? "lg" : "md"} busy={scanCtl.scanning} disabled={noMarket || saving} onClick={() => void scanNow()} icon={<RefreshCw size={16} aria-hidden="true" />}>
+    <Button variant="primary" size={bp === "compact" ? "lg" : "md"} busy={scanCtl.scanning} disabled={noMarket || saving} onClick={() => void scanNow()} icon={<RefreshCw size={16} strokeWidth={1.5} aria-hidden="true" />}>
       {scanCtl.scanning ? "스캔 중" : dirty ? "저장하고 스캔" : "지금 스캔"}
     </Button>
   );
@@ -131,7 +131,7 @@ export function ScreenerTab() {
                 {saveBtn}
                 {scanBtn}
                 {scan && scan.candidates.length > 0 && (
-                  <Button variant="ghost" icon={<FlaskConical size={16} aria-hidden="true" />} onClick={() => navigate(`/discover/strategy?id=daytrade-breakout&code=${encodeURIComponent(scan.candidates[0]!.code)}`)}>
+                  <Button variant="ghost" icon={<FlaskConical size={16} strokeWidth={1.5} aria-hidden="true" />} onClick={() => navigate(`/discover/strategy?id=daytrade-breakout&code=${encodeURIComponent(scan.candidates[0]!.code)}`)}>
                     백테스트 실행
                   </Button>
                 )}
@@ -234,7 +234,7 @@ function ConditionEditor({ draft, set, dirty, onRevert, onDefaults, compact }: {
         <h2 className="t-section">조건</h2>
         <div className="row">
           {dirty && (
-            <Button variant="link" onClick={onRevert} icon={<RotateCcw size={14} aria-hidden="true" />}>
+            <Button variant="link" onClick={onRevert} icon={<RotateCcw size={14} strokeWidth={1.5} aria-hidden="true" />}>
               되돌리기
             </Button>
           )}
@@ -400,7 +400,7 @@ function FixedRules() {
   return (
     <div className="disc-fixed">
       <p className="t-cap row" style={{ gap: 4 }}>
-        <Lock size={12} aria-hidden="true" />
+        <Lock size={12} strokeWidth={1.5} aria-hidden="true" />
         고정 규칙 · 앱에 정해져 있어 바꿀 수 없어요
       </p>
       <dl className="disc-fixed-list">

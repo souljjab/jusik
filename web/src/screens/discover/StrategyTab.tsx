@@ -70,7 +70,7 @@ export function StrategyTab() {
   );
 
   const runBtn = (
-    <Button variant="primary" size={compact ? "lg" : "md"} block={compact} disabled={!data || !(draft.initialCash > 0)} onClick={run} icon={<Play size={16} aria-hidden="true" />}>
+    <Button variant="primary" size={compact ? "lg" : "md"} block={compact} disabled={!data || !(draft.initialCash > 0)} onClick={run} icon={<Play size={16} strokeWidth={1.5} aria-hidden="true" />}>
       백테스트 실행
     </Button>
   );
@@ -230,7 +230,7 @@ function StockLine({ loaded, code }: { loaded: Loaded; code: string }) {
       </span>
       <QuoteLine name={d.info.name} price={d.quote.price} change={d.quote.change} pct={d.quote.changePct} region={region} />
       <MarketStatus region={region} now={now} asOf={loaded.at} />
-      <Button variant="link" onClick={() => openStock(d.info.code)} icon={<ExternalLink size={14} aria-hidden="true" />}>
+      <Button variant="link" onClick={() => openStock(d.info.code)} icon={<ExternalLink size={14} strokeWidth={1.5} aria-hidden="true" />}>
         종목 분석 열기
       </Button>
     </div>
