@@ -14,6 +14,8 @@ import type { Signals, SignalView } from "./useSignals";
  */
 
 const MARK = { met: Check, unmet: X, na: Minus } as const;
+/** 신호 블록 위 작은 글: 어느 매매법의 신호인지(전략 이름 '2단계 돌파'가 4단계 종목 위에 붙어 헷갈리지 않게) */
+const FAMILY: Record<SignalView["strategy"], string> = { weinstein: "와인스타인 주봉 단계", daytrade: "단타 돌파 후보", "candle-master": "캔들마스터 주봉" };
 const WORD = { met: "충족", unmet: "미충족", na: "데이터 없음" } as const;
 
 /** 짧은 근거 목록(태블릿·핸드폰): 아이콘 + 규칙 이름, 실제 값은 툴팁과 화면 낭독으로 */
@@ -62,7 +64,7 @@ export function SignalBlock({ view, name, code, variant, headingLevel = "h3", on
       <div className="stk-sigblock-head">
         <div className="stack" style={{ gap: 2, minWidth: 0 }}>
           <span className="t-2">
-            {ev?.strategyName ?? "신호"}
+            {view.daily ? "일봉 보조 신호" : FAMILY[view.strategy]}
             {view.when ? ` · ${view.when}` : ""}
           </span>
           <H className="t-section">{view.title}</H>

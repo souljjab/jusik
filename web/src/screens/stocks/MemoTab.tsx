@@ -30,7 +30,7 @@ function StockMemo({ code }: { code: string }) {
   return (
     <div className="ui-field">
       <label className="lbl" htmlFor={`${id}-memo`}>
-        종목 메모
+        메모 내용
       </label>
       <textarea
         id={`${id}-memo`}
