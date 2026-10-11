@@ -116,6 +116,8 @@ export interface ServerState {
   counts: { journal: number; history: number; reviews: number };
   /** 모의투자 기간 추적(M5-02) */
   paperTracking: Record<Region, PaperTrackingStatus>;
+  /** 통화별 오늘 손익(모의계좌, 하루 시작 자산 대비). 오늘 장 기록이 없으면 빠진다 */
+  todayPnl?: Partial<Record<Currency, { date: string; pnl: number; pct: number }>>;
 }
 
 /** GET /api/macro 응답 */

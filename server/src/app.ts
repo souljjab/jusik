@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import {
-  averagingDownCheck, isValidCode, macroNotes, marketClock, netOf, paperTrackingStatus, preTradeChecklist, regionOf, regionOfCode,
+  averagingDownCheck, isValidCode, macroNotes, marketClock, netOf, paperEquity, paperTrackingStatus, preTradeChecklist, regionOf, regionOfCode,
   type AlertsResponse, type BreadthResponse, type JournalCheck, type JournalEntry, type MacroResponse, type Market, type MinuteResponse, type Note, type Region, type ServerState, type StockExtras,
 } from "@jusik/shared";
 import { TtlCache } from "./cache";
@@ -149,8 +149,22 @@ export function buildApp({ provider, store, exporter, scheduler, macro, extras, 
       paper: store.state.paper,
       counts: { journal: store.state.journal.length, history: store.state.history.length, reviews: store.state.reviews.length },
       paperTracking: { KR: tracking("KR"), US: tracking("US") },
+      todayPnl: todayPnlOf(t),
     };
   });
+
+  /** 통화별 오늘 손익(모의계좌): 지금 자산 − 그 시장 날짜의 하루 시작 자산. 시작 자산 기록이 오늘 것이 아니면 없음 */
+  function todayPnlOf(t: Date): ServerState["todayPnl"] {
+    const out: NonNullable<ServerState["todayPnl"]> = {};
+    for (const cur of ["KRW", "USD"] as const) {
+      const ds = store.state.dayStart[cur];
+      const date = marketClock(cur === "KRW" ? "KR" : "US", t).date;
+      if (!ds || ds.date !== date || !(ds.equity > 0)) continue;
+      const pnl = paperEquity(store.state.paper[cur]) - ds.equity;
+      out[cur] = { date, pnl, pct: (pnl / ds.equity) * 100 };
+    }
+    return out;
+  }
 
   app.put("/api/settings", async (req) => {
     const before = store.state.settings;

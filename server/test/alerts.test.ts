@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { buildApp } from "../src/app";
 import { disclosureAlerts, positionAlerts, pushAlert, scanAlerts } from "../src/alerts";
 import { Exporter } from "../src/exporter";
-import { MockMacro } from "../src/extras";
+import { MockExtras, MockMacro } from "../src/extras";
 import { runScan, syncPaperWithDeposit } from "../src/scanner";
 import { Scheduler } from "../src/scheduler";
 import { ALERT_LIMIT, sanitizeSettings, Store } from "../src/state";
@@ -17,7 +17,7 @@ function setup(over: Record<string, unknown> = {}) {
   store.state.settings = sanitizeSettings({ minTradeValueKRW: 1, minTradeValueUSD: 1, paperEnabled: false, ...over }, store.state.settings);
   syncPaperWithDeposit(store, true);
   const provider = new StubProvider();
-  const deps = { provider, store, macro: new MockMacro(now), now };
+  const deps = { provider, store, macro: new MockMacro(now), extras: new MockExtras(now), now };
   const app = buildApp({ ...deps, exporter: new Exporter({ excelPath: join(dir, "j.xlsx"), sheets: null, debounceMs: 1, build: () => [] }), scheduler: new Scheduler(deps) });
   return { store, deps, app };
 }

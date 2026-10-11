@@ -1,6 +1,6 @@
 import {
   analyze, regionOf,
-  type Analysis, type BreadthResponse, type Candle, type DailyReview, type MinuteResponse, type Evaluation, type Fundamentals, type JournalCheck, type JournalEntry, type MacroResponse, type Market, type Posture,
+  type AlertItem, type Analysis, type BreadthResponse, type Candle, type DailyReview, type MinuteResponse, type Evaluation, type Fundamentals, type JournalCheck, type JournalEntry, type MacroResponse, type Market, type Posture,
   type Quote, type Region, type ReplayRun, type ServerState, type Settings, type StockExtras, type StockInfo,
 } from "@jusik/shared";
 
@@ -124,10 +124,39 @@ export const resetPaper = () => getJson<unknown>("/api/paper/reset", send("POST"
 export const syncExport = () => getJson<unknown>("/api/export/sync", send("POST"));
 export const excelUrl = `${BASE}/api/export/excel`;
 export const getJournal = () => getJson<{ entries: JournalEntry[] }>("/api/journal").then((r) => r.entries);
-export const addJournal = (e: Pick<JournalEntry, "code" | "side" | "price" | "qty" | "date"> & Partial<JournalEntry>) =>
-  getJson<{ entry: JournalEntry; check: JournalCheck }>("/api/journal", send("POST", e));
-export const patchJournal = (id: string, patch: Partial<Pick<JournalEntry, "review" | "emotion" | "exitReason" | "strategy">>) =>
+/** 일지 입력. plannedAdd: 손실 중 추가 매수를 사전에 계획한 분할 매수라고 확인했을 때 */
+export type JournalInput = Pick<JournalEntry, "code" | "side" | "price" | "qty" | "date"> & Partial<JournalEntry> & { plannedAdd?: boolean };
+export const addJournal = (e: JournalInput) => getJson<{ entry: JournalEntry; check: JournalCheck }>("/api/journal", send("POST", e));
+/** 저장하지 않고 주문 전 점검(체크리스트·손실 중 추가 매수)만 본다 */
+export const checkJournal = (e: JournalInput) => getJson<{ check: JournalCheck }>("/api/journal/check", send("POST", e)).then((r) => r.check);
+export const patchJournal = (id: string, patch: Partial<Pick<JournalEntry, "review" | "emotion" | "exitReason" | "strategy">> & { selfCheck?: JournalEntry["selfCheck"] | null }) =>
   getJson<{ entry: JournalEntry }>(`/api/journal/${id}`, send("PATCH", patch));
+
+// ---- 알림 ----
+export const getAlerts = () => getJson<{ alerts: AlertItem[] }>("/api/alerts").then((r) => r.alerts);
+
+// ---- 지수(상단 바) ----
+export interface IndexQuote {
+  market: Market;
+  close: number;
+  change: number;
+  changePct: number;
+  date: string;
+}
+/** 시장 지수의 마지막 종가와 전일 대비(일봉 마지막 두 개) */
+export function getIndexQuote(market: Market): Promise<IndexQuote | null> {
+  return getJson<{ candles: Candle[] }>(`/api/index/${market}/candles?count=5`)
+    .then(({ candles }) => {
+      const a = candles.at(-1), b = candles.at(-2);
+      if (!a || !b) return null;
+      return { market, close: a.close, change: a.close - b.close, changePct: (a.close / b.close - 1) * 100, date: a.date };
+    })
+    .catch(() => null);
+}
+/** 일봉(작은 추세선·차트용) */
+export const getCandles = (code: string, count: number) => getJson<{ candles: Candle[] }>(`/api/stocks/${code}/candles?count=${count}`).then((r) => r.candles);
+/** 종목 개요(이름·현재가·재무) */
+export const getOverview = (code: string) => getJson<{ info: StockInfo; quote: Quote; fundamentals: Fundamentals }>(`/api/stocks/${code}/overview`);
 export const deleteJournal = (id: string) => getJson<unknown>(`/api/journal/${id}`, send("DELETE"));
 
 // ---- 종목 보조 데이터(국내: 수급·공시·업종) ----
