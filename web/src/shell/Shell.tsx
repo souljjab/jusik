@@ -174,7 +174,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <main id="main" className="shell-main" tabIndex={-1}>
         {offline && (
           <Notice tone="warn" title="서버에 연결할 수 없어요" className="bar" >
-            {serverAt ? `표시된 내용은 ${fmtAsOf(serverAt)}이에요. ` : ""}서버(포트 8787)가 켜져 있는지 확인해 주세요. 연결되면 자동으로 다시 받아요.
+            {serverAt ? `표시된 내용은 ${fmtAsOf(serverAt)}이에요. ` : ""}앱 서버가 켜져 있는지 확인해 주세요. 연결되면 자동으로 다시 받아요.
           </Notice>
         )}
         {children}

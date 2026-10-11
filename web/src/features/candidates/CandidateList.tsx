@@ -44,7 +44,8 @@ export function CandidateList({ candidates, limit, sparks, showPrice = true, emp
 
   const open = (x: CandidateRow) => openEvidence({ title: `${x.candidate.name} 근거`, evidence: x.evidence, code: x.candidate.code, notes: x.candidate.notes });
 
-  if (bp === "compact")
+  // 태블릿 세로(840 미만)까지는 표 대신 목록 행(표가 좁아 열이 한 글자씩 꺾인다)
+  if (bp === "compact" || bp === "medium")
     return (
       <ul className="ui-rows" aria-label="후보 목록">
         {rows.map((x) => {
@@ -99,7 +100,7 @@ export function CandidateList({ candidates, limit, sparks, showPrice = true, emp
           {rows.map((x) => {
             const region = regionOf(x.candidate.market);
             return (
-              <tr key={x.candidate.code} className="click" onClick={() => openStock(x.candidate.code)} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && openStock(x.candidate.code)}>
+              <tr key={x.candidate.code} className="click" onClick={() => openStock(x.candidate.code)} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && openStock(x.candidate.code)}>
                 <td>
                   <div className="stack" style={{ gap: 0 }}>
                     <span className="t-medium">{x.candidate.name}</span>

@@ -1,33 +1,14 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import {
-  DEFAULT_POSTURE_CAPS, GUARD_DEFAULTS, newPaperAccount,
+  DEFAULT_POSTURE_CAPS, DEFAULT_SETTINGS as SHARED_DEFAULT_SETTINGS, GUARD_DEFAULTS, newPaperAccount,
   type AlertItem, type Currency, type DailyReview, type HistoryRow, type JournalEntry, type Market, type MarketRowLike, type PaperAccount, type ReplayRun, type ScanResult, type Settings,
 } from "@jusik/shared";
 
 export type { HistoryRow, ScanResult, Settings };
 
-export const DEFAULT_SETTINGS: Settings = {
-  depositKRW: 10_000_000,
-  depositUSD: 7_000,
-  riskPct: 1,
-  maxWeightPct: 30,
-  maxPositions: 3,
-  reservePct: 10,
-  minScore: 55,
-  minTradeValueKRW: 1_000_000_000,
-  minTradeValueUSD: 5_000_000,
-  scanIntervalMin: 10,
-  monitorIntervalSec: 60,
-  paperEnabled: false,
-  markets: { KOSPI: true, KOSDAQ: true, US: true },
-  maxScanPerMarket: 40,
-  postureCaps: { ...DEFAULT_POSTURE_CAPS },
-  dailyLossLimitPct: GUARD_DEFAULTS.dailyLossLimitPct,
-  maxConsecutiveLosses: GUARD_DEFAULTS.maxConsecutiveLosses,
-  ismManual: null,
-  minuteMode: "filter",
-};
+/** 설정 기본값은 화면과 같이 쓰려고 shared에 둔다 */
+export const DEFAULT_SETTINGS: Settings = SHARED_DEFAULT_SETTINGS;
 
 const RANGES: Record<string, [number, number]> = {
   depositKRW: [0, 1e13], depositUSD: [0, 1e10], riskPct: [0.1, 10], maxWeightPct: [1, 100], maxPositions: [1, 10], reservePct: [0, 90],

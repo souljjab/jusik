@@ -1,4 +1,5 @@
 import {
+  DEFAULT_SETTINGS,
   DAYTRADE_BY_REGION, DAYTRADE_CELLS, POSTURE_LABEL, dayTradeEvidence, expectancy, regionOf,
   type BacktestResult, type Candle, type DayTradeCandidate, type DayTradeCheckId, type EquityPoint, type Market, type Region, type SchedulerStatus, type Settings,
 } from "@jusik/shared";
@@ -70,18 +71,15 @@ export const SCAN_KEYS = ["minScore", "minTradeValueKRW", "minTradeValueUSD", "m
 export type ScanKey = (typeof SCAN_KEYS)[number];
 export type ScanDraft = Pick<Settings, ScanKey>;
 
-/**
- * 서버 기본값(server/src/state.ts DEFAULT_SETTINGS의 스캔 조건)과 같게 둔다.
- * shared에 기본값이 없어 여기서 같은 값을 들고 있다.
- */
+/** 스캔 조건 기본값(앱 설정 기본값 DEFAULT_SETTINGS에서 뽑는다) */
 export const SCAN_DEFAULTS: ScanDraft = {
-  minScore: 55,
-  minTradeValueKRW: 1_000_000_000,
-  minTradeValueUSD: 5_000_000,
-  markets: { KOSPI: true, KOSDAQ: true, US: true },
-  maxScanPerMarket: 40,
-  scanIntervalMin: 10,
-  minuteMode: "filter",
+  minScore: DEFAULT_SETTINGS.minScore,
+  minTradeValueKRW: DEFAULT_SETTINGS.minTradeValueKRW,
+  minTradeValueUSD: DEFAULT_SETTINGS.minTradeValueUSD,
+  markets: { ...DEFAULT_SETTINGS.markets },
+  maxScanPerMarket: DEFAULT_SETTINGS.maxScanPerMarket,
+  scanIntervalMin: DEFAULT_SETTINGS.scanIntervalMin,
+  minuteMode: DEFAULT_SETTINGS.minuteMode,
 };
 
 /** 설정에서 스캔 조건만 뽑는다(이전 버전 설정에 없는 항목은 기본값) */

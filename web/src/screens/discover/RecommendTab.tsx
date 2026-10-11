@@ -86,7 +86,7 @@ export function RecommendTab() {
               </div>
             )}
             {/* 행 안의 '근거 보기'에서 Enter를 누르면 행(종목 분석 열기)까지 함께 열리지 않게 막는다(공용 목록의 행 키 처리) */}
-            <div className="disc-list" onKeyDownCapture={stopRowEnter}>
+            <div className="disc-list">
               <CandidateList
                 candidates={list}
                 empty={
@@ -121,12 +121,6 @@ export function RecommendTab() {
       {bp === "compact" && <div className="disc-bottom-bar">{scanButton}</div>}
     </div>
   );
-}
-
-/** 표 행 안의 버튼에서 누른 Enter는 버튼만 누르게 한다(행의 Enter 처리까지 가지 않게) */
-function stopRowEnter(e: KeyboardEvent<HTMLDivElement>) {
-  const t = e.target as HTMLElement;
-  if (e.key === "Enter" && t.tagName === "BUTTON" && t.closest("tr")) e.stopPropagation();
 }
 
 /** 조건 충족 0개일 때의 사실 문장(자세한 완화 제안은 스크리너에서) */

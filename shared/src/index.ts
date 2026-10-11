@@ -32,3 +32,4 @@ export * from "./candleMaster";
 export * from "./intraday";
 export * from "./usFlows";
 export * from "./evidence";
+export * from "./settingsDefaults";
