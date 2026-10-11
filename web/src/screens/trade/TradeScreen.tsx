@@ -62,7 +62,7 @@ export default function TradeScreen() {
           보유
           {near > 0 && (
             <>
-              <span className="trd-tabmark warn" aria-hidden="true">
+              <span className="trd-tabmark is-warn" aria-hidden="true">
                 <AlertTriangle size={12} strokeWidth={2} />
                 {near}
               </span>
@@ -79,7 +79,7 @@ export default function TradeScreen() {
           비중·한도
           {locked && (
             <>
-              <span className="trd-tabmark warn" aria-hidden="true">
+              <span className="trd-tabmark is-warn" aria-hidden="true">
                 <AlertTriangle size={12} strokeWidth={2} />
                 잠김
               </span>
@@ -137,7 +137,7 @@ export default function TradeScreen() {
   else body = <HoldingsTab server={server} />;
 
   return (
-    <div className={`trd ${bp}`}>
+    <div className={`trd is-${bp}`}>
       <div className="trd-head">
         <h1 className={bp === "compact" ? "sr-only" : "t-title"}>매매</h1>
         {bp !== "compact" && <p className="t-2">보유 종목과 한도를 확인하고, 오늘의 계획에서 주문을 검토해요. 이 앱은 증권사에 주문을 내지 않아요.</p>}

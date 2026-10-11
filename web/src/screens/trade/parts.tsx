@@ -21,6 +21,15 @@ export function Pnl({ value, currency, className = "" }: { value: number | null 
 }
 
 /**
+ * 손절 시 예상 손실(아직 일어나지 않은 금액): 부호만 붙이고 상승·하락 색과 삼각형은 쓰지 않는다(주문 검토 시트의 위험 상자와 같게).
+ * value는 잃는 금액(양수).
+ */
+export function Loss({ value, currency, className = "" }: { value: number; currency: Currency; className?: string }) {
+  const text = value > 0 ? fmtPnlByCurrency(-value, currency) : fmtPnlByCurrency(0, currency);
+  return <span className={`num ${className}`}>{text}</span>;
+}
+
+/**
  * 손절가까지 남은 거리. 2% 안쪽이면 경고색 + 아이콘 + 문장(색에만 기대지 않는다).
  * 이미 손절가 아래면 '손절가 아래'.
  */
@@ -28,7 +37,7 @@ export function StopDistance({ leftPct, className = "" }: { leftPct: number | nu
   if (leftPct == null || !Number.isFinite(leftPct)) return <span className={`t-cap ${className}`}>손절가 없음</span>;
   const near = leftPct <= NEAR_STOP_PCT;
   return (
-    <span className={`trd-stopdist ${near ? "near" : ""} ${className}`}>
+    <span className={`trd-stopdist ${near ? "is-near" : ""} ${className}`}>
       {near && <AlertTriangle size={12} strokeWidth={2} aria-hidden="true" />}
       {leftPct <= 0 ? "손절가 아래" : `손절가까지 ${fmtRatio(leftPct)}`}
       {near && leftPct > 0 && <span className="sr-only">, 손절가 근접</span>}

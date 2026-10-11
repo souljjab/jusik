@@ -249,7 +249,7 @@ export function ruleLines(s: Settings, fmtMoney: (n: number, c: Currency) => str
     { label: "종목 비중 상한", value: pct(s.maxWeightPct), hint: "한 종목에 싣는 최대 비중" },
     { label: "최대 종목 수", value: `${s.maxPositions}종목` },
     { label: "예비 현금", value: pct(s.reservePct), hint: "늘 남겨 두는 현금" },
-    { label: "국면별 주식 비중 상한", value: `공격 ${pct(s.postureCaps.ATTACK)} · 중립 ${pct(s.postureCaps.NEUTRAL)} · 방어 ${pct(s.postureCaps.DEFENSE)}` },
+    { label: "국면별 비중 상한", value: `공격 ${pct(s.postureCaps.ATTACK)} · 중립 ${pct(s.postureCaps.NEUTRAL)} · 방어 ${pct(s.postureCaps.DEFENSE)}` },
     { label: "일일 손실 한도", value: s.dailyLossLimitPct > 0 ? pct(s.dailyLossLimitPct) : "꺼짐", hint: "하루 시작 자산 대비" },
     { label: "연속 손실 휴식", value: s.maxConsecutiveLosses > 0 ? `${s.maxConsecutiveLosses}회` : "꺼짐" },
     { label: "예수금", value: `${fmtMoney(s.depositKRW, "KRW")} · ${fmtMoney(s.depositUSD, "USD")}` },

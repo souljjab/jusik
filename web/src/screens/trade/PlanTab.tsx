@@ -11,7 +11,7 @@ import {
   atLeast, Button, Disclaimer, EmptyState, EvidenceStrip, EvidenceStripFull, fmtBig, fmtInt, fmtMoneyByCurrency, fmtNum, fmtPct, fmtPrice, fmtRatio, fmtTime, Notice, NoteList,
   RiskMeter, RuleTag, Section, useBreakpoint, type Breakpoint,
 } from "../../ui";
-import { AccountTitle, asOfText, Pnl, ScanButton } from "./parts";
+import { AccountTitle, asOfText, Loss, ScanButton } from "./parts";
 import { capHit, CUR_NAME, currenciesShown, distPct, planCashBase, planKey, planRisk, reasonCounts, regionOfCur } from "./tradeModel";
 
 /*
@@ -68,13 +68,13 @@ function PlanRow({ x, selected, onSelect, onKey }: { x: PlanEntry; selected: boo
         <span className="row wrap trd-tags">
           {x.executed && <span className="trd-tag">모의 진입함</span>}
           {!x.executed && x.minuteHeld && (
-            <span className="trd-tag warn" title="분봉 확인으로 이번 스캔에서는 모의 진입을 미뤘어요">
+            <span className="trd-tag is-warn" title="분봉 확인으로 이번 스캔에서는 모의 진입을 미뤘어요">
               분봉 보류
             </span>
           )}
         </span>
         <span className="trd-plan-loss">
-          <span className="t-cap">손절 시</span> <Pnl value={-x.item.riskAmount} currency={x.cur} className="t-medium" />
+          <span className="t-cap">손절 시</span> <Loss value={x.item.riskAmount} currency={x.cur} className="t-medium" />
         </span>
       </div>
       <div className="trd-plan-line">
@@ -178,9 +178,7 @@ function PlanDetail({ x, server }: { x: PlanEntry | null; server: ServerState })
           <span className="t-2">손절 시 예상 손실</span>
           <span className="t-cap">계좌의 {x.lossPct == null ? "-" : fmtRatio(x.lossPct, 2)}</span>
         </div>
-        <span className="t-price">
-          <Pnl value={-x.item.riskAmount} currency={x.cur} />
-        </span>
+        <Loss value={x.item.riskAmount} currency={x.cur} className="t-price" />
         <RiskMeter label="계획 비중" value={x.item.weightPct} limit={cap} format={(n) => fmtRatio(n)} limitLabel={`종목 비중 상한 ${fmtRatio(cap)}`} overText="상한 초과" />
       </div>
 
@@ -230,7 +228,7 @@ function CashLine({ server, cur, plan }: { server: ServerState; cur: Currency; p
       <div>
         <dt>손절 시 손실 합계</dt>
         <dd>
-          <Pnl value={plan.items.length ? -planRisk(plan) : 0} currency={cur} />
+          <Loss value={planRisk(plan)} currency={cur} />
         </dd>
       </div>
     </dl>
@@ -389,13 +387,13 @@ function CurrencyPlan({ cur, server, entries, selKey, onSelect, onKey }: {
 function ActionBar({ x, bp }: { x: PlanEntry; bp: Breakpoint }) {
   const { openOrderReview } = useActions();
   return (
-    <div className={`trd-actionbar ${bp}`} role="region" aria-label="고른 계획">
+    <div className={`trd-actionbar is-${bp}`} role="region" aria-label="고른 계획">
       <div className="trd-actionbar-info">
         <span className="t-medium ellipsis">
           {x.item.candidate.name} · <span className="num">{fmtInt(x.item.qty)}주</span>
         </span>
         <span className="t-cap">
-          손절 시 <Pnl value={-x.item.riskAmount} currency={x.cur} /> · 계좌의 {x.lossPct == null ? "-" : fmtRatio(x.lossPct, 2)}
+          손절 시 <Loss value={x.item.riskAmount} currency={x.cur} /> · 계좌의 {x.lossPct == null ? "-" : fmtRatio(x.lossPct, 2)}
         </span>
       </div>
       {x.blocked ? (
@@ -521,7 +519,7 @@ export function PlanTab({ server }: { server: ServerState }) {
       )}
 
       {split ? (
-        <div className={`trd-plan-grid ${bp}`}>
+        <div className={`trd-plan-grid is-${bp}`}>
           <div className="trd-plan-listcol">{list}</div>
           <div className="trd-plan-detailcol">
             <PlanDetail x={selected} server={server} />

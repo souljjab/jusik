@@ -33,7 +33,7 @@ function capNote(scan: ScanResult | null, cur: Currency, cap: number): string {
 function LockState({ r, hasGuard, paperOff }: { r: CurrencyRisk; hasGuard: boolean; paperOff: boolean }) {
   if (r.blocked)
     return (
-      <div className="trd-lock warn" role="status">
+      <div className="trd-lock is-warn" role="status">
         <p className="trd-lock-title">
           <Lock size={20} strokeWidth={1.75} aria-hidden="true" />
           신규 매수 잠김
@@ -45,7 +45,7 @@ function LockState({ r, hasGuard, paperOff }: { r: CurrencyRisk; hasGuard: boole
       </div>
     );
   return (
-    <div className="trd-lock ok" role="status">
+    <div className="trd-lock is-ok" role="status">
       <p className="trd-lock-title">
         <CheckCircle2 size={20} strokeWidth={1.5} aria-hidden="true" />
         신규 매수 가능

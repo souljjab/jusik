@@ -185,7 +185,7 @@ describe("ruleLines", () => {
     const lines = ruleLines({ ...settings, dailyLossLimitPct: 0, maxConsecutiveLosses: 0 }, (n, c) => `${c}${n}`);
     expect(lines.find((l) => l.label === "일일 손실 한도")!.value).toBe("꺼짐");
     expect(lines.find((l) => l.label === "연속 손실 휴식")!.value).toBe("꺼짐");
-    expect(lines.find((l) => l.label === "국면별 주식 비중 상한")!.value).toBe("공격 90% · 중립 60% · 방어 30%");
+    expect(lines.find((l) => l.label === "국면별 비중 상한")!.value).toBe("공격 90% · 중립 60% · 방어 30%");
     expect(lines.find((l) => l.label === "예수금")!.value).toBe("KRW10000000 · USD7000");
   });
 });

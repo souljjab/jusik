@@ -479,7 +479,9 @@ function PaperTracking({ server, currencies }: { server: ServerState; currencies
                 <span>거래당 기대값</span>
                 {t.expectancyPct == null ? <span className="t-cap">청산 거래가 없어 아직 몰라요</span> : <Change pct={t.expectancyPct} showAbs={false} />}
               </div>
-              <NoteList notes={[t.note]} dense />
+              <div className="t-2">
+                <NoteList notes={[t.note]} dense />
+              </div>
             </div>
           ))}
         </div>
