@@ -222,6 +222,14 @@
 .stk-swatch.dotted { border-top-style: dotted; border-top-width: 3px; }
 .stk-band-chart { margin: 0; display: flex; flex-direction: column; gap: var(--space-2); }
 .stk-est td { color: var(--color-text-2); }
+.stk-finrows { list-style: none; margin: 0; padding: 0; }
+.stk-finrows li { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-2) 0; border-top: 1px solid var(--color-border); }
+.stk-finrows li:first-child { border-top: 0; }
+.stk-finrows li.stk-est { color: var(--color-text-2); }
+.stk-fingrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); margin: 0; }
+.stk-fingrid > div { display: flex; flex-direction: column; align-items: flex-end; min-width: 0; }
+.stk-fingrid dt { font-size: var(--font-size-caption); color: var(--color-text-2); }
+.stk-fingrid dd { margin: 0; font-size: var(--font-size-table); }
 
 /* ───────── 공시 탭 ───────── */
 .stk-dis { list-style: none; margin: 0; padding: 0; }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Candle } from "@jusik/shared";
 import {
-  barLabel, barTimeOf, candleMarks, fmtInputPrice, parseInputPrice, chartMarkers, chartSummary, clampStopPct, dailyMarks, defaultPeriod, krTick, loadMemo, marksForPeriod, moveItem, objParticle,
+  barLabel, barTimeOf, markDate, markWhen, sortMarksDesc, candleMarks, fmtInputPrice, parseInputPrice, chartMarkers, chartSummary, clampStopPct, dailyMarks, defaultPeriod, krTick, loadMemo, marksForPeriod, moveItem, objParticle,
   orderPreview, parseStockRoute, restoreAt, saveMemo, stateLabel, stepCode, stopFromPct, toBars, weinsteinMarks, type SignalMark,
 } from "../src/screens/stocks/stocksModel";
 
@@ -118,6 +118,20 @@ describe("signal marks", () => {
     expect(marksForPeriod(marks, "M").some((m) => m.kind === "daily")).toBe(false);
   });
 
+  it("labels and sorts signals newest first", () => {
+    expect(markDate("2026-10-09", "2026-10-11")).toBe("10.09(금)");
+    expect(markDate("2025-10-31", "2026-10-11")).toBe("25.10.31(금)");
+    expect(markWhen({ kind: "weinstein", date: "2026-10-09" }, "2026-10-11")).toBe("10.09(금) 마감 주");
+    expect(markWhen({ kind: "daily", date: "2026-10-08" }, "2026-10-11")).toBe("10.08(목)");
+    const base = { side: "buy" as const, label: "", short: "", latest: false };
+    const sorted = sortMarksDesc([
+      { ...base, id: "a", kind: "daily", date: "2026-10-09" },
+      { ...base, id: "b", kind: "candle", date: "2025-10-31" },
+      { ...base, id: "c", kind: "weinstein", date: "2026-10-09" },
+      { ...base, id: "d", kind: "candle", date: "2026-09-18" },
+    ]);
+    expect(sorted.map((m) => m.id)).toEqual(["c", "a", "d", "b"]);
+  });
   it("daily and candle marks run on real-sized history without errors", () => {
     const d = dailyMarks(cs, null, 120);
     for (const m of d) {

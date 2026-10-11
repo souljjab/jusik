@@ -2,10 +2,10 @@ import { useMemo, useState, type ReactNode } from "react";
 import { marketSession, regionOf } from "@jusik/shared";
 import type { StockData } from "../../api";
 import { useApp } from "../../app/AppContext";
-import { Button, Chip, fmtAsOf, fmtDate, Segmented, type Breakpoint } from "../../ui";
+import { Button, Chip, fmtAsOf, fmtDate, kstDate, Segmented, type Breakpoint } from "../../ui";
 import { MinuteView } from "./MinuteView";
 import { PriceChart, type ChartLine, type ChartToggles } from "./PriceChart";
-import { chartMarkers, marksForPeriod, PERIOD_LABEL, SIGNAL_KIND_LABEL, toBars, type Period } from "./stocksModel";
+import { chartMarkers, marksForPeriod, markWhen, PERIOD_LABEL, SIGNAL_KIND_LABEL, sortMarksDesc, toBars, type Period } from "./stocksModel";
 import type { Signals, SignalView } from "./useSignals";
 
 /*
@@ -84,7 +84,8 @@ export function ChartArea({ data, at, period, onPeriod, signals, onSelect, lines
     [signals.marks, toggles.daily, signals.selectedId],
   );
   const markers = useMemo(() => chartMarkers(visible, bars, barPeriod), [visible, bars, barPeriod]);
-  const marks = useMemo(() => [...marksForPeriod(visible, barPeriod)].reverse(), [visible, barPeriod]);
+  const marks = useMemo(() => sortMarksDesc(marksForPeriod(visible, barPeriod)), [visible, barPeriod]);
+  const today = kstDate(now);
   const open = marketSession(region, now).state === "open";
   const limit = bp === "compact" ? 3 : SHOWN_MARKS;
   const shownMarks = allMarks ? marks : marks.slice(0, limit);
@@ -157,7 +158,7 @@ export function ChartArea({ data, at, period, onPeriod, signals, onSelect, lines
               {shownMarks.map((m) => (
                 <SignalItem
                   key={m.id}
-                  v={{ id: m.id, title: m.label, when: m.kind === "daily" ? fmtDate(m.date) : `${fmtDate(m.date)} 마감 주` }}
+                  v={{ id: m.id, title: m.label, when: markWhen(m, today) }}
                   kind={SIGNAL_KIND_LABEL[m.kind]}
                   selected={signals.selectedId === m.id}
                   onSelect={() => onSelect(m.id)}

@@ -4,9 +4,9 @@ import {
   type DayTradeCandidate, type Evidence, type Note, type Posture,
 } from "@jusik/shared";
 import type { StockData } from "../../api";
-import { fmtDate } from "../../ui";
+import { fmtDate, kstDate } from "../../ui";
 import {
-  analysisAt, candleMarks, candlePlan, dailyMarks, dayTradePlan, postureAt, stagesByWeek, weinsteinMarks, weinsteinPlan,
+  analysisAt, candleMarks, markWhen, candlePlan, dailyMarks, dayTradePlan, postureAt, stagesByWeek, weinsteinMarks, weinsteinPlan,
   type OrderPlan, type SignalMark,
 } from "./stocksModel";
 
@@ -47,7 +47,8 @@ export interface Signals {
   candidate: DayTradeCandidate | null;
 }
 
-const week = (d: string) => `${fmtDate(d)} 마감 주`;
+const today = () => kstDate(new Date());
+const week = (d: string) => markWhen({ kind: "weinstein", date: d }, today());
 
 export function useSignals(data: StockData | null, candidate: DayTradeCandidate | null, caps?: Record<Posture, number>): Signals {
   const code = data?.info.code ?? null;
@@ -98,7 +99,7 @@ export function useSignals(data: StockData | null, candidate: DayTradeCandidate 
       if (m.kind === "daily") {
         const st = stages.get(weekKeyOf(m.date));
         const ev = st ? weinsteinEvidence(analysisAt(a, st, postureAt(data?.indexCandles, m.date, caps, region))) : null;
-        return { id: m.id, strategy: "weinstein", title: m.label, when: fmtDate(m.date), evidence: ev, notes: [], historical: !m.latest, daily: m.daily, mark: m };
+        return { id: m.id, strategy: "weinstein", title: m.label, when: markWhen(m, today()), evidence: ev, notes: [], historical: !m.latest, daily: m.daily, mark: m };
       }
     }
     return current.find((v) => v.id === NOW) ?? current[0] ?? { id: NOW, strategy: "weinstein", title: "분석 없음", when: "", evidence: null, notes: [], historical: false };

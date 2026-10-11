@@ -89,7 +89,7 @@ function TabBody({ tab, data, signals, brief, compact }: { tab: DetailTab; data:
   const { server, journal, health } = useApp();
   const region = regionOf(data.info.market);
   const sample = !!health?.sample;
-  if (tab === "fin") return <FinTab f={data.fundamentals} a={data.analysis} candles={data.candles} region={region} sample={sample} />;
+  if (tab === "fin") return <FinTab f={data.fundamentals} a={data.analysis} candles={data.candles} region={region} sample={sample} compact={compact} />;
   if (tab === "disclosure") return <DisclosureTab code={data.info.code} region={region} sample={sample} compact={compact} />;
   if (tab === "memo") return <MemoTab code={data.info.code} />;
   return <EvidencePanel data={data} signals={signals} settings={server?.settings ?? null} journal={journal} brief={brief} />;

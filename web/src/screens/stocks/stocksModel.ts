@@ -112,6 +112,19 @@ export function barLabel(time: string, period: BarPeriod): string {
   return shortDateKo(time);
 }
 
+/** 신호 날짜: 올해면 "10.12(월)", 다른 해면 "25.10.31(금)" */
+export function markDate(date: string, today: string): string {
+  return date.slice(0, 4) === today.slice(0, 4) ? shortDateKo(date) : `${date.slice(2, 4)}.${shortDateKo(date)}`;
+}
+/** 신호 시점 문구: 주봉 신호는 "… 마감 주" */
+export const markWhen = (m: Pick<SignalMark, "kind" | "date">, today: string) => (m.kind === "daily" ? markDate(m.date, today) : `${markDate(m.date, today)} 마감 주`);
+
+/** 최근 신호부터(같은 날이면 주봉 → 캔들 → 일봉 순) */
+export function sortMarksDesc(marks: SignalMark[]): SignalMark[] {
+  const rank = { weinstein: 0, candle: 1, daily: 2 } as const;
+  return [...marks].sort((a, b) => (a.date === b.date ? rank[a.kind] - rank[b.kind] : a.date < b.date ? 1 : -1));
+}
+
 /** 처음 보여 줄 봉 수(나머지는 끌어서 본다) */
 export const INITIAL_BARS: Record<BarPeriod, number> = { D: 130, W: 104, M: 60 };
 

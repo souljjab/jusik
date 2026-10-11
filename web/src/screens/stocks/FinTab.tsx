@@ -91,11 +91,50 @@ function unitCaption(unit: AmountUnit | undefined, region: Region): string {
   return region === "US" ? "단위: 원자료(출처 단위 그대로, EPS는 달러)" : "단위: 억 원(EPS는 원)";
 }
 
-function PeriodTable({ title, rows, region, unit }: { title: string; rows: PeriodRow[]; region: Region; unit: AmountUnit | undefined }) {
+function PeriodTable({ title, rows, region, unit, compact }: { title: string; rows: PeriodRow[]; region: Region; unit: AmountUnit | undefined; compact: boolean }) {
   if (!rows.length) return null;
   const d = amountDigits(unit, region);
   const amt = (v: number | undefined) => (v == null ? "-" : fmtNum(v, d));
   const neg = (v: number | undefined, est: boolean) => (!est && v != null && v < 0 ? "warn-text" : "");
+  // 핸드폰: 표 대신 목록 행(기간 + 네 값)
+  if (compact)
+    return (
+      <div className="stack">
+        <h4 className="stk-sub">{title}</h4>
+        <ul className="stk-finrows">
+          {[...rows].reverse().map((p) => (
+            <li key={p.period} className={p.estimate ? "stk-est" : ""}>
+              <span className="row between">
+                <span className="t-medium">
+                  {p.period}
+                  {p.estimate && " (추정)"}
+                  {p.derived && <span className="t-cap"> (계산)</span>}
+                </span>
+                <span className="t-cap num">제출 {p.filed ?? "-"}</span>
+              </span>
+              <dl className="stk-fingrid">
+                <div>
+                  <dt>매출</dt>
+                  <dd className="num">{amt(p.revenue)}</dd>
+                </div>
+                <div>
+                  <dt>영업이익</dt>
+                  <dd className={`num ${neg(p.opIncome, p.estimate)}`}>{amt(p.opIncome)}</dd>
+                </div>
+                <div>
+                  <dt>순이익</dt>
+                  <dd className={`num ${neg(p.netIncome, p.estimate)}`}>{amt(p.netIncome)}</dd>
+                </div>
+                <div>
+                  <dt>EPS</dt>
+                  <dd className={`num ${neg(p.eps, p.estimate)}`}>{p.eps == null ? "-" : fmtNum(p.eps, region === "US" ? 2 : 0)}</dd>
+                </div>
+              </dl>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
   return (
     <div className="stack">
       <h4 className="stk-sub">{title}</h4>
@@ -133,7 +172,7 @@ function PeriodTable({ title, rows, region, unit }: { title: string; rows: Perio
   );
 }
 
-function Financials({ f, region }: { f: Fundamentals; region: Region }) {
+function Financials({ f, region, compact }: { f: Fundamentals; region: Region; compact: boolean }) {
   const annual: PeriodRow[] = f.annual ?? [];
   const quarterly: PeriodRow[] = f.quarterly ?? [];
   return (
@@ -146,8 +185,8 @@ function Financials({ f, region }: { f: Fundamentals; region: Region }) {
             {unitCaption(f.amountUnit, region)} · 최신 기간이 위에 있어요. 추정치는 스크리닝 판단에서 빼요. 적자는 경고색으로 표시해요.
             {quarterly.some((p) => p.derived) && " (계산)은 공시에 4분기 단독 값이 없어 연간에서 1~3분기를 빼서 구한 값이에요."}
           </p>
-          <PeriodTable title="연간" rows={annual} region={region} unit={f.amountUnit} />
-          <PeriodTable title="분기" rows={quarterly} region={region} unit={f.amountUnit} />
+          <PeriodTable title="연간" rows={annual} region={region} unit={f.amountUnit} compact={compact} />
+          <PeriodTable title="분기" rows={quarterly} region={region} unit={f.amountUnit} compact={compact} />
         </>
       )}
     </Section>
@@ -475,11 +514,11 @@ function RefFigures({ f, region, sample }: { f: Fundamentals; region: Region; sa
   );
 }
 
-export function FinTab({ f, a, candles, region, sample }: { f: Fundamentals; a: Analysis | null; candles: Candle[]; region: Region; sample: boolean }) {
+export function FinTab({ f, a, candles, region, sample, compact = false }: { f: Fundamentals; a: Analysis | null; candles: Candle[]; region: Region; sample: boolean; compact?: boolean }) {
   return (
     <div className="stk-tabbody">
       {a ? <Screening s={a.screening} /> : <p className="t-2">분석 데이터가 부족해 체크리스트를 만들지 못했어요.</p>}
-      <Financials f={f} region={region} />
+      <Financials f={f} region={region} compact={compact} />
       <Valuation a={a} f={f} candles={candles} region={region} sample={sample} />
       <RefFigures f={f} region={region} sample={sample} />
     </div>
