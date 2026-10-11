@@ -1,0 +1,66 @@
+/* --- 분봉 탭: 1분봉·3분봉 차트와 강창권 장중 타점 판단 (mn-) ---
+ * 이 파일은 styles.css보다 먼저 번들되므로 .chip·.banner·.steps 같은 기존 클래스를 덮을 때는 클래스를 겹쳐 우선순위를 올렸다. */
+:root { --mn-good: #15803d; }
+@media (prefers-color-scheme: dark) { :root { --mn-good: #4ade80; } }
+
+/* 종목 분석 탭 줄(App.tsx): 탭이 4개라 좁은 화면에서는 줄바꿈 대신 가로로 밀어 본다 */
+.tabs.mn-tabs { overflow-x: auto; scrollbar-width: none; }
+.tabs.mn-tabs::-webkit-scrollbar { display: none; }
+.tabs.mn-tabs button { flex: none; white-space: nowrap; }
+
+/* 머리 줄 */
+.mn-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
+.mn-head .mn-title { margin: 0; }
+.mn-title small { font-size: 12px; font-weight: 400; }
+.mn-live { font-size: 12px; color: var(--muted); }
+.mn-live.on { color: var(--mn-good); }
+.primary.small-btn.mn-refresh { margin-left: auto; }
+.primary.small-btn.mn-refresh:disabled { opacity: .6; cursor: default; }
+.mn-meta { margin: 4px 0 0; }
+.banner.mn-msg { margin: 8px 0; padding: 8px 12px; }
+
+/* 차트 */
+.mn-chart { margin-top: 8px; min-width: 0; }
+.mn-chart-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; }
+.mn-chart-bar .seg { margin-bottom: 0; }
+.legend.mn-legend { flex-wrap: wrap; gap: 2px 12px; margin: 0; }
+.mn-chart-box { width: 100%; min-width: 0; margin-top: 6px; }
+.mn-caption { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+
+/* 판단 카드 */
+.mn-verdict-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
+.mn-verdict-row .mn-title { margin: 0; }
+.chip.mn-verdict { font-size: 14px; padding: 2px 12px; }
+.chip.mn-verdict-buy { background: #c62828; }
+.chip.mn-verdict-wait { background: #78879b; }
+.chip.mn-verdict-avoid { background: #b45309; }
+.mn-help { margin: 4px 0; }
+.metrics.mn-metrics { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.mn-plan { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; margin: 4px 0; }
+.mn-plan-item { display: flex; flex-direction: column; gap: 2px; min-width: 0; background: var(--bg); border-radius: 8px; padding: 8px 12px; }
+.mn-plan-item b { font-size: 16px; }
+.mn-sub { display: block; font-size: 11px; }
+.mn-prices { list-style: none; margin: 0; padding: 0; }
+.mn-prices li { padding: 1px 0; }
+.mn-stop { color: var(--down); }
+
+/* 판단 항목(보유·눌림·손절·돌파) */
+.steps.mn-steps { margin-top: 12px; }
+.mn-steps .step { min-width: 0; }
+.mn-steps .notes { font-size: 13px; margin-bottom: 0; }
+.chip.mn-flag { font-size: 11px; font-weight: 700; }
+.chip.mn-tone-good { background: #15803d; }
+.chip.mn-tone-bad { background: #b91c1c; }
+.chip.mn-tone-warn { background: #d97706; }
+.chip.mn-tone-info { background: #78879b; }
+.mn-kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 4px 0; font-size: 13px; }
+.mn-kv dt { color: var(--muted); }
+.mn-kv dd { margin: 0; min-width: 0; }
+.mn-below { color: var(--err); font-weight: 700; font-size: 12px; }
+.mn-above { color: var(--mn-good); font-size: 12px; }
+
+/* 규칙 요약 */
+.mn-rules-title { margin: 0 0 6px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.mn-rules ul { margin: 0 0 6px; padding-left: 18px; }
+.mn-rules li { padding: 1px 0; }
+.mn-rule { display: inline-block; padding: 0 6px; border: 1px solid var(--border); border-radius: 4px; font-size: 11px; line-height: 16px; font-weight: 400; color: var(--muted); white-space: nowrap; }

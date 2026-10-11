@@ -7,6 +7,7 @@ import { ChartPanel } from "./ChartPanel";
 import { DayTradeView } from "./DayTradeView";
 import { FundamentalsTab } from "./FundamentalsTab";
 import { JournalView } from "./JournalView";
+import { MinutePanel } from "./MinutePanel";
 import { ReviewView } from "./ReviewView";
 import { RuleCheckView } from "./RuleCheckView";
 import { SearchBox } from "./SearchBox";
@@ -17,9 +18,9 @@ import { useServerState } from "./useServerState";
 import { useStock } from "./useStock";
 
 type View = "daytrade" | "analysis" | "journal" | "review" | "rules";
-type Tab = "signal" | "fundamentals" | "backtest";
+type Tab = "signal" | "minute" | "fundamentals" | "backtest";
 const VIEWS: [View, string][] = [["daytrade", "단타 추천"], ["analysis", "종목 분석"], ["journal", "매매일지"], ["review", "일일 복기"], ["rules", "규칙 점검"]];
-const TABS: [Tab, string][] = [["signal", "차트·신호"], ["fundamentals", "재무·스크리닝"], ["backtest", "백테스트"]];
+const TABS: [Tab, string][] = [["signal", "차트·신호"], ["minute", "분봉"], ["fundamentals", "재무·스크리닝"], ["backtest", "백테스트"]];
 
 export default function App() {
   const [health, setHealth] = useState<Health | null>(null);
@@ -110,7 +111,7 @@ export default function App() {
                   </button>
                 </div>
 
-                <nav className="tabs" role="tablist">
+                <nav className="tabs mn-tabs" role="tablist">
                   {TABS.map(([k, label]) => (
                     <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{label}</button>
                   ))}
@@ -122,6 +123,7 @@ export default function App() {
                     <div className="card"><ChartPanel candles={data.candles} /></div>
                   </>
                 )}
+                {tab === "minute" && <MinutePanel code={data.info.code} region={region} />}
                 {tab === "fundamentals" && <FundamentalsTab f={data.fundamentals} a={data.analysis} region={region} />}
                 {tab === "backtest" && <BacktestTab candles={data.candles} indexCandles={data.indexCandles} region={region} info={data.info} />}
               </>
