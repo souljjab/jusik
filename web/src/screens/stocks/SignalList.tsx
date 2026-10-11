@@ -92,13 +92,14 @@ export function SignalList({ signals, marks, today, wide, onSelect }: {
         {items.map((it) => (
           <li key={it.id}>
             <button type="button" className="stk-sigrow" aria-pressed={signals.selectedId === it.id} onClick={() => onSelect(it.id)}>
-              <span className="stk-sigrow-when t-2 num">{it.when}</span>
               <span className="stk-sigrow-main">
                 <span className="t-medium ellipsis">
                   {it.side === "sell" && <span className="sr-only">매도 쪽 신호, </span>}
                   {it.title}
                 </span>
-                <span className="t-cap ellipsis">{it.kind}</span>
+                <span className="t-cap ellipsis">
+                  <span className="num">{it.when}</span> · {it.kind}
+                </span>
               </span>
               <span className="stk-sigrow-ev">
                 {it.view?.evidence ? <EvidenceStrip evidence={it.view.evidence} /> : <span className="t-cap">{it.view ? "근거 없음" : "일봉 보조"}</span>}

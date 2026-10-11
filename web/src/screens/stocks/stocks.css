@@ -21,6 +21,8 @@
 .stk-side-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: var(--space-4) var(--space-1) var(--space-4) 0; }
 .stk-side-order { flex: none; max-height: 56%; overflow-y: auto; border-top: 1px solid var(--color-border); padding: var(--space-3) var(--space-1) 0 0; }
 .stk-nopick { display: grid; place-items: center; }
+/* 오른쪽 패널이 없을 때(고르지 않음·오류) 가운데가 끝까지 */
+.stk-large > .stk-pane-center:last-child { grid-column: 3 / -1; }
 
 /* ───────── 태블릿 가로: 목록-상세 ───────── */
 .stk-expanded {
@@ -115,7 +117,7 @@
 .stk-siglist { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--color-border); }
 .stk-siglist li { border-bottom: 1px solid var(--color-border); }
 .stk-sigrow {
-  width: 100%; display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; align-items: center; gap: var(--space-3);
+  width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-3);
   min-height: 48px; padding: var(--space-1) var(--space-2); border: 0; border-left: 3px solid transparent; border-radius: 0; background: transparent; color: var(--color-text); text-align: left;
   transition: background-color var(--motion-fast) var(--motion-ease);
 }
@@ -125,7 +127,7 @@
 .stk-sigrow-ev { display: flex; justify-content: flex-end; }
 .stk-sigchips {
   list-style: none; margin: 0 calc(-1 * var(--gutter)); padding: 0 var(--gutter) var(--space-1); display: flex; gap: var(--space-2);
-  overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scrollbar-width: thin;
+  overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scroll-padding-inline: var(--gutter); scrollbar-width: thin;
 }
 .stk-sigchips li { flex: none; scroll-snap-align: start; }
 .stk-sigchip {

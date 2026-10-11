@@ -80,7 +80,7 @@ function LoadError({ error, onRetry }: { error: string; onRetry: () => void }) {
         </Button>
       }
     >
-      {error}. 종목 코드가 맞는지, 서버가 켜져 있는지 확인한 뒤 다시 불러오세요.
+      {error.replace(/[.\s]+$/, "")}. 종목 코드가 맞는지, 서버가 켜져 있는지 확인한 뒤 다시 불러오세요.
     </Notice>
   );
 }

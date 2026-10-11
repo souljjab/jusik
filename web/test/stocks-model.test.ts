@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Candle } from "@jusik/shared";
 import {
-  barLabel, barTimeOf, markDate, markWhen, sortMarksDesc, candleMarks, fmtInputPrice, parseInputPrice, chartMarkers, chartSummary, clampStopPct, dailyMarks, defaultPeriod, krTick, loadMemo, marksForPeriod, moveItem, objParticle,
+  barLabel, barTimeOf, crosshairTime, markDate, timeToYmd, markWhen, sortMarksDesc, candleMarks, fmtInputPrice, parseInputPrice, chartMarkers, chartSummary, clampStopPct, dailyMarks, defaultPeriod, krTick, loadMemo, marksForPeriod, moveItem, objParticle,
   orderPreview, parseStockRoute, restoreAt, saveMemo, stateLabel, stepCode, stopFromPct, toBars, weinsteinMarks, type SignalMark,
 } from "../src/screens/stocks/stocksModel";
 
@@ -73,6 +73,22 @@ describe("bars", () => {
     expect(s).toContain("한빛반도체 일봉");
     expect(s).toContain("상승");
     expect(chartSummary("x", [], "W", String)).toContain("자료가 모자라요");
+  });
+});
+
+describe("crosshair time", () => {
+  it("reads string, business-day and timestamp times", () => {
+    expect(timeToYmd("2025-09-18")).toBe("2025-09-18");
+    expect(timeToYmd({ year: 2025, month: 9, day: 8 })).toBe("2025-09-08");
+    expect(timeToYmd(Date.UTC(2025, 8, 18) / 1000)).toBe("2025-09-18");
+    expect(timeToYmd("bad")).toBeNull();
+    expect(timeToYmd(null)).toBeNull();
+  });
+  it("labels by period and year", () => {
+    expect(crosshairTime("2026-09-18", "W", "2026-10-11")).toBe("9.18(금)");
+    expect(crosshairTime("2025-10-31", "D", "2026-10-11")).toBe("25.10.31(금)");
+    expect(crosshairTime({ year: 2025, month: 8, day: 29 }, "M", "2026-10-11")).toBe("2025.08");
+    expect(crosshairTime(undefined, "D", "2026-10-11")).toBe("");
   });
 });
 

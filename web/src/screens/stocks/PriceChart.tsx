@@ -5,9 +5,9 @@ import {
 } from "lightweight-charts";
 import type { Region } from "@jusik/shared";
 import { CHART_FONT, CHART_LOCALE, useChartColors, type ChartColors } from "../../theme";
-import { fmtBig, fmtPrice } from "../../ui";
+import { fmtBig, fmtPrice, kstDate } from "../../ui";
 import {
-  barLabel, chartSummary, INITIAL_BARS, MA_SETS, macdPoints, maPoints, PERIOD_NAME, rsiPoints,
+  barLabel, chartSummary, crosshairTime, INITIAL_BARS, MA_SETS, macdPoints, maPoints, PERIOD_NAME, rsiPoints,
   type Bar, type BarPeriod, type ChartMarker,
 } from "./stocksModel";
 
@@ -41,7 +41,8 @@ interface Pane {
 const priceText = (region: Region) => (p: number) =>
   region === "US" || Math.abs(p) < 100 ? p.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Math.round(p).toLocaleString("ko-KR");
 
-function options(c: ChartColors, region: Region, showTime: boolean, main: boolean, formatter?: (p: number) => string) {
+function options(c: ChartColors, region: Region, period: BarPeriod, showTime: boolean, main: boolean, formatter?: (p: number) => string) {
+  const today = kstDate(new Date());
   return {
     autoSize: true,
     // 출처 표시(TradingView 로고)는 가격 패널에 한 번만
@@ -50,7 +51,7 @@ function options(c: ChartColors, region: Region, showTime: boolean, main: boolea
     rightPriceScale: { borderVisible: false, minimumWidth: 72 },
     timeScale: { borderColor: c.grid, rightOffset: 4, visible: showTime, minBarSpacing: 2 },
     crosshair: { mode: CrosshairMode.Normal },
-    localization: { locale: CHART_LOCALE, priceFormatter: formatter ?? priceText(region) },
+    localization: { locale: CHART_LOCALE, priceFormatter: formatter ?? priceText(region), timeFormatter: (t: Time) => crosshairTime(t, period, today) },
   } as const;
 }
 
@@ -109,7 +110,7 @@ export function PriceChart({
     if (!el) return;
     const below = [volPane && volEl.current, toggles.rsi && rsiEl.current, toggles.macd && macdEl.current].filter(Boolean) as HTMLDivElement[];
     const lastEl = below.at(-1) ?? el;
-    const make = (node: HTMLDivElement, formatter?: (p: number) => string) => createChart(node, options(colors, region, node === lastEl, node === el, formatter));
+    const make = (node: HTMLDivElement, formatter?: (p: number) => string) => createChart(node, options(colors, region, period, node === lastEl, node === el, formatter));
 
     const main = make(el);
     const candle = main.addCandlestickSeries({

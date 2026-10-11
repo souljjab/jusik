@@ -112,6 +112,24 @@ export function barLabel(time: string, period: BarPeriod): string {
   return shortDateKo(time);
 }
 
+/** 차트 시각(문자열 'YYYY-MM-DD'·BusinessDay·UTC 초) → 'YYYY-MM-DD' */
+export function timeToYmd(t: unknown): string | null {
+  if (typeof t === "string") return /^\d{4}-\d{2}-\d{2}/.test(t) ? t.slice(0, 10) : null;
+  if (typeof t === "number" && Number.isFinite(t)) return new Date(t * 1000).toISOString().slice(0, 10);
+  if (t && typeof t === "object" && "year" in t && "month" in t && "day" in t) {
+    const b = t as { year: number; month: number; day: number };
+    return `${b.year}-${String(b.month).padStart(2, "0")}-${String(b.day).padStart(2, "0")}`;
+  }
+  return null;
+}
+
+/** 크로스헤어 날짜 이름표: 일·주봉은 "9.18(금)"(다른 해면 "25.9.18(금)"), 월봉은 "2025.09" */
+export function crosshairTime(t: unknown, period: BarPeriod, today: string): string {
+  const d = timeToYmd(t);
+  if (!d) return "";
+  return period === "M" ? barLabel(d, "M") : markDate(d, today);
+}
+
 /** 신호 날짜: 올해면 "10.12(월)", 다른 해면 "25.10.31(금)" */
 export function markDate(date: string, today: string): string {
   return date.slice(0, 4) === today.slice(0, 4) ? shortDateKo(date) : `${date.slice(2, 4)}.${shortDateKo(date)}`;
