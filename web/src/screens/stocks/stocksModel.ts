@@ -1,6 +1,6 @@
 import {
   BUY_ACTIONS, SELL_ACTIONS, STAGE_LABEL, assessRegimeAt, candleMasterAt, candleMasterSignals, completedWeeks, dailyRegimeLookup,
-  dailySignalsFromPrep, macd, prepareDailySignals, prepareStage, relativeStrength, rsi, sma, stageAt, toWeekly,
+  dailySignalsFromPrep, macd, prepareDailySignals, prepareStage, relativeStrength, rsi, shortDateKo, sma, stageAt, toWeekly,
   type Analysis, type Candle, type CandleMasterResult, type DailySignal, type DayTradeCandidate, type Posture, type Region,
   type RegimeAssessment, type StageResult,
 } from "@jusik/shared";
@@ -102,6 +102,14 @@ export const rsiPoints = (bars: Bar[]) => points(bars, rsi(bars.map((b) => b.clo
 export function macdPoints(bars: Bar[]) {
   const m = macd(bars.map((b) => b.close));
   return { macd: points(bars, m.macd), signal: points(bars, m.signal), hist: points(bars, m.hist) };
+}
+
+/** 봉 이름(크로스헤어 범례): 일봉 "10.12(월)", 주봉 "8월 4주", 월봉 "2024.08" */
+export function barLabel(time: string, period: BarPeriod): string {
+  const y = time.slice(0, 4), m = Number(time.slice(5, 7)), d = Number(time.slice(8, 10));
+  if (period === "M") return `${y}.${String(m).padStart(2, "0")}`;
+  if (period === "W") return `${m}월 ${Math.ceil(d / 7)}주`;
+  return shortDateKo(time);
 }
 
 /** 처음 보여 줄 봉 수(나머지는 끌어서 본다) */

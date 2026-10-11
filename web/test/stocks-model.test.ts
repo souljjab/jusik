@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Candle } from "@jusik/shared";
 import {
-  barTimeOf, candleMarks, chartMarkers, chartSummary, clampStopPct, dailyMarks, defaultPeriod, krTick, loadMemo, marksForPeriod, moveItem,
+  barLabel, barTimeOf, candleMarks, chartMarkers, chartSummary, clampStopPct, dailyMarks, defaultPeriod, krTick, loadMemo, marksForPeriod, moveItem,
   orderPreview, parseStockRoute, restoreAt, saveMemo, stateLabel, stepCode, stopFromPct, toBars, weinsteinMarks, type SignalMark,
 } from "../src/screens/stocks/stocksModel";
 
@@ -62,6 +62,11 @@ describe("bars", () => {
     expect(barTimeOf(w, "2023-01-09")).toBe("2023-01-13");
     expect(barTimeOf(w, "2022-12-30")).toBe(null);
     expect(barTimeOf(w, "2030-01-01")).toBe(null);
+  });
+  it("labels bars for the crosshair legend", () => {
+    expect(barLabel("2024-10-14", "D")).toBe("10.14(월)");
+    expect(barLabel("2024-08-23", "W")).toBe("8월 4주");
+    expect(barLabel("2024-08-30", "M")).toBe("2024.08");
   });
   it("summarizes the visible chart for screen readers", () => {
     const s = chartSummary("한빛반도체", toBars(cs, "D"), "D", (n) => String(n));
