@@ -483,7 +483,7 @@ function Comparison({ data, region, cash, selected, onPick }: { data: StockData;
               const avg = res ? mean(res.trades.map((t) => t.returnPct)) : null;
               const st = style.get(r.id);
               return (
-                <tr key={r.id} className={`click ${r.id === selected ? "sel" : ""}`} tabIndex={0} onClick={() => onPick(r.id)} onKeyDown={(e) => e.key === "Enter" && onPick(r.id)} aria-selected={r.id === selected}>
+                <tr key={r.id} className={`click ${r.id === selected ? "sel" : ""}`} tabIndex={0} onClick={() => onPick(r.id)} onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && onPick(r.id)} aria-current={r.id === selected ? "true" : undefined}>
                   <td>
                     <div className="row" style={{ gap: 8 }}>
                       {st && <i className={`disc-swatch ${st.style}`} style={{ borderColor: st.color }} aria-hidden="true" />}

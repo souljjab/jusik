@@ -54,6 +54,7 @@
 /* ───────── 추천 ───────── */
 .disc-rec-grid { display: flex; flex-direction: column; gap: var(--space-6); }
 .disc-rec-main { min-width: 0; }
+.disc-list { min-width: 0; }
 .disc-rec-main .ui-section { gap: var(--space-4); }
 .disc-rec-side { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--space-5) var(--space-6); align-items: start; border-top: 1px solid var(--color-border); padding-top: var(--space-5); }
 .disc-rec-side > .ui-section + .ui-section { border-top: 0; padding-top: 0; }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type KeyboardEvent } from "react";
 import { ArrowRight, RefreshCw } from "lucide-react";
 import { EXPOSURE_CAP_REASON, regionOf, type Currency, type Market, type ScanResult, type ServerState } from "@jusik/shared";
 import { useApp } from "../../app/AppContext";
@@ -85,24 +85,27 @@ export function RecommendTab() {
                 ))}
               </div>
             )}
-            <CandidateList
-              candidates={list}
-              empty={
-                !scan ? (
-                  <EmptyState title="아직 스캔 결과가 없어요" action={bp === "compact" ? undefined : scanButton}>
-                    지금 스캔하면 단타 돌파 규칙에 맞는 후보를 찾아요. 장이 닫혀 있으면 마지막 종가 기준으로 찾아요.
-                  </EmptyState>
-                ) : all.length === 0 ? (
-                  <EmptyState title="조건에 맞는 후보가 없어요" action={<Button onClick={() => navigate("/discover/screener")}>스크리너에서 조건 보기</Button>}>
-                    {zeroSentence(scan, server.settings)}
-                  </EmptyState>
-                ) : (
-                  <EmptyState title="고른 근거를 모두 충족한 후보가 없어요" action={<Button onClick={() => (setFilters(new Set()), setMarket("all"))}>필터 지우기</Button>}>
-                    칩을 하나 빼면 더 많은 후보가 보여요.
-                  </EmptyState>
-                )
-              }
-            />
+            {/* 행 안의 '근거 보기'에서 Enter를 누르면 행(종목 분석 열기)까지 함께 열리지 않게 막는다(공용 목록의 행 키 처리) */}
+            <div className="disc-list" onKeyDownCapture={stopRowEnter}>
+              <CandidateList
+                candidates={list}
+                empty={
+                  !scan ? (
+                    <EmptyState title="아직 스캔 결과가 없어요" action={bp === "compact" ? undefined : scanButton}>
+                      지금 스캔하면 단타 돌파 규칙에 맞는 후보를 찾아요. 장이 닫혀 있으면 마지막 종가 기준으로 찾아요.
+                    </EmptyState>
+                  ) : all.length === 0 ? (
+                    <EmptyState title="조건에 맞는 후보가 없어요" action={<Button onClick={() => navigate("/discover/screener")}>스크리너에서 조건 보기</Button>}>
+                      {zeroSentence(scan, server.settings)}
+                    </EmptyState>
+                  ) : (
+                    <EmptyState title="고른 근거를 모두 충족한 후보가 없어요" action={<Button onClick={() => (setFilters(new Set()), setMarket("all"))}>필터 지우기</Button>}>
+                      칩을 하나 빼면 더 많은 후보가 보여요.
+                    </EmptyState>
+                  )
+                }
+              />
+            </div>
             {list.length > 0 && <Disclaimer />}
           </Section>
         </div>
@@ -118,6 +121,12 @@ export function RecommendTab() {
       {bp === "compact" && <div className="disc-bottom-bar">{scanButton}</div>}
     </div>
   );
+}
+
+/** 표 행 안의 버튼에서 누른 Enter는 버튼만 누르게 한다(행의 Enter 처리까지 가지 않게) */
+function stopRowEnter(e: KeyboardEvent<HTMLDivElement>) {
+  const t = e.target as HTMLElement;
+  if (e.key === "Enter" && t.tagName === "BUTTON" && t.closest("tr")) e.stopPropagation();
 }
 
 /** 조건 충족 0개일 때의 사실 문장(자세한 완화 제안은 스크리너에서) */

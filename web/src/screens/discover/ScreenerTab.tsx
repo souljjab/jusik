@@ -486,7 +486,7 @@ function ResultTable({ list }: { list: DayTradeCandidate[] }) {
               const sp = sparks[c.code];
               const spPct = sp && sp.length > 1 && sp[0]! > 0 ? (sp.at(-1)! / sp[0]! - 1) * 100 : null;
               return (
-                <tr key={c.code} className="click" tabIndex={0} onClick={() => openStock(c.code)} onKeyDown={(e) => e.key === "Enter" && openStock(c.code)}>
+                <tr key={c.code} className="click" tabIndex={0} onClick={() => openStock(c.code)} onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && openStock(c.code)}>
                   <td>
                     <div className="stack" style={{ gap: 0 }}>
                       <span className="t-medium">{c.name}</span>
