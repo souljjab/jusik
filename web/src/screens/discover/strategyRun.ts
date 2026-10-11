@@ -1,6 +1,6 @@
 import {
-  DEFAULT_BACKTEST, DEFAULT_RUN, PAPER_COSTS, STRATEGIES, getStrategy, runBacktest, runStageBacktest, runStrategy, weinsteinStrategy,
-  type BacktestResult, type Candle, type Region, type StockInfo, type Strategy, type StrategyTrade,
+  DEFAULT_BACKTEST, DEFAULT_RUN, PAPER_COSTS, STRATEGIES, candleMasterEvidence, dayTradeEvidence, getStrategy, runBacktest, runStageBacktest, runStrategy, weinsteinEvidence, weinsteinStrategy,
+  type Analysis, type BacktestResult, type Candle, type DayTradeCandidate, type Evidence, type Region, type StockInfo, type Strategy, type StrategyTrade,
 } from "@jusik/shared";
 
 /*
@@ -109,3 +109,15 @@ export const hasRegimeToggle = (id: string) => id === "weinstein" || id === "app
 
 /** 표의 날짜: 여러 해에 걸치므로 연도까지 "2024.03.05" */
 export const fmtYmd = (d: string | null | undefined) => (d ? d.slice(0, 10).replace(/-/g, ".") : "-");
+
+/**
+ * 고른 전략으로 본 이 종목의 지금 신호 근거(근거 스트립). 근거 칸을 정의한 전략만:
+ * 와인스타인(주봉 단계 신호 포함)·캔들마스터는 종목 분석으로, 단타 돌파는 최근 스캔 후보일 때만.
+ * 설춘환 스윙·RSI 회복·BBC 눌림·일봉 기술 점수는 근거 칸이 없어 null.
+ */
+export function signalEvidenceFor(id: string, analysis: Analysis | null | undefined, candidate: DayTradeCandidate | null | undefined): Evidence | null {
+  if (id === "weinstein" || id === "app-stage") return analysis ? weinsteinEvidence(analysis) : null;
+  if (id === "candle-master") return analysis ? candleMasterEvidence(analysis.candleMaster) : null;
+  if (id === "daytrade-breakout") return candidate ? dayTradeEvidence(candidate) : null;
+  return null;
+}

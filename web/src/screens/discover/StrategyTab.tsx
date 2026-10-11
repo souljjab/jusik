@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { ExternalLink, Play } from "lucide-react";
 import { DEFAULT_RUN, STRATEGIES, TRADE_REASON_LABEL, compareStrategies, isValidCode, regionOf, type Market, type Region } from "@jusik/shared";
 import { loadStock, type StockData } from "../../api";
+import { useActions } from "../../app/actions";
 import { useApp } from "../../app/AppContext";
 import { navigate, useRoute } from "../../app/router";
 import { useChartColors, type ChartColors } from "../../theme";
 import {
-  Button, Change, Chip, Field, MarketStatus, Notice, QuoteLine, RuleTag, Section, Skeleton, Stat, Stats, Toggle,
+  Button, Change, Chip, EvidenceStrip, Field, MarketStatus, Notice, QuoteLine, RuleTag, Section, Skeleton, Stat, Stats, Toggle,
   fmtInt, fmtMoney, fmtNum, fmtPct, fmtPrice, fmtRatio, useBreakpoint,
 } from "../../ui";
 import { DcaSection } from "./DcaSection";
@@ -14,7 +15,7 @@ import { ChartLegend, EquityChart, type ChartLine } from "./EquityChart";
 import { StockPicker } from "./StockPicker";
 import { MIN_SAMPLE, indexEquity, periodLabel, summarizeBacktest } from "./logic";
 import {
-  ALL_STRATEGIES, APP_STRATEGIES, BOOK_STRATEGIES, DEFAULT_STRATEGY_ID, btCostText, btCosts, defaultParams, fmtYmd, hasRegimeToggle, runSelected, strategyMeta,
+  ALL_STRATEGIES, APP_STRATEGIES, BOOK_STRATEGIES, DEFAULT_STRATEGY_ID, btCostText, btCosts, defaultParams, fmtYmd, hasRegimeToggle, runSelected, signalEvidenceFor, strategyMeta,
   type AnyBacktest, type BtParams, type StrategyMeta,
 } from "./strategyRun";
 
@@ -107,6 +108,7 @@ export function StrategyTab() {
         <Section title="종목과 조건">
           <StockPicker code={code} onPick={(c) => go({ code: c })} />
           <StockLine loaded={loaded} code={code} />
+          {data && <SignalNow id={id} data={data} />}
           <div className="disc-form">
             <Field label={`투자금(${region === "US" ? "달러" : "원"})`} htmlFor="disc-bt-cash">
               <input
@@ -235,6 +237,32 @@ function StockLine({ loaded, code }: { loaded: Loaded; code: string }) {
   );
 }
 
+/** 고른 전략으로 본 이 종목의 지금 신호(근거 스트립 + 근거 보기). 근거 칸이 없는 전략은 그렇다고 쓴다 */
+function SignalNow({ id, data }: { id: string; data: StockData }) {
+  const { server } = useApp();
+  const { openEvidence } = useActions();
+  const cand = server?.latestScan?.candidates.find((c) => c.code === data.info.code) ?? null;
+  const ev = signalEvidenceFor(id, data.analysis, cand);
+  if (!ev)
+    return (
+      <p className="t-cap">
+        {id === "daytrade-breakout"
+          ? "이 종목은 최근 스캔 후보가 아니라 지금 단타 돌파 근거를 보여 줄 수 없어요. 아래 과거 백테스트로 규칙을 확인하세요."
+          : "이 전략은 근거 칸을 따로 정의하지 않아 지금 신호 대신 과거 백테스트만 보여 줘요."}
+      </p>
+    );
+  return (
+    <div className="disc-signal">
+      <span className="t-2">지금 신호</span>
+      <span className="t-medium">{ev.headline}</span>
+      <EvidenceStrip
+        evidence={ev}
+        onOpen={() => openEvidence({ title: `${data.info.name} 근거`, evidence: ev, code: data.info.code, notes: cand?.notes })}
+      />
+    </div>
+  );
+}
+
 /** F. 백테스트 미리보기: 기간·비용 반영을 제목 옆에, 연평균 수익률·최대 낙폭·승률·손익비, 전략 대 단순 보유·지수 */
 function Preview({ result, data, meta, params, region, compact }: { result: AnyBacktest; data: StockData; meta: StrategyMeta; params: BtParams; region: Region; compact: boolean }) {
   const colors = useChartColors();
@@ -258,7 +286,7 @@ function Preview({ result, data, meta, params, region, compact }: { result: AnyB
     <Section title="백테스트 미리보기" sub={`${period}, 수수료와 세금 반영`}>
       <p className="t-cap">
         {data.info.name} · {meta.name} · 다음 날 시가 체결 · {btCostText(region, meta.id !== "app-score" && meta.id !== "app-stage")}
-        {!data.indexCandles && " · 지수 자료가 없어 지수 약세 국면 거르기 없이 돌렸어요"}
+        {!data.indexCandles && " · 지수 자료가 없어 지수 약세 국면 거르기 없이 돌렸어요"} · 재무 지표는 과거 시점 자료가 없어 넣지 않았어요
       </p>
       <Stats n={compact ? 2 : 4}>
         <Stat value={<Change pct={s.cagrPct} showAbs={false} />} label="연평균 수익률" />

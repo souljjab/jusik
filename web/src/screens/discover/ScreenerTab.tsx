@@ -1,12 +1,12 @@
 import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { FlaskConical, Lock, RefreshCw, RotateCcw } from "lucide-react";
-import { INTRADAY_PARAMS, STRATEGIES, dayTradeEvidence, regionOf, type DayTradeCandidate, type Market, type ScanResult, type Settings } from "@jusik/shared";
+import { INTRADAY_PARAMS, STRATEGIES, dayTradeEvidence, regionOf, type DayTradeCandidate, type Market, type Region, type ScanResult, type Settings } from "@jusik/shared";
 import { saveSettings } from "../../api";
 import { useActions } from "../../app/actions";
 import { useApp } from "../../app/AppContext";
 import { Link, navigate } from "../../app/router";
 import {
-  Button, Change, Chip, EmptyState, EvidenceStrip, Notice, RuleTag, ScoreBar, Section, Skeleton, SkeletonRows, Sparkline, Toggle,
+  Button, Change, Chip, EmptyState, EvidenceStrip, MarketStatus, Notice, RuleTag, ScoreBar, Section, Skeleton, SkeletonRows, Sparkline, Toggle,
   fmtBig, fmtInt, fmtNum, fmtPct, fmtPrice, fmtWhen, useBreakpoint, useToast,
 } from "../../ui";
 import {
@@ -33,7 +33,7 @@ const MINUTE_MODES: { id: Settings["minuteMode"]; label: string; help: string }[
 
 /** 스크리너(지도서 5.3 A~E): 전략 프리셋, 조건 편집, 결과 수와 저장, 결과 표와 52주 추세 */
 export function ScreenerTab() {
-  const { server, refreshServer } = useApp();
+  const { server, refreshServer, now } = useApp();
   const bp = useBreakpoint();
   const toast = useToast();
   const scanCtl = useScan();
@@ -139,9 +139,16 @@ export function ScreenerTab() {
             )}
           </div>
           {scan && (
-            <p className="t-2 num">
-              {fmtWhen(scan.at, new Date())} 스캔 기준 · 후보 풀 {fmtInt(scan.universeCount)} → 분석 {fmtInt(scan.scannedCount)} → 조건 충족 {fmtInt(scan.candidates.length)}
-            </p>
+            <div className="disc-result-meta">
+              <p className="t-2 num">
+                {fmtWhen(scan.at, now)} 스캔 기준 · 후보 풀 {fmtInt(scan.universeCount)} → 분석 {fmtInt(scan.scannedCount)} → 조건 충족 {fmtInt(scan.candidates.length)}
+              </p>
+              <span className="disc-status-markets">
+                {scanRegions(scan).map((r) => (
+                  <MarketStatus key={r} region={r} now={now} asOf={scan.at} />
+                ))}
+              </span>
+            </div>
           )}
           {dirty && (
             <Notice tone="info" title="저장하지 않은 조건이 있어요">
@@ -181,6 +188,12 @@ export function ScreenerTab() {
       )}
     </div>
   );
+}
+
+/** 스캔한 시장의 지역(장 상태 표시용). 시장 목록이 없으면 국내 */
+function scanRegions(scan: ScanResult): Region[] {
+  const r = [...new Set(scan.markets.map(regionOf))];
+  return r.length ? r : ["KR"];
 }
 
 /** A. 전략 프리셋: 스캔이 쓰는 단타 돌파 하나 + 종목별로 시험하는 책 전략 */
