@@ -491,7 +491,7 @@ export function PlanTab({ server }: { server: ServerState }) {
         <CurrencyPlan key={cur} cur={cur} server={server} entries={entries.filter((x) => x.cur === cur)} selKey={selected?.key ?? null} onSelect={setSelKey} onKey={onKey} />
       ))}
       <div className="stack" style={{ gap: "var(--space-2)" }}>
-        <p className="t-cap trd-lead">
+        <p className="t-cap trd-caveat">
           모의매매는 실제 주문이 아니라 규칙을 시험하는 가상 체결이에요(수수료·세금·슬리피지 반영). 단타 규칙은 경험칙이고 수익이 검증되지 않았어요. 모의매매 결과가 충분히
           쌓이기 전에는 실제 자금으로 따라 하지 마세요.
         </p>

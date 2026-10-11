@@ -197,16 +197,8 @@ function PaperAccountBlock({ v, today, big, bp }: { v: AccountView; today: { pnl
       <AccountTitle currency={v.currency} asOf={serverAt} />
       <AccountSummary v={v} today={today} big={big} />
       {v.positions.length === 0 ? (
-        <EmptyState
-          title="보유 중인 모의 종목이 없어요"
-          action={
-            <Button variant="secondary" onClick={() => navigate("/trade/plan", { replace: true })}>
-              오늘의 계획 보기
-            </Button>
-          }
-        >
-          <span className="t-2">모의매매가 켜져 있으면 서버가 오늘의 계획대로 들어가요.</span>
-        </EmptyState>
+        // 모든 계좌가 비었으면 아래에 빈 화면 안내를 한 번만 둔다
+        <p className="t-2">보유 중인 모의 종목이 없어요.</p>
       ) : (
         <>
           <p className="t-2">
@@ -643,6 +635,7 @@ export function HoldingsTab({ server }: { server: ServerState }) {
   const views = currencies.map((c) => accountView(server.paper[c], c, todayOf(regionOfCur(c), now)));
   const large = bp === "large";
   const paperOff = !server.settings.paperEnabled;
+  const allEmpty = views.every((v) => v.positions.length === 0);
   const side = (
     <>
       <PaperTracking server={server} currencies={currencies} side={large} />
@@ -655,9 +648,9 @@ export function HoldingsTab({ server }: { server: ServerState }) {
       <div className="trd-split-main">
         <Section title="모의계좌(자동)" as="h2" sub={paperOff ? "자동 실행 꺼짐" : undefined}>
           <p className="t-2 trd-lead">서버가 규칙대로 모의로 사고판 종목이에요. 손절가·목표가·보유 기한에 닿으면 자동으로 청산해요. 실제 증권 계좌와는 연결되어 있지 않아요.</p>
-          {paperOff && (
+          {paperOff && !allEmpty && (
             <Notice tone="info" action={<Link to="/settings" className="trd-link">설정 열기</Link>}>
-              모의매매 자동 실행이 꺼져 있어요. 설정에서 켜면 오늘의 계획대로 모의로 들어가요.
+              모의매매 자동 실행이 꺼져 있어요. 지금 보유는 그대로 관리하고, 새로 들어가지는 않아요. 설정에서 켤 수 있어요.
             </Notice>
           )}
           <div className={`trd-accts n${views.length}`}>
@@ -666,6 +659,28 @@ export function HoldingsTab({ server }: { server: ServerState }) {
               return <PaperAccountBlock key={v.currency} v={v} today={t ? { pnl: t.pnl, pct: t.pct } : null} big={views.length === 1} bp={bp} />;
             })}
           </div>
+          {allEmpty && (
+            <EmptyState
+              title="보유 중인 모의 종목이 없어요"
+              action={
+                paperOff ? (
+                  <Button variant="secondary" className="trd-touch-btn" onClick={() => navigate("/settings")}>
+                    설정에서 모의매매 켜기
+                  </Button>
+                ) : (
+                  <Button variant="secondary" className="trd-touch-btn" onClick={() => navigate("/trade/plan", { replace: true })}>
+                    오늘의 계획 보기
+                  </Button>
+                )
+              }
+            >
+              <span className="t-2">
+                {paperOff
+                  ? "모의매매 자동 실행이 꺼져 있어요. 켜면 장이 열린 동안 서버가 오늘의 계획대로 모의로 사고팔아요."
+                  : "장이 열린 동안 서버가 오늘의 계획대로 모의로 들어가요. 계획에서 무엇을 살지 미리 볼 수 있어요."}
+              </span>
+            </EmptyState>
+          )}
         </Section>
         <ManualSection bp={bp} />
         {!large && side}

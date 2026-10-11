@@ -112,7 +112,7 @@ export default function TradeScreen() {
     body = offline ? (
       <Notice
         tone="warn"
-        title="서버에 연결하지 못해 보유 종목과 한도를 불러오지 못했어요"
+        title="보유 종목과 한도를 불러오지 못했어요"
         action={
           <Button
             variant="secondary"
@@ -132,7 +132,7 @@ export default function TradeScreen() {
           </Button>
         }
       >
-        서버가 켜져 있는지 확인해 주세요. 연결되면 자동으로 다시 받아요.
+        서버와 다시 연결되면 자동으로 받아요. 바로 다시 시도하려면 '다시 연결'을 누르세요.
       </Notice>
     ) : (
       <LoadingShape />

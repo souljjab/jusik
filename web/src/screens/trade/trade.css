@@ -190,6 +190,7 @@ a.ui-btn.trd-a-btn { text-decoration: none; }
 .trd-inline-ico { display: inline-block; vertical-align: -1px; margin-right: 4px; }
 .trd-rot { transform: rotate(180deg); }
 .trd-minute { border-top: 1px solid var(--color-border); padding-top: var(--space-3); }
+.trd-caveat { max-width: 72ch; margin: var(--space-4) auto 0; text-align: center; }
 
 /* 아래 붙는 버튼 줄(핸드폰은 하단 탭 바로 위, 태블릿 세로는 화면 맨 아래). 목록을 내리는 동안 엄지 영역에 머문다 */
 .trd-actionbar {

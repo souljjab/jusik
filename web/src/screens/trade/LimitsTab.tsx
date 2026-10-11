@@ -63,8 +63,9 @@ function CurrencyLimits({ r, server, streak, manualStreak }: { r: CurrencyRisk; 
   const max = s.maxConsecutiveLosses;
   const view = accountView(server.paper[r.currency], r.currency, todayOf(regionOfCur(r.currency), now));
   const region = regionOfCur(r.currency);
-  // 서버 노트 중 잠금 사유(bad)는 위 상태 문장에 이미 썼으니 나머지만
-  const notes = (guard?.notes ?? []).filter((n) => !(r.blocked && n.tone === "bad" && n.text === r.blockReason));
+  const restSuggested = max > 0 && streak >= max;
+  // 서버 노트 중 잠금 사유(bad)는 위 상태 문장에, 연속 손실은 아래 '기록만 하기' 제안에 이미 쓰니 나머지만
+  const notes = (guard?.notes ?? []).filter((n) => !(r.blocked && n.tone === "bad" && n.text === r.blockReason) && !(restSuggested && /연속 손실/.test(n.text)));
   return (
     <div className="trd-limit">
       <AccountTitle currency={r.currency} asOf={serverAt} />
@@ -111,13 +112,13 @@ function CurrencyLimits({ r, server, streak, manualStreak }: { r: CurrencyRisk; 
       </div>
 
       {notes.length > 0 && (
-        <div className="stack">
+        <div className="stack t-2">
           <h4 className="trd-h4">리스크 가드 메모</h4>
           <NoteList notes={notes} dense />
         </div>
       )}
 
-      {max > 0 && streak >= max && (
+      {restSuggested && (
         <Notice tone="warn" title="오늘은 기록만 하기를 권해요" action={<Button size="sm" variant="secondary" onClick={() => navigate("/records")}>매매일지 쓰기</Button>}>
           모의 자동매매가 최근 {streak}번 연속 손실이에요. 새로 사기보다 기록과 복기로 규칙을 점검해요. 다시 시작할 때는 규모를 줄여요.
         </Notice>
