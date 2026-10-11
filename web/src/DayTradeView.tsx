@@ -1,14 +1,16 @@
 import { useState } from "react";
 import {
   DEFAULT_PAPER_TRACKING, EXPOSURE_CAP_REASON, paperEquity, regionOfCode,
-  type Currency, type DayTradeCandidate, type PaperAccount, type PaperTrackingStatus, type Plan, type PlanItem, type Region, type ServerState,
+  type Currency, type DayTradeCandidate, type PaperAccount, type PaperTrackingStatus, type Plan, type PlanItem, type Region, type ScanResult, type ServerState,
 } from "@jusik/shared";
 import { excelUrl, resetPaper, startScan, syncExport } from "./api";
 import { kst, moneyByCurrency, num, pct, tone } from "./format";
 import { NoteList } from "./NoteList";
 import { GuardStatus, PosturePanel } from "./DayTradePosture";
 import { RuleTag, SettingsPanel } from "./DayTradeSettings";
+import { BreadthPanel } from "./BreadthPanel";
 import "./styles/daytrade.css";
+import "./styles/market.css";
 
 const CUR_LABEL: Record<Currency, string> = { KRW: "원화(국내)", USD: "달러(해외)" };
 const REGIME_LABEL: Record<string, string> = { BULL: "강세", NEUTRAL: "중립", BEAR: "약세" };
@@ -51,6 +53,8 @@ function PlanTable({ cur, st, onOpen }: { cur: Currency; st: ServerState; onOpen
   const s = st.settings;
   const cash = s.paperEnabled ? st.paper[cur].cash : cur === "KRW" ? s.depositKRW : s.depositUSD;
   const executed = new Set(scan?.executed ?? []);
+  // 이전 버전 스캔에는 분봉 보류 목록이 없다
+  const held = new Set((scan?.minuteSkips ?? []).map((x) => x.code));
   const m = (n: number) => moneyByCurrency(n, cur);
   return (
     <div className="card">
@@ -76,7 +80,10 @@ function PlanTable({ cur, st, onOpen }: { cur: Currency; st: ServerState; onOpen
                   <td>{m(it.amount)}</td>
                   <td>{m(it.riskAmount)}</td>
                   <td>{num(it.weightPct, 1)}%</td>
-                  <td>{executed.has(it.candidate.code) && <span className="chip grade-A">모의 진입</span>}</td>
+                  <td>
+                    {executed.has(it.candidate.code) && <span className="chip grade-A">모의 진입</span>}
+                    {!executed.has(it.candidate.code) && held.has(it.candidate.code) && <span className="chip mk-held" title="분봉 확인으로 이번 스캔에서는 진입을 미뤘어요">분봉 보류</span>}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -87,6 +94,31 @@ function PlanTable({ cur, st, onOpen }: { cur: Currency; st: ServerState; onOpen
         <p className="small">합계 투자 {m(plan.used)} · 남는 현금 {m(plan.remainingCash)} (예비 현금 {s.reservePct}% 포함) · 최대 손실 합계 {m(plan.items.reduce((a, i) => a + i.riskAmount, 0))}</p>
       )}
       {plan && plan.skipped.length > 0 && <SkippedList plan={plan} cap={scan?.exposureCaps?.[cur]} paperEnabled={s.paperEnabled} />}
+    </div>
+  );
+}
+
+type MinuteSkip = NonNullable<ScanResult["minuteSkips"]>[number];
+const VERDICT_LABEL: Record<MinuteSkip["verdict"], string> = { buy: "매수 신호", wait: "대기", avoid: "피함" };
+
+/** 분봉 확인(4.7·M3-18)으로 모의 자동매매 진입을 미룬 종목 */
+function MinuteSkips({ list, onOpen }: { list: MinuteSkip[]; onOpen: (code: string) => void }) {
+  if (list.length === 0) return null;
+  return (
+    <div className="card mk-skips">
+      <h3 className="h3">
+        분봉 확인으로 진입 보류 <RuleTag rule="4.7·M3-18 강창권" /> <span className="muted small">{list.length}종목</span>
+      </h3>
+      <p className="muted small mk-help">매매 계획에는 들었지만 모의 자동매매가 1분봉을 보고 이번 스캔에서는 들어가지 않은 종목이에요. 다음 스캔에서 다시 확인해요.</p>
+      <ul className="notes small">
+        {list.map((x, i) => (
+          <li key={`${x.code}-${i}`} className={x.verdict === "avoid" ? "note-bad" : "note-warn"}>
+            <button className="link" onClick={() => onOpen(x.code)}>{x.name}</button> <span className="muted">{x.code}</span>{" "}
+            <span className={`mk-verdict mk-verdict-${x.verdict}`}>{VERDICT_LABEL[x.verdict] ?? x.verdict}</span> {x.reason || <span className="muted">사유 없음</span>}
+          </li>
+        ))}
+      </ul>
+      <p className="muted small mk-help">분봉 확인 방식은 설정의 「분봉 확인」에서 바꿀 수 있어요.</p>
     </div>
   );
 }
@@ -253,7 +285,7 @@ export function DayTradeView({ st, error, refresh, onOpen }: { st: ServerState |
         <button className="primary" disabled={sch.scanning || busy === "scan"} onClick={() => run("scan", startScan)}>{sch.scanning ? "스캔 중…" : "지금 스캔"}</button>
       </div>
 
-      <SettingsPanel s={st.settings} onSaved={refresh} />
+      <SettingsPanel s={st.settings} onSaved={refresh} macro={scan?.macroSummary} />
 
       {scan && (
         <div className="card small">
@@ -269,9 +301,11 @@ export function DayTradeView({ st, error, refresh, onOpen }: { st: ServerState |
       )}
 
       {scan && <PosturePanel scan={scan} />}
+      <BreadthPanel defaultMarket={scan?.markets[0] ?? "KOSPI"} />
 
       <PlanTable cur="KRW" st={st} onOpen={onOpen} />
       <PlanTable cur="USD" st={st} onOpen={onOpen} />
+      <MinuteSkips list={scan?.minuteSkips ?? []} onOpen={onOpen} />
 
       <div className="card">
         <h3 className="h3">후보 전체 <span className="muted small">— 점수 순 · 종목명을 누르면 상세 분석</span></h3>
