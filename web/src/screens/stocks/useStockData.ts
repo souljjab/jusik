@@ -85,18 +85,18 @@ export function useStockData(code: string | null): StockState {
   };
 }
 
-/** 목록 행용: 같은 loadStock 캐시를 쓴다(상세로 들어가면 바로 그려진다) */
-export function useStockLite(code: string): { data: StockData | null; failed: boolean } {
-  const [st, setSt] = useState<{ code: string; data: StockData | null; failed: boolean }>({ code, data: null, failed: false });
+/** 목록 행용: 같은 loadStock 캐시를 쓴다(상세로 들어가면 바로 그려진다). at은 받은 시각(ms) */
+export function useStockLite(code: string): { data: StockData | null; failed: boolean; at: number | null } {
+  const [st, setSt] = useState<{ code: string; data: StockData | null; failed: boolean; at: number | null }>({ code, data: null, failed: false, at: null });
   useEffect(() => {
     let alive = true;
-    setSt((s) => (s.code === code ? s : { code, data: null, failed: false }));
+    setSt((s) => (s.code === code ? s : { code, data: null, failed: false, at: null }));
     fetchStock(code)
-      .then(({ data }) => alive && setSt({ code, data, failed: false }))
-      .catch(() => alive && setSt({ code, data: null, failed: true }));
+      .then(({ data, at }) => alive && setSt({ code, data, failed: false, at }))
+      .catch(() => alive && setSt({ code, data: null, failed: true, at: null }));
     return () => {
       alive = false;
     };
   }, [code]);
-  return st.code === code ? { data: st.data, failed: st.failed } : { data: null, failed: false };
+  return st.code === code ? { data: st.data, failed: st.failed, at: st.at } : { data: null, failed: false, at: null };
 }

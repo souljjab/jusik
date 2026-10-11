@@ -330,7 +330,7 @@ export default function StocksScreen() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const list = <WatchPane selected={r.code} mode={mode} onMode={setMode} compact={!twoPane} />;
+  const list = <WatchPane selected={r.code} mode={mode} onMode={setMode} compact={!twoPane} showStatus={bp === "compact"} />;
   const noPick: ReactNode = (
     <EmptyState title="종목을 고르면 차트와 근거가 여기에 나와요" center>
       <span className="t-2">왼쪽 목록에서 고르거나 종목 검색으로 찾아보세요.</span>

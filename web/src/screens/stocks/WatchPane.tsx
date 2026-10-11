@@ -1,11 +1,11 @@
 import { ArrowDown, ArrowUp, Compass, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { dayTradeEvidence, regionOf, regionOfCode, type DayTradeCandidate } from "@jusik/shared";
 import { useActions } from "../../app/actions";
 import { useApp } from "../../app/AppContext";
 import { href, navigate } from "../../app/router";
 import { heldQty } from "../../features/OrderReviewSheet";
-import { Button, Change, EmptyState, EvidenceStrip, IconButton, Price, Segmented, Skeleton, Sparkline, srQuote } from "../../ui";
+import { Button, Change, EmptyState, EvidenceStrip, IconButton, MarketStatus, Price, Segmented, Skeleton, Sparkline, srQuote } from "../../ui";
 import { StockSearch } from "./StockSearch";
 import { moveItem, restoreAt, stateLabel, stockPath } from "./stocksModel";
 import { useStockLite } from "./useStockData";
@@ -18,7 +18,7 @@ import { useStockLite } from "./useStockData";
 
 export type ListMode = "watch" | "recs";
 
-function WatchRow({ code, active, editing, index, count, onMove, onRemove }: {
+function WatchRow({ code, active, editing, index, count, onMove, onRemove, onAt }: {
   code: string;
   active: boolean;
   editing: boolean;
@@ -26,8 +26,13 @@ function WatchRow({ code, active, editing, index, count, onMove, onRemove }: {
   count: number;
   onMove: (delta: number) => void;
   onRemove: () => void;
+  /** 시세를 받은 시각을 알린다(목록 위 '기준' 시각) */
+  onAt: (code: string, at: number) => void;
 }) {
-  const { data, failed } = useStockLite(code);
+  const { data, failed, at } = useStockLite(code);
+  useEffect(() => {
+    if (at) onAt(code, at);
+  }, [code, at, onAt]);
   const { journal, server } = useApp();
   const region = regionOfCode(code);
   const name = data?.info.name ?? code;
@@ -106,8 +111,27 @@ function RecRow({ c, active }: { c: DayTradeCandidate; active: boolean }) {
   );
 }
 
-export function WatchPane({ selected, mode, onMode, compact = false }: { selected: string | null; mode: ListMode; onMode: (m: ListMode) => void; compact?: boolean }) {
-  const { watchlist, setWatchlist, server } = useApp();
+export function WatchPane({ selected, mode, onMode, compact = false, showStatus = false }: {
+  selected: string | null;
+  mode: ListMode;
+  onMode: (m: ListMode) => void;
+  compact?: boolean;
+  /** 핸드폰: 상단 바에 시장 상태가 없어 목록 위에 장 상태와 시세 기준 시각을 쓴다 */
+  showStatus?: boolean;
+}) {
+  const { watchlist, setWatchlist, server, now, serverAt } = useApp();
+  // 행마다 받은 시각 중 가장 오래된 것이 목록 전체의 '기준' 시각
+  const [ats, setAts] = useState<Record<string, number>>({});
+  const onAt = useCallback((code: string, at: number) => setAts((m) => (m[code] === at ? m : { ...m, [code]: at })), []);
+  const regions = useMemo(() => {
+    const codes = mode === "watch" ? watchlist : (server?.latestScan?.candidates ?? []).map((c) => c.code);
+    return (["KR", "US"] as const).filter((r) => codes.some((c) => regionOfCode(c) === r));
+  }, [mode, watchlist, server?.latestScan]);
+  const asOf = useMemo(() => {
+    if (mode === "recs") return serverAt;
+    const list = watchlist.map((c) => ats[c]).filter((x): x is number => x != null);
+    return list.length ? Math.min(...list) : null;
+  }, [mode, serverAt, watchlist, ats]);
   const [editing, setEditing] = useState(false);
   const [undo, setUndo] = useState<{ code: string; index: number } | null>(null);
   const recs = server?.latestScan?.candidates ?? [];
@@ -143,6 +167,13 @@ export function WatchPane({ selected, mode, onMode, compact = false }: { selecte
         )}
       </div>
       {!compact && seg}
+      {showStatus && regions.length > 0 && (
+        <div className="stk-list-status" aria-label="시장 상태">
+          {regions.map((r) => (
+            <MarketStatus key={r} region={r} now={now} asOf={asOf} compact />
+          ))}
+        </div>
+      )}
       <StockSearch onPick={(code) => navigate(stockPath(code))} />
 
       {undo && (
@@ -179,6 +210,7 @@ export function WatchPane({ selected, mode, onMode, compact = false }: { selecte
                 editing={editing}
                 onMove={(d) => setWatchlist(moveItem(watchlist, i, d))}
                 onRemove={() => remove(code)}
+                onAt={onAt}
               />
             ))}
           </ul>
