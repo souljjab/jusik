@@ -1,5 +1,5 @@
 import {
-  DAYTRADE_CELLS, POSTURE_LABEL, dayTradeEvidence, expectancy, regionOf,
+  DAYTRADE_BY_REGION, DAYTRADE_CELLS, POSTURE_LABEL, dayTradeEvidence, expectancy, regionOf,
   type BacktestResult, type Candle, type DayTradeCandidate, type DayTradeCheckId, type EquityPoint, type Market, type Region, type SchedulerStatus, type Settings,
 } from "@jusik/shared";
 import { fmtBig, fmtTime, fmtWhen } from "../../ui/format";
@@ -114,12 +114,13 @@ export function draftProblems(d: ScanDraft): string[] {
 }
 
 /** 스캔 조건이 아닌 앱 고정 규칙(scoreDayTrade·DAYTRADE_BY_REGION). 화면에서는 읽기만 한다 */
+const KR = DAYTRADE_BY_REGION.KR, US = DAYTRADE_BY_REGION.US;
 export const FIXED_RULES: { label: string; value: string }[] = [
-  { label: "당일 등락률", value: "+2% ~ +20%" },
-  { label: "RSI(14)", value: "80 이하" },
-  { label: "20일선 이격", value: "25% 이하" },
+  { label: "당일 등락률", value: `+${KR.minChangePct}% ~ +${KR.maxChangePct}%` },
+  { label: "RSI(14)", value: `${KR.maxRsi} 이하` },
+  { label: "20일선 이격", value: `${KR.maxExtendPct}% 이하` },
   { label: "거래량", value: "20일 평균의 1.2배 이상" },
-  { label: "최소 주가", value: "국내 1,000원 · 미국 $2" },
+  { label: "최소 주가", value: `국내 ${KR.minPrice.toLocaleString("ko-KR")}원 · 미국 $${US.minPrice}` },
   { label: "일봉 자료", value: "40일 이상, 7일 안의 시세" },
 ];
 

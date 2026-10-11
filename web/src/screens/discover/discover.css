@@ -25,6 +25,7 @@
 .disc-chips .ui-chip[aria-pressed="true"] .num { color: var(--color-text); }
 .disc-tag { display: inline-block; margin-left: var(--space-2); padding: 0 var(--space-1); border: 1px solid var(--color-border); border-radius: var(--radius-chip); color: var(--color-text-2); font-size: var(--font-size-caption); font-weight: var(--font-weight-medium); white-space: nowrap; vertical-align: 1px; }
 .disc-tag.warn { border-color: var(--color-warn); color: var(--color-warn-text); }
+.disc-cmp td:first-child .t-medium { white-space: nowrap; }
 .disc-details > summary { cursor: pointer; min-height: 36px; display: flex; align-items: center; }
 .disc-table-scroll { max-height: 440px; overflow: auto; }
 .disc-reason { min-width: 200px; max-width: 320px; white-space: normal; font-size: var(--font-size-secondary); }
@@ -60,6 +61,12 @@
   .disc-rec-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--space-6); align-items: start; }
   .disc-rec-side { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-5); border-top: 0; padding-top: 0; border-left: 1px solid var(--color-border); padding-left: var(--space-5); }
   .disc-rec-side > .ui-section + .ui-section { border-top: 1px solid var(--color-border); padding-top: var(--space-5); }
+}
+/* 후보 표(공용 CandidateList): 전략 열이 한 글자씩 세로로 접히지 않게. 태블릿 세로에서는 근거 스트립과 겹치는 전략 열을 빼고 칸을 좁힌다 */
+.disc-rec-main .ui-table td:nth-child(2) { min-width: 8em; }
+@media (min-width: 600px) and (max-width: 839.98px) {
+  .disc-rec-main .ui-table th:nth-child(2), .disc-rec-main .ui-table td:nth-child(2) { display: none; }
+  .disc-rec-main .ui-table th, .disc-rec-main .ui-table td { padding-left: var(--space-2); padding-right: var(--space-2); }
 }
 .disc-posture { display: flex; align-items: center; gap: var(--space-3); }
 .disc-skip { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 2px var(--space-2); }

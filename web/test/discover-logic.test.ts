@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { BacktestResult, Candle, DayTradeCandidate, DayTradeCheckId } from "@jusik/shared";
 import {
-  FILTER_CHIPS, PREFILTER_REASON, SCAN_DEFAULTS, bindingRejection, changedKeys, draftProblems, filterCandidates, filterCounts, indexEquity, lastScanText,
+  FILTER_CHIPS, FIXED_RULES, PREFILTER_REASON, SCAN_DEFAULTS, bindingRejection, changedKeys, draftProblems, filterCandidates, filterCounts, indexEquity, lastScanText,
   nextScanText, periodLabel, postureLine, rejectionAdvice, scanDraftOf, summarizeBacktest, topRejection,
 } from "../src/screens/discover/logic";
-import { ALL_STRATEGIES, btCostText, defaultParams, fmtYmd, hasRegimeToggle, runSelected, strategyMeta } from "../src/screens/discover/strategyRun";
+import { ALL_STRATEGIES, btCostText, defaultParams, fmtYmd, hasRegimeToggle, runSelected, signalEvidenceFor, strategyMeta } from "../src/screens/discover/strategyRun";
 
 const ALL_MET: Record<DayTradeCheckId, boolean | null> = { volume2x: true, breakout20: true, trend: true, closeHigh: true, momentum: true, regime: true };
 
@@ -171,5 +171,23 @@ describe("전략 실행", () => {
     expect(btCostText("KR")).toBe("수수료 0.015%(매수·매도) · 매도세 0.18% · 슬리피지 0.1%");
     expect(btCostText("KR", false)).not.toMatch(/슬리피지/);
     expect(defaultParams("US").initialCash).toBe(10_000);
+  });
+});
+
+describe("고정 규칙과 지금 신호 근거", () => {
+  it("고정 규칙은 공용 단타 기준값에서 만든다", () => {
+    const text = FIXED_RULES.map((r) => `${r.label} ${r.value}`).join(" / ");
+    expect(text).toContain("당일 등락률 +2% ~ +20%");
+    expect(text).toContain("RSI(14) 80 이하");
+    expect(text).toContain("20일선 이격 25% 이하");
+    expect(text).toContain("최소 주가 국내 1,000원 · 미국 $2");
+  });
+  it("근거 칸이 있는 전략만 지금 신호를 만든다", () => {
+    const c = cand("005930");
+    expect(signalEvidenceFor("daytrade-breakout", null, c)?.strategy).toBe("daytrade");
+    expect(signalEvidenceFor("daytrade-breakout", null, null)).toBeNull();
+    expect(signalEvidenceFor("weinstein", null, c)).toBeNull();
+    expect(signalEvidenceFor("rsi-recovery", null, c)).toBeNull();
+    expect(signalEvidenceFor("seol-swing", null, c)).toBeNull();
   });
 });

@@ -463,7 +463,7 @@ function Comparison({ data, region, cash, selected, onPick }: { data: StockData;
         </>
       )}
       <div className="ui-table-wrap disc-table-scroll">
-        <table className="ui-table">
+        <table className="ui-table disc-cmp">
           <caption className="sr-only">전략 비교(행을 누르면 그 전략을 미리보기로)</caption>
           <thead>
             <tr>
