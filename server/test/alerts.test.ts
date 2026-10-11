@@ -98,3 +98,16 @@ describe("journal check and self check", () => {
     expect(cleared.entry.selfCheck).toBeUndefined();
   });
 });
+
+describe("today P&L in server state", () => {
+  it("reports equity change since the day-start snapshot of today's market date", async () => {
+    const { app, store } = setup();
+    store.state.dayStart.KRW = { date: "2024-03-18", equity: 10_000_000 };
+    store.state.paper.KRW.cash = 9_900_000;
+    store.state.dayStart.USD = { date: "2024-03-15", equity: 7_000 }; // 지난 날짜 기록은 쓰지 않는다
+    const r = (await app.inject("/api/state")).json();
+    expect(r.todayPnl.KRW).toMatchObject({ date: "2024-03-18", pnl: -100_000 });
+    expect(r.todayPnl.KRW.pct).toBeCloseTo(-1, 9);
+    expect(r.todayPnl.USD).toBeUndefined();
+  });
+});
