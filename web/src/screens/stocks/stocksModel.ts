@@ -188,6 +188,19 @@ export function weinsteinMarks(candles: Candle[], indexCandles?: Candle[] | null
   return out;
 }
 
+/** 주(weekKey)별 와인스타인 단계 판정(일봉 보조 신호를 그 주 주봉 근거와 함께 보여 줄 때) */
+export function stagesByWeek(candles: Candle[], indexCandles?: Candle[] | null): Map<string, StageResult> {
+  const weekly = completedWeeks(toWeekly(candles));
+  const ctx = prepareStage(weekly);
+  const rs = indexCandles?.length ? relativeStrength(weekly, toWeekly(indexCandles)) : undefined;
+  const out = new Map<string, StageResult>();
+  weekly.forEach((w, k) => {
+    const r = stageAt(ctx, k, rs);
+    if (r) out.set(w.weekKey, r);
+  });
+  return out;
+}
+
 /** 캔들마스터 주봉 매수 신호(파동이 해석 대상인 주만 — 그렇지 않으면 진입 근거가 아니다) */
 export function candleMarks(candles: Candle[]): SignalMark[] {
   const weekly = completedWeeks(toWeekly(candles));
@@ -458,4 +471,13 @@ export function saveMemo(code: string, text: string): boolean {
   } catch {
     return false;
   }
+}
+
+// ───────────────────────── 문장 ─────────────────────────
+
+/** 목적격 조사: 받침이 있으면 '을', 없으면 '를'. 한글이 아니면 '을(를)' */
+export function objParticle(word: string): string {
+  const c = word.charCodeAt(word.length - 1) - 0xac00;
+  if (!(c >= 0 && c < 11172)) return "을(를)";
+  return c % 28 === 0 ? "를" : "을";
 }

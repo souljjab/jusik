@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Candle } from "@jusik/shared";
 import {
-  barLabel, barTimeOf, candleMarks, chartMarkers, chartSummary, clampStopPct, dailyMarks, defaultPeriod, krTick, loadMemo, marksForPeriod, moveItem,
+  barLabel, barTimeOf, candleMarks, chartMarkers, chartSummary, clampStopPct, dailyMarks, defaultPeriod, krTick, loadMemo, marksForPeriod, moveItem, objParticle,
   orderPreview, parseStockRoute, restoreAt, saveMemo, stateLabel, stepCode, stopFromPct, toBars, weinsteinMarks, type SignalMark,
 } from "../src/screens/stocks/stocksModel";
 
@@ -212,6 +212,11 @@ describe("watchlist helpers", () => {
   it("defaults the period by strategy", () => {
     expect(defaultPeriod(true)).toBe("D");
     expect(defaultPeriod(false)).toBe("W");
+  });
+  it("picks the object particle", () => {
+    expect(objParticle("삼성전자")).toBe("를");
+    expect(objParticle("세온바이오텍")).toBe("을");
+    expect(objParticle("AAPL")).toBe("을(를)");
   });
   it("memo storage degrades without localStorage", () => {
     expect(loadMemo("005930")).toBe("");
