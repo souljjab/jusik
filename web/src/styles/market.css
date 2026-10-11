@@ -1,0 +1,69 @@
+/* --- 단타 화면의 시장 폭·매크로 요약·ISM/분봉 설정·분봉 보류 (mk-) --- */
+.mk-help { margin: 4px 0; }
+
+/* 국면 상자 안 시장 폭 요약 */
+.mk-bsum { margin-top: 4px; padding-top: 6px; border-top: 1px dashed var(--border); display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mk-bsum-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.mk-facts { display: flex; flex-wrap: wrap; gap: 2px 10px; }
+.mk-fact { min-width: 0; overflow-wrap: anywhere; }
+.mk-basis { overflow-wrap: anywhere; }
+
+/* 시장 폭 점수 표시(+1 / 0 / -1) */
+.mk-score { display: inline-block; min-width: 26px; padding: 0 6px; border-radius: 999px; border: 1px solid currentColor; font-size: 11px; font-weight: 700; line-height: 17px; text-align: center; }
+
+/* 매크로 요약 줄(ISM·금리 추세) */
+.mk-macro { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; }
+.mk-macro > span { min-width: 0; }
+
+/* 시장 폭 카드 */
+.card.mk-breadth > summary { display: flex; align-items: center; gap: 4px 8px; flex-wrap: wrap; list-style: none; }
+.card.mk-breadth > summary::-webkit-details-marker { display: none; }
+/* flex로 바꾸면 기본 삼각형이 사라져 접기 표시를 직접 그린다 */
+.card.mk-breadth > summary::before { content: "▸"; color: var(--muted); width: 12px; }
+.card.mk-breadth[open] > summary::before { content: "▾"; }
+.card.mk-breadth[open] > summary { margin-bottom: 8px; }
+.mk-bar { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
+.seg.mk-seg { flex-wrap: wrap; max-width: 100%; margin-bottom: 0; }
+.seg.mk-seg button { padding: 6px 12px; }
+@media (max-width: 480px) { .seg.mk-seg button { padding: 6px 9px; } }
+.mk-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; margin: 8px 0 4px; }
+.mk-pending { margin: 8px 0; padding: 10px 12px; border-radius: 8px; background: var(--bg); display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
+.mk-pending p { margin: 0; flex: 1 1 220px; }
+.mk-sub { margin: 14px 0 4px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; }
+.mk-breadth .notes { font-size: 13px; }
+.mk-errors { margin-top: 8px; }
+
+/* 거래소 전체 등락 종목 수 */
+.mk-counts { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 6px 0; }
+.mk-count { background: var(--bg); border-radius: 8px; padding: 6px 4px; display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.mk-count b { font-size: 15px; }
+@media (max-width: 480px) { .mk-counts { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+/* 차트 */
+.mk-chart-wrap { margin-top: 10px; }
+.mk-chart-bar { display: flex; align-items: center; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap; margin-bottom: 6px; }
+.mk-chart { width: 100%; min-width: 0; }
+.mk-legend { margin: 4px 0 0; display: flex; flex-wrap: wrap; gap: 2px 12px; }
+.mk-key { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+.mk-empty { margin: 8px 0; padding: 18px 12px; border-radius: 8px; background: var(--bg); text-align: center; }
+
+/* 신고가·신저가 */
+.mk-hilo { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin: 6px 0; }
+.mk-hilo .metric b { font-size: 15px; }
+
+/* 설정: ISM 직접 입력·분봉 확인 */
+.form.mk-form { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); align-items: end; }
+.form.mk-form .mk-clear { align-self: end; padding: 8px 0; }
+.form .mk-select { width: 100%; }
+.mk-modes { margin: 4px 0; }
+.mk-modes li { color: var(--muted); }
+.mk-modes li.mk-on { color: var(--text); }
+.mk-now { margin: 2px 0 4px; }
+
+/* 분봉 확인으로 보류한 종목 */
+.mk-skips .notes li { overflow-wrap: anywhere; }
+.mk-verdict { display: inline-block; padding: 0 8px; border-radius: 999px; font-size: 11px; font-weight: 700; line-height: 18px; color: #fff; background: #78879b; white-space: nowrap; vertical-align: middle; }
+.mk-verdict-avoid { background: #b91c1c; }
+.mk-verdict-wait { background: #b45309; }
+.mk-verdict-buy { background: #15803d; }
+.chip.mk-held { background: #b45309; }
