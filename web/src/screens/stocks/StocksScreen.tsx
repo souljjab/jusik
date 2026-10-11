@@ -199,7 +199,17 @@ function Detail({ code, tab, minute, bp, reviewRef, sideW, onSideW }: {
         ...(signals.plan.plan.target ? [{ price: signals.plan.plan.target, title: "목표", kind: "target" as const }] : []),
       ]
     : [];
-  const chart = <ChartArea data={data} at={st.at} period={period} onPeriod={changePeriod} signals={signals} onSelect={selectSignal} lines={lines} bp={bp} height={height} />;
+  // 태블릿 가로: 차트 바로 아래 신호 근거(D)와 포지션 계산(E)
+  const de =
+    bp === "expanded" ? (
+      <div className="stk-de">
+        <section className="stk-de-ev" aria-label="신호 근거 요약">
+          <SignalBlock view={signals.selected} name={data.info.name} code={code} variant="brief" />
+        </section>
+        <PositionCalc ctx={ctx} stopPct={stopPct} onStopPct={setStopPct} />
+      </div>
+    ) : undefined;
+  const chart = <ChartArea data={data} at={st.at} period={period} onPeriod={changePeriod} signals={signals} onSelect={selectSignal} lines={lines} bp={bp} height={height} afterChart={de} />;
   const tabs = (
     <Tabs
       label="종목 상세"
@@ -212,7 +222,7 @@ function Detail({ code, tab, minute, bp, reviewRef, sideW, onSideW }: {
   );
   const panel = (
     <div ref={tabRef} id={`stk-tab-${tab}`} role="tabpanel" aria-labelledby={`stk-tab-tab-${tab}`} className="stk-tabpanel" tabIndex={-1}>
-      <TabBody tab={tab} data={data} signals={signals} brief={single} compact={bp === "compact"} />
+      <TabBody tab={tab} data={data} signals={signals} brief={single} compact={bp === "compact" || large} />
     </div>
   );
 
@@ -240,12 +250,6 @@ function Detail({ code, tab, minute, bp, reviewRef, sideW, onSideW }: {
       <div className="stk-detail">
         <StockHeader data={data} at={st.at} />
         {chart}
-        <div className="stk-de">
-          <section className="stk-de-ev" aria-label="신호 근거 요약">
-            <SignalBlock view={signals.selected} name={data.info.name} code={code} variant="brief" />
-          </section>
-          <PositionCalc ctx={ctx} stopPct={stopPct} onStopPct={setStopPct} />
-        </div>
         {tabs}
         {panel}
         <Disclaimer />

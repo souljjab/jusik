@@ -41,8 +41,18 @@ export function CompactEvidence({ cells, onlyUnmet = false }: { cells: EvidenceC
   );
 }
 
-/** 신호 한 덩어리. full: 칸 이름까지 보이는 스트립 + 규칙별 목록 + 근거 문장, brief: 작은 스트립 + 짧은 목록 */
-export function SignalBlock({ view, name, code, variant, headingLevel = "h3" }: { view: SignalView; name: string; code: string; variant: "full" | "brief"; headingLevel?: "h2" | "h3" }) {
+/**
+ * 신호 한 덩어리. full: 칸 이름까지 보이는 스트립 + 규칙별 목록 + 근거 문장, brief: 작은 스트립 + 짧은 목록(onlyUnmet이면 미충족만 경고색으로),
+ * mini: 머리 + 스트립 + 근거 보기(다른 신호 목록)
+ */
+export function SignalBlock({ view, name, code, variant, headingLevel = "h3", onlyUnmet = false }: {
+  view: SignalView;
+  name: string;
+  code: string;
+  variant: "full" | "brief" | "mini";
+  headingLevel?: "h2" | "h3";
+  onlyUnmet?: boolean;
+}) {
   const { openEvidence } = useActions();
   const ev = view.evidence;
   const H = headingLevel;
@@ -57,10 +67,10 @@ export function SignalBlock({ view, name, code, variant, headingLevel = "h3" }: 
           </span>
           <H className="t-section">{view.title}</H>
         </div>
-        {ev && variant === "brief" && <EvidenceStrip evidence={ev} size="md" />}
+        {ev && variant !== "full" && <EvidenceStrip evidence={ev} size="md" />}
       </div>
-      {view.historical && <p className="t-cap">지난 신호예요. 단계·국면 칸은 그 주 기준으로 다시 계산했고(매크로·시장 폭 제외), 실적 칸은 지금 공시 기준이에요.</p>}
-      {ev ? (
+      {view.historical && variant !== "mini" && <p className="t-cap">지난 신호예요. 단계·국면 칸은 그 주 기준으로 다시 계산했고(매크로·시장 폭 제외), 실적 칸은 지금 공시 기준이에요.</p>}
+      {variant === "mini" ? null : ev ? (
         variant === "full" ? (
           <>
             <EvidenceStripFull evidence={ev} />
@@ -69,13 +79,13 @@ export function SignalBlock({ view, name, code, variant, headingLevel = "h3" }: 
         ) : (
           <>
             <span className="t-2">{evidenceSummary(ev)}</span>
-            <CompactEvidence cells={ev.cells} />
+            <CompactEvidence cells={ev.cells} onlyUnmet={onlyUnmet} />
           </>
         )
       ) : (
         !view.daily && <p className="t-2">분석에 필요한 주봉(약 34주 이상)이 모자라 근거를 만들지 못했어요.</p>
       )}
-      {view.daily && (
+      {view.daily && variant !== "mini" && (
         <div className="stack">
           <span className="t-2">이 날의 일봉 보조 신호(참고 신호예요. 주봉 의견을 바꾸지 않아요){ev ? " · 위 칸은 그 주 주봉 근거예요" : ""}</span>
           <DailySignalList signals={view.daily} />
@@ -124,7 +134,7 @@ export function EvidencePanel({ data, signals, settings, journal, brief = false 
   const others = signals.current.filter((v) => v.id !== sel.id);
   return (
     <div className="stk-evpanel">
-      <SignalBlock view={sel} name={info.name} code={info.code} variant={brief ? "brief" : "full"} />
+      <SignalBlock view={sel} name={info.name} code={info.code} variant={brief ? "brief" : "full"} onlyUnmet={brief} />
       {brief && <KeyFigures data={data} />}
       <SignalStatsView code={info.code} strategy={sel.strategy} />
       {others.length > 0 && (
@@ -134,9 +144,9 @@ export function EvidencePanel({ data, signals, settings, journal, brief = false 
           </h3>
           {others.map((v) => (
             <div key={v.id} className="stk-other">
-              <SignalBlock view={v} name={info.name} code={info.code} variant="brief" headingLevel="h3" />
+              <SignalBlock view={v} name={info.name} code={info.code} variant="mini" headingLevel="h3" />
               <Button variant="secondary" size="sm" onClick={() => signals.select(v.id)}>
-                이 신호로 보기
+                이 신호로 근거 보기
               </Button>
             </div>
           ))}

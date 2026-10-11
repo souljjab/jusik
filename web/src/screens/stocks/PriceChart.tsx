@@ -136,8 +136,8 @@ export function PriceChart({
     if (toggles.rsi && rsiEl.current) {
       const c = make(rsiEl.current, (p) => p.toFixed(0));
       rsi = c.addLineSeries({ color: colors.accent, lineWidth: 1, priceLineVisible: false, lastValueVisible: true, crosshairMarkerRadius: 3 });
-      rsi.createPriceLine({ price: 70, color: colors.muted, lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: true });
-      rsi.createPriceLine({ price: 30, color: colors.muted, lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: true });
+      rsi.createPriceLine({ price: 70, color: colors.muted, lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: false });
+      rsi.createPriceLine({ price: 30, color: colors.muted, lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: false });
       c.priceScale("right").applyOptions({ scaleMargins: { top: 0.1, bottom: 0.1 } });
       panes.push({ chart: c, series: rsi, values: new Map() });
     }

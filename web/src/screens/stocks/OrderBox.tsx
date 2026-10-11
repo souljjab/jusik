@@ -75,13 +75,13 @@ export function OrderBox({ ctx, onReview, reviewRef }: { ctx: OrderContext; onRe
 
   // 신호(계획)가 바뀌면 손절·목표를 다시 채운다. 가격은 직접 고치지 않았으면 현재가를 따라간다
   useEffect(() => {
-    setStop(ctx.plan?.stop ? fmtInputPrice(String(roundPx(ctx.plan.stop, ctx.region)), ctx.region) : "");
-    setTarget(ctx.plan?.target ? fmtInputPrice(String(roundPx(ctx.plan.target, ctx.region)), ctx.region) : "");
+    setStop(ctx.plan?.stop ? pxInput(ctx.plan.stop, ctx.region) : "");
+    setTarget(ctx.plan?.target ? pxInput(ctx.plan.target, ctx.region) : "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [planKey]);
   useEffect(() => setPriceDirty(false), [ctx.code]);
   useEffect(() => {
-    if (!priceDirty) setPrice(fmtInputPrice(String(ctx.price), ctx.region));
+    if (!priceDirty) setPrice(fmtInputPrice(ctx.region === "US" ? ctx.price.toFixed(2) : String(ctx.price), ctx.region));
   }, [ctx.price, ctx.region, priceDirty]);
 
   const p = parseInputPrice(price), st = parseInputPrice(stop), tg = parseInputPrice(target);
@@ -112,6 +112,7 @@ export function OrderBox({ ctx, onReview, reviewRef }: { ctx: OrderContext; onRe
     >
       <Segmented
         label="주문 방향"
+        size="sm"
         className="stk-order-side"
         value={side}
         onChange={setSide}
@@ -180,6 +181,9 @@ export function OrderBox({ ctx, onReview, reviewRef }: { ctx: OrderContext; onRe
     </form>
   );
 }
+
+/** 입력칸 처음 값(국내 원 단위 정수 + 쉼표, 미국 소수 둘째 자리) */
+const pxInput = (n: number, region: Region) => fmtInputPrice(region === "US" ? n.toFixed(2) : String(Math.round(n)), region);
 
 /** 가격 단위 맞추기(국내 원 단위 정수, 미국 센트) */
 export const roundPx = (n: number, region: Region) => (region === "US" ? Math.round(n * 100) / 100 : Math.round(n));

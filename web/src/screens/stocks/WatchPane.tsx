@@ -118,26 +118,31 @@ export function WatchPane({ selected, mode, onMode, compact = false }: { selecte
     setUndo({ code, index });
   };
 
+  const seg = (
+    <Segmented
+      label="목록"
+      size="sm"
+      className="stk-list-mode"
+      value={mode}
+      onChange={(m) => (onMode(m), setEditing(false))}
+      options={[{ value: "watch", label: `관심 ${watchlist.length}` }, { value: "recs", label: `추천 ${recs.length}` }]}
+    />
+  );
+
   return (
     <section className={`stk-list ${compact ? "compact" : ""}`} aria-labelledby="stk-list-h">
       <div className="stk-list-head">
         <h2 id="stk-list-h" className={compact ? "sr-only" : "t-section"}>
           {mode === "watch" ? "관심종목" : "추천 후보"}
         </h2>
+        {compact && seg}
         {mode === "watch" && watchlist.length > 0 && (
           <Button variant="ghost" size="sm" onClick={() => (setEditing((v) => !v), setUndo(null))} aria-pressed={editing}>
             {editing ? "편집 끝내기" : "편집"}
           </Button>
         )}
       </div>
-      <Segmented
-        label="목록"
-        size="sm"
-        className="stk-list-mode"
-        value={mode}
-        onChange={(m) => (onMode(m), setEditing(false))}
-        options={[{ value: "watch", label: `관심 ${watchlist.length}` }, { value: "recs", label: `추천 ${recs.length}` }]}
-      />
+      {!compact && seg}
       <StockSearch onPick={(code) => navigate(stockPath(code))} />
 
       {undo && (

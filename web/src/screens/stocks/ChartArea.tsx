@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { marketSession, regionOf } from "@jusik/shared";
 import type { StockData } from "../../api";
 import { useApp } from "../../app/AppContext";
@@ -48,7 +48,7 @@ function SignalItem({ v, kind, selected, onSelect }: { v: Pick<SignalView, "id" 
   );
 }
 
-export function ChartArea({ data, at, period, onPeriod, signals, onSelect, lines, bp, height }: {
+export function ChartArea({ data, at, period, onPeriod, signals, onSelect, lines, bp, height, afterChart }: {
   data: StockData;
   at: number | null;
   period: Period;
@@ -59,6 +59,8 @@ export function ChartArea({ data, at, period, onPeriod, signals, onSelect, lines
   lines: ChartLine[];
   bp: Breakpoint;
   height: number;
+  /** 차트 바로 아래에 둘 내용(태블릿 가로: 신호 근거 D와 포지션 계산 E) */
+  afterChart?: ReactNode;
 }) {
   const large = bp === "large";
   const region = regionOf(data.info.market);
@@ -84,7 +86,8 @@ export function ChartArea({ data, at, period, onPeriod, signals, onSelect, lines
   const markers = useMemo(() => chartMarkers(visible, bars, barPeriod), [visible, bars, barPeriod]);
   const marks = useMemo(() => [...marksForPeriod(visible, barPeriod)].reverse(), [visible, barPeriod]);
   const open = marketSession(region, now).state === "open";
-  const shownMarks = allMarks ? marks : marks.slice(0, SHOWN_MARKS);
+  const limit = bp === "compact" ? 3 : SHOWN_MARKS;
+  const shownMarks = allMarks ? marks : marks.slice(0, limit);
   const last = data.candles.at(-1);
 
   return (
@@ -133,6 +136,7 @@ export function ChartArea({ data, at, period, onPeriod, signals, onSelect, lines
             {open ? `시세 ${at ? fmtAsOf(at) : "-"}` : `시세 ${last ? fmtDate(last.date) : "-"} 종가 기준`}
             {open && last ? ` · 일봉 ${fmtDate(last.date)}` : ""} · 주봉 신호는 마감된 주 기준이에요
           </p>
+          {afterChart}
           <section className="stk-sigarea" aria-labelledby="stk-sig-h">
             <div className="row between wrap">
               <h3 id="stk-sig-h" className="t-body t-bold">
@@ -160,9 +164,9 @@ export function ChartArea({ data, at, period, onPeriod, signals, onSelect, lines
                 />
               ))}
             </ul>
-            {marks.length > SHOWN_MARKS && (
-              <Button variant="link" onClick={() => setAllMarks((v) => !v)}>
-                {allMarks ? "최근 신호만 보기" : `지난 신호 ${marks.length - SHOWN_MARKS}개 더 보기`}
+            {marks.length > limit && (
+              <Button variant="link" className="stk-more" onClick={() => setAllMarks((v) => !v)}>
+                {allMarks ? "최근 신호만 보기" : `지난 신호 ${marks.length - limit}개 더 보기`}
               </Button>
             )}
             {!marks.length && <p className="t-2">이 기간 차트에 표시할 지난 신호가 없어요.</p>}

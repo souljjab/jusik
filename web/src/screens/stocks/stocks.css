@@ -19,7 +19,7 @@
 .stk-pane-center { display: flex; flex-direction: column; gap: var(--space-4); padding: 0 var(--space-4); }
 .stk-pane-side { display: flex; flex-direction: column; overflow: hidden; padding-left: var(--space-3); }
 .stk-side-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: var(--space-4) var(--space-1) var(--space-4) 0; }
-.stk-side-order { flex: none; max-height: 62%; overflow-y: auto; border-top: 1px solid var(--color-border); padding: var(--space-3) var(--space-1) 0 0; }
+.stk-side-order { flex: none; max-height: 56%; overflow-y: auto; border-top: 1px solid var(--color-border); padding: var(--space-3) var(--space-1) 0 0; }
 .stk-nopick { display: grid; place-items: center; }
 
 /* ───────── 태블릿 가로: 목록-상세 ───────── */
@@ -32,7 +32,8 @@
   min-height: 520px;
 }
 .stk-expanded .stk-pane-list { border-right: 1px solid var(--color-border); padding-right: var(--space-4); }
-.stk-pane-detail { padding-bottom: var(--space-7); }
+/* 아래쪽 내용이 떠 있는 주문 버튼(F) 위로 올라오게 */
+.stk-pane-detail { padding-bottom: calc(var(--space-7) * 2); }
 .stk-expanded .stk-pane-detail > .ui-empty { height: 100%; justify-content: center; }
 
 /* ───────── 한 화면(태블릿 세로·핸드폰) ───────── */
@@ -45,6 +46,9 @@
 .stk-list-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: 32px; }
 .stk-list.compact .stk-list-head { min-height: 0; }
 .stk-list-mode { align-self: flex-start; }
+.stk-list.compact .stk-list-mode { align-self: center; }
+.stk-more { min-height: 32px; }
+@media (max-width: 1199.98px) { .stk-more { min-height: var(--touch-min); } }
 .stk-list-foot { padding-top: var(--space-1); }
 .stk-rows { list-style: none; margin: 0; padding: 0; }
 .stk-row { display: flex; align-items: center; flex-wrap: wrap; border-bottom: 1px solid var(--color-border); border-radius: var(--radius-chip); }
@@ -238,15 +242,15 @@
 .stk-journal li:first-child { border-top: 0; }
 
 /* ───────── 주문 미리 보기(G) ───────── */
-.stk-order { display: flex; flex-direction: column; gap: var(--space-3); }
+.stk-order { display: flex; flex-direction: column; gap: var(--space-2); }
 .stk-order-side { display: flex; width: 100%; }
 .stk-order-side button { flex: 1; }
 .stk-order-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(96px, 150px); gap: var(--space-2) var(--space-3); align-items: center; }
-.stk-order-grid .ui-input { min-height: 34px; padding-top: var(--space-1); padding-bottom: var(--space-1); }
+.stk-order-grid .ui-input { min-height: 32px; padding-top: 2px; padding-bottom: 2px; }
 .stk-order-lbl { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-1) var(--space-2); }
 .stk-order-hint { grid-column: 1 / -1; margin-top: calc(-1 * var(--space-1)); font-size: var(--font-size-caption); }
 .stk-req { font-size: var(--font-size-caption); color: var(--color-accent); border: 1px solid var(--color-accent-line); border-radius: var(--radius-chip); padding: 0 4px; font-weight: var(--font-weight-bold); }
-.stk-order-risk { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-1) var(--space-3); margin: 0; padding-top: var(--space-3); border-top: 1px solid var(--color-border); align-items: baseline; }
+.stk-order-risk { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px var(--space-3); margin: 0; padding-top: var(--space-2); border-top: 1px solid var(--color-border); align-items: baseline; }
 .stk-order-risk dt { color: var(--color-text-2); font-size: var(--font-size-secondary); }
 .stk-order-risk dd { margin: 0; text-align: right; font-weight: var(--font-weight-bold); font-variant-numeric: tabular-nums; }
 .stk-order-risk dd:first-of-type { font-size: var(--font-size-section); }
