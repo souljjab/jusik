@@ -9,6 +9,16 @@ import { useExtras } from "./useExtras";
 
 const MARKET_LABEL: Record<Market, string> = { KOSPI: "코스피", KOSDAQ: "코스닥", US: "미국" };
 
+/** 핸드폰·태블릿 세로: 관심종목 목록으로 돌아가기 */
+export function BackLink() {
+  return (
+    <a className="stk-back" href={href("/stocks")}>
+      <ChevronLeft size={20} strokeWidth={1.5} aria-hidden="true" />
+      관심종목
+    </a>
+  );
+}
+
 /**
  * 가격 머리말(UI 지도서 5.2 B): 현재가를 가장 크게, 등락은 색·삼각형·부호를 함께. 장 상태와 기준 시각, 관심종목 별.
  * 핸드폰·태블릿 세로에서는 위에 '관심종목'으로 돌아가는 단추를 둔다.
@@ -24,12 +34,7 @@ export function StockHeader({ data, at, back = false }: { data: StockData; at: n
 
   return (
     <header className="stk-head">
-      {back && (
-        <a className="stk-back" href={href("/stocks")}>
-          <ChevronLeft size={20} strokeWidth={1.5} aria-hidden="true" />
-          관심종목
-        </a>
-      )}
+      {back && <BackLink />}
       <div className="stk-head-top">
         <div className="stk-head-name">
           <h1 className="t-title ellipsis">{info.name}</h1>

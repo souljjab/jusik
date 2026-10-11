@@ -64,8 +64,11 @@ const num = (s: string) => {
 const MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 const PLAN_LABEL = { weinstein: "와인스타인 참고 손절가", candle: "캔들마스터 신호 손절가", daytrade: "단타 후보 손절가" } as const;
 
-/** 컴퓨터 오른쪽 패널 아래 주문 상자(G) */
-export function OrderBox({ ctx, onReview }: { ctx: OrderContext; onReview: (r: OrderRequest) => void }) {
+/** 슬라이더 비율 → 손절가 */
+export const stopFromPctCtx = (ctx: OrderContext, pct: number) => stopFromPct(ctx.price, pct, ctx.region);
+
+/** 컴퓨터 오른쪽 패널 아래 주문 상자(G). reviewRef에 검토 열기를 걸어 Ctrl(⌘)+Enter가 이 상자의 값으로 시트를 연다 */
+export function OrderBox({ ctx, onReview, reviewRef }: { ctx: OrderContext; onReview: (r: OrderRequest) => void; reviewRef?: { current: (() => void) | null } }) {
   const id = useId();
   const [side, setSide] = useState<"BUY" | "SELL">("BUY");
   const [price, setPrice] = useState("");
@@ -93,6 +96,13 @@ export function OrderBox({ ctx, onReview }: { ctx: OrderContext; onReview: (r: O
   const buy = side === "BUY";
   const pct = (x: number) => (p > 0 && x > 0 ? fmtPct((x / p - 1) * 100, 1) : "");
   const review = () => onReview(orderRequest(ctx, side, { price: p || undefined, stop: st || undefined, target: tg || null }));
+  useEffect(() => {
+    if (!reviewRef) return;
+    reviewRef.current = review;
+    return () => {
+      reviewRef.current = null;
+    };
+  });
 
   return (
     <form

@@ -294,21 +294,21 @@ export function PriceChart({
       </figcaption>
       <div ref={mainEl} className="stk-chart-main" role="img" aria-label={`${summary}. 차트 아래 신호 목록에서 신호를 고를 수 있어요`} style={{ height }} />
       {volPane && (
-        <div className="stk-pane">
-          <span className="stk-pane-lbl t-cap">거래량</span>
-          <div ref={volEl} className="stk-pane-box" style={{ height: 72 }} aria-hidden="true" />
+        <div className="stk-subpane">
+          <span className="stk-subpane-lbl t-cap">거래량</span>
+          <div ref={volEl} className="stk-subpane-box" style={{ height: 72 }} aria-hidden="true" />
         </div>
       )}
       {toggles.rsi && (
-        <div className="stk-pane">
-          <span className="stk-pane-lbl t-cap">RSI 14 · 70 과매수 · 30 과매도</span>
-          <div ref={rsiEl} className="stk-pane-box" style={{ height: 96 }} aria-hidden="true" />
+        <div className="stk-subpane">
+          <span className="stk-subpane-lbl t-cap">RSI 14 · 70 과매수 · 30 과매도</span>
+          <div ref={rsiEl} className="stk-subpane-box" style={{ height: 96 }} aria-hidden="true" />
         </div>
       )}
       {toggles.macd && (
-        <div className="stk-pane">
-          <span className="stk-pane-lbl t-cap">MACD 12·26·9</span>
-          <div ref={macdEl} className="stk-pane-box" style={{ height: 96 }} aria-hidden="true" />
+        <div className="stk-subpane">
+          <span className="stk-subpane-lbl t-cap">MACD 12·26·9</span>
+          <div ref={macdEl} className="stk-subpane-box" style={{ height: 96 }} aria-hidden="true" />
         </div>
       )}
       <span className="sr-only">{PERIOD_NAME[period]}</span>
