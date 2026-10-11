@@ -115,7 +115,7 @@ export function buildApp({ provider, store, exporter, scheduler, macro, extras, 
     if (!breadth) return { ...empty, errors: ["시장 폭 공급자가 없어요"] };
     const r = await withTimeout(breadth.getBreadth(market), BREADTH_WAIT_MS);
     if (!r) return { ...empty, pending: true };
-    logBreadthToday(store, market, marketClock(regionOf(market), now()).date, r.today);
+    logBreadthToday(store, market, marketClock(regionOf(market), now()).date, r);
     const out: BreadthResponse = {
       market, pending: false, analysis: r.analysis, today: r.today, log: (store.state.breadthLog[market] ?? []).slice(-250), basketSize: r.basket.length, errors: r.errors, sample: r.sample,
     };

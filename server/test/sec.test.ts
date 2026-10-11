@@ -252,6 +252,68 @@ describe("parseCompanyFacts", () => {
     expect(g.quarterly[0]!.period).toBe("2021.03");
   });
 
+  it("restates EPS filed before a stock split to the latest share basis", () => {
+    // 2024-06 4:1 분할. 2023년 실적은 분할 전 기준으로 처음 보고됐고, 2024년 10-Q 비교값으로 분할 후 기준이 보인다
+    const g = parseCompanyFacts(
+      facts({
+        NetIncomeLoss: {
+          USD: [
+            fact("2023-01-01", "2023-12-31", 400 * M, "10-K", "2024-02-21"),
+            fact("2023-01-01", "2023-03-31", 100 * M, "10-Q", "2023-05-05"),
+            fact("2023-04-01", "2023-06-30", 100 * M, "10-Q", "2023-08-04"),
+            fact("2023-07-01", "2023-09-30", 100 * M, "10-Q", "2023-11-03"),
+            fact("2024-07-01", "2024-09-30", 120 * M, "10-Q", "2024-11-01"),
+          ],
+        },
+        EarningsPerShareDiluted: {
+          "USD/shares": [
+            fact("2023-01-01", "2023-12-31", 4.0, "10-K", "2024-02-21"),
+            fact("2023-01-01", "2023-03-31", 1.0, "10-Q", "2023-05-05"),
+            fact("2023-04-01", "2023-06-30", 1.0, "10-Q", "2023-08-04"),
+            fact("2023-07-01", "2023-09-30", 1.0, "10-Q", "2023-11-03"),
+            fact("2023-07-01", "2023-09-30", 0.25, "10-Q", "2024-11-01"), // 분할 후 비교값
+            fact("2024-07-01", "2024-09-30", 0.3, "10-Q", "2024-11-01"),
+          ],
+        },
+      }),
+    );
+    expect(g.annual.find((p) => p.period === "2023.12")).toMatchObject({ eps: 1, filed: "2024-02-21" });
+    expect(g.quarterly.map((p) => [p.period, p.eps])).toEqual([
+      ["2023.03", 0.25],
+      ["2023.06", 0.25],
+      ["2023.09", 0.25],
+      ["2023.12", 0.25],
+      ["2024.09", 0.3],
+    ]);
+  });
+
+  it("does not derive Q4 EPS across share bases it could not reconcile", () => {
+    // 3분기 보고 뒤 2:1 분할 — 연간 EPS는 분할 후 기준인데 비교값이 아직 없어 분기는 분할 전 기준으로 남는다
+    const g = parseCompanyFacts(
+      facts({
+        NetIncomeLoss: {
+          USD: [
+            fact("2023-01-01", "2023-12-31", 400 * M, "10-K", "2024-02-21"),
+            fact("2023-01-01", "2023-03-31", 100 * M, "10-Q", "2023-05-05"),
+            fact("2023-04-01", "2023-06-30", 100 * M, "10-Q", "2023-08-04"),
+            fact("2023-07-01", "2023-09-30", 100 * M, "10-Q", "2023-11-03"),
+          ],
+        },
+        EarningsPerShareDiluted: {
+          "USD/shares": [
+            fact("2023-01-01", "2023-12-31", 2.0, "10-K", "2024-02-21"),
+            fact("2023-01-01", "2023-03-31", 1.0, "10-Q", "2023-05-05"),
+            fact("2023-04-01", "2023-06-30", 1.0, "10-Q", "2023-08-04"),
+            fact("2023-07-01", "2023-09-30", 1.0, "10-Q", "2023-11-03"),
+          ],
+        },
+      }),
+    );
+    const q4 = g.quarterly.find((p) => p.period === "2023.12")!;
+    expect(q4).toMatchObject({ derived: true, netIncome: 100 });
+    expect(q4.eps).toBeUndefined();
+  });
+
   it("returns empty results for unknown shapes or non-USD units", () => {
     const empty = { annual: [], quarterly: [] };
     expect(parseCompanyFacts("oops")).toEqual(empty);

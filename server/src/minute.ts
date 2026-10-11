@@ -111,8 +111,11 @@ export function parseYahooMinute(text: string): IntradayBar[] {
   const r = json?.chart?.result?.[0];
   const ts: unknown = r?.timestamp;
   const off: unknown = r?.meta?.gmtoffset;
+  const tzName: unknown = r?.meta?.exchangeTimezoneName;
   const q = r?.indicators?.quote?.[0];
   if (!Array.isArray(ts) || typeof off !== "number" || !Number.isFinite(off) || !q) return [];
+  // 거래소 시간대 이름이 있으면 봉마다 그 시각의 오프셋으로 바꾼다(5일 범위가 서머타임 전환을 걸칠 때 gmtoffset 하나로는 한 시간 밀린다)
+  const local = typeof tzName === "string" && tzName ? localStamper(tzName) : null;
   const at = (arr: unknown, i: number): number | null => {
     const x = Array.isArray(arr) ? arr[i] : null;
     return typeof x === "number" && Number.isFinite(x) ? x : null;
@@ -121,10 +124,24 @@ export function parseYahooMinute(text: string): IntradayBar[] {
   ts.forEach((sec, i) => {
     const close = at(q.close, i);
     if (typeof sec !== "number" || close == null || !(close > 0)) return;
-    const t = new Date((sec + off) * 1000).toISOString().slice(0, 16);
+    const t = local?.(sec) ?? new Date((sec + off) * 1000).toISOString().slice(0, 16);
     bars.push(fillBar(t, at(q.open, i), at(q.high, i), at(q.low, i), close, at(q.volume, i)));
   });
   return dedupeSort(bars);
+}
+
+/** 시간대 이름 → (초) → 그 시간대 현지 'YYYY-MM-DDTHH:mm'. 모르는 시간대면 null */
+function localStamper(tz: string): ((sec: number) => string) | null {
+  let fmt: Intl.DateTimeFormat;
+  try {
+    fmt = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return null;
+  }
+  return (sec) => {
+    const p = Object.fromEntries(fmt.formatToParts(new Date(sec * 1000)).map((x) => [x.type, x.value]));
+    return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
+  };
 }
 
 export interface SessionWindow {

@@ -348,6 +348,17 @@ describe("valuationNotes", () => {
     expect(below[0]!.tone).toBe("good");
     expect(below[0]!.text).toContain("최저(8배)");
   });
+  it("does not call a Stage 4 (falling) stock a value candidate and adds the Weinstein warning", () => {
+    const ns = valuationNotes({ band: mk(8.5, "low"), psr: null, epsGrowthPositive: true, growthGroup: "A", stage: 4, marketPer: 12 });
+    expect(ns.some((n) => n.tone === "good")).toBe(false);
+    expect(ns[0]).toMatchObject({ tone: "info", rule: "M2-09 강영현·최병운" });
+    expect(ns[0]!.text).toContain("4단계");
+    const w = ns.find((n) => n.rule === "3.3 와인스타인")!;
+    expect(w.tone).toBe("warn");
+    expect(w.text).toContain("PER이 아무리 낮아도 사지 말고");
+    // 2단계면 그대로 가치 후보
+    expect(valuationNotes({ band: mk(8.5, "low"), psr: null, epsGrowthPositive: true, growthGroup: "A", stage: 2 })[0]!.tone).toBe("good");
+  });
   it("adds the common warning when growth is negative or unknown", () => {
     const neg = valuationNotes({ band: mk(8.5, "low"), psr: null, epsGrowthPositive: false });
     expect(rules(neg)).toEqual(["good:M2-09 강영현·최병운", "info:3.3 최병운", CHEAP]);

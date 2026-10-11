@@ -356,7 +356,8 @@ describe("periodicReports / attachFiledDates", () => {
     ]);
     expect(r).toEqual([
       { period: "2023.06", kind: "반기보고서", filed: "2023-08-14", deadline: "2023-08-14", late: false },
-      { period: "2023.09", kind: "분기보고서", filed: "2023-11-20", deadline: "2023-11-14", late: true, amended: true },
+      // 정정본만 보이면 원본 제출일을 몰라 기한 초과로 보지 않는다
+      { period: "2023.09", kind: "분기보고서", filed: "2023-11-20", deadline: "2023-11-14", late: false, amended: true },
       { period: "2023.12", kind: "사업보고서", filed: "2024-03-12", deadline: "2024-04-01", late: false },
       { period: "2024.03", kind: "분기보고서", filed: "2024-05-14", deadline: "2024-05-15", late: false },
     ]);
@@ -378,6 +379,13 @@ describe("periodicReports / attachFiledDates", () => {
     const out = attachFiledDates(periods, reports);
     expect(out.map((p) => p.filed)).toEqual(["2023-03-14", undefined, "2024-03-12"]);
     expect(periods[0]!.filed).toBeUndefined(); // 원본은 그대로
+  });
+
+  it("does not use an amended report's date as the original filing date", () => {
+    const reports = periodicReports([d("2024-06-20", "[기재정정]사업보고서 (2023.12)")]);
+    expect(reports[0]).toMatchObject({ amended: true, late: false });
+    const out = attachFiledDates([{ period: "2023.12", estimate: false, revenue: 1 }], reports);
+    expect(out[0]!.filed).toBeUndefined();
   });
 });
 

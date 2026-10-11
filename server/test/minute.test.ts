@@ -96,6 +96,21 @@ describe("parseYahooMinute", () => {
     ]);
   });
 
+  it("converts each bar with the exchange time zone so bars before a DST change keep their local time", () => {
+    const before = Date.UTC(2024, 2, 8, 14, 30) / 1000; // 2024-03-08 09:30 EST(UTC−5), 서머타임 시작 전
+    const body = JSON.stringify({
+      chart: {
+        result: [{
+          meta: { symbol: "AAPL", exchangeTimezoneName: "America/New_York", gmtoffset: -14400 },
+          timestamp: [before, t0],
+          indicators: { quote: [{ open: [1, 2], high: [1, 2], low: [1, 2], close: [1, 2], volume: [1, 2] }] },
+        }],
+        error: null,
+      },
+    });
+    expect(parseYahooMinute(body).map((b) => b.t)).toEqual(["2024-03-08T09:30", "2024-03-18T09:30"]);
+  });
+
   it("returns [] when the local offset or the structure is missing", () => {
     expect(parseYahooMinute(json({}))).toEqual([]);
     expect(parseYahooMinute(json({ gmtoffset: "x" }))).toEqual([]);

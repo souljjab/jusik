@@ -9,7 +9,7 @@ import { MockExtras, MockMacro } from "../src/extras";
 import { minuteDecision } from "../src/intradayCheck";
 import { MockMinuteSource, type MinuteSource } from "../src/minute";
 import { MockUsSource } from "../src/mockUs";
-import { runScan, syncPaperWithDeposit } from "../src/scanner";
+import { logBreadthToday, runScan, syncPaperWithDeposit } from "../src/scanner";
 import { Scheduler } from "../src/scheduler";
 import { sanitizeSettings, Store } from "../src/state";
 import { buildTables } from "../src/tables";
@@ -34,14 +34,14 @@ function setup(over: Record<string, unknown> = {}, minute: MinuteSource | null =
 }
 
 /** END 10:30 KST까지의 1분봉: 전일 종가 대비 +12% 갭으로 시작해 계속 밀리는 장(1분봉 20분선 지지 없음) */
-function gapFadeBars(prevClose: number): IntradayBar[] {
+function gapFadeBars(prevClose: number, date = END): IntradayBar[] {
   const out: IntradayBar[] = [];
   let px = prevClose * 1.12;
   for (let m = 0; m < 90; m++) {
     const h = 9 + Math.floor(m / 60), mm = m % 60;
     const open = px;
     px = px * 0.998;
-    out.push({ t: `${END}T${String(h).padStart(2, "0")}:${String(mm).padStart(2, "0")}`, open, high: open * 1.001, low: px * 0.999, close: px, volume: 1000 });
+    out.push({ t: `${date}T${String(h).padStart(2, "0")}:${String(mm).padStart(2, "0")}`, open, high: open * 1.001, low: px * 0.999, close: px, volume: 1000 });
   }
   return out;
 }
@@ -151,5 +151,63 @@ describe("ISM manual value, DART and US extras", () => {
     expect(t.find((x) => x.name === "시장폭")!.rows.length).toBeGreaterThan(0);
     expect(t.find((x) => x.name === "추천(최신)")!.headers).toContain("분봉 확인(진입 보류)");
     expect(t.find((x) => x.name === "요약")!.rows.some((r) => r[0] === "ISM 제조업지수")).toBe(true);
+  });
+});
+
+describe("round-2 review fixes", () => {
+  it("only uses today's 1-minute session for the entry check (a previous session counts as no data)", async () => {
+    const stale: MinuteSource = {
+      sample: true,
+      async getMinuteBars() {
+        const daily = await new StubProvider().getCandles("000001", 80);
+        return gapFadeBars(daily.at(-3)!.close, daily.at(-2)!.date); // 직전 거래일 분봉만 있다
+      },
+    };
+    const filter = setup({ minuteMode: "filter" }, stale);
+    const a = await runScan(filter.deps);
+    expect(a.minuteSkips).toEqual([]);
+    expect(filter.store.state.paper.KRW.positions.length).toBeGreaterThan(0);
+
+    const strict = setup({ minuteMode: "strict" }, stale);
+    const b = await runScan(strict.deps);
+    expect(b.minuteSkips!.length).toBeGreaterThan(0);
+    expect(b.minuteSkips![0]!.reason).toContain("분봉 자료가 없어");
+  });
+
+  it("logs exchange-wide breadth only when the basket's last day is the market date", () => {
+    const { store } = setup({ paperEnabled: false });
+    const today = { up: 500, upperLimit: 3, unchanged: 50, down: 300, lowerLimit: 1 };
+    logBreadthToday(store, "KOSPI", "2024-03-18", { today, days: [{ date: "2024-03-15" }] as never });
+    expect(store.state.breadthLog.KOSPI ?? []).toHaveLength(0);
+    logBreadthToday(store, "KOSPI", "2024-03-18", { today, days: [{ date: "2024-03-18" }] as never });
+    expect(store.state.breadthLog.KOSPI).toEqual([{ date: "2024-03-18", ...today }]);
+  });
+
+  it("uses the sample ISM when the manual value is too old, and says so", async () => {
+    const r = await new MockMacro(now).getSnapshot({ ism: { value: 47, month: "2023-06" } });
+    expect(r.snapshot.ism).toBeTruthy();
+    expect(r.snapshot.ism!.source).not.toBe("수동");
+    expect(r.errors.some((e) => e.includes("수동 입력(2023-06)") && e.includes("오래돼"))).toBe(true);
+  });
+
+  it("shows a missing SEC_USER_AGENT as an info note, not an error", async () => {
+    const us = new MockUsSource(now);
+    const extras = new MockExtras(now, undefined, { usHolders: (c) => us.holders(c) });
+    const { store, provider } = setup({ paperEnabled: false });
+    const deps = { provider, store, macro: new MockMacro(now), extras, now };
+    const app = buildApp({ ...deps, exporter: new Exporter({ excelPath: join(tmp(), "j.xlsx"), sheets: null, debounceMs: 1, build: () => [] }), scheduler: new Scheduler(deps) });
+    const r = (await app.inject("/api/stocks/AAPL/extras")).json();
+    expect(r.errors).toEqual([]);
+    expect(r.notes.some((n: { tone: string; text: string }) => n.tone === "info" && n.text.includes("SEC_USER_AGENT"))).toBe(true);
+  });
+
+  it("labels a manual ISM that the last scan could not use", async () => {
+    const { store, deps } = setup({ paperEnabled: false });
+    const ismRow = () => buildTables(store.state, { provider: "stub", sample: true, now: now() }).find((x) => x.name === "요약")!.rows.find((r) => r[0] === "ISM 제조업지수")![1];
+    store.state.settings.ismManual = { value: 47, month: "2024-02" };
+    expect(ismRow()).toContain("다음 스캔부터 적용");
+    await runScan(deps);
+    store.state.latestScan!.macroSummary!.ism = null;
+    expect(ismRow()).toContain("미적용");
   });
 });

@@ -88,7 +88,7 @@ export async function loadStockExtras(src: ExtrasSource, code: string, today: st
   if (src.dart) {
     try {
       const all = await src.dart.disclosures(code, DART_REPORT_DAYS);
-      out.reports = periodicReports(all).map(({ period, kind, filed, deadline, late }) => ({ period, kind, filed, deadline, late }));
+      out.reports = periodicReports(all).map(({ period, kind, filed, deadline, late, amended }) => ({ period, kind, filed, deadline, late, ...(amended ? { amended } : {}) }));
       const from = new Date(Date.parse(today) - 90 * 86_400_000).toISOString().slice(0, 10);
       out.disclosures = all.filter((d) => d.date >= from);
       out.disclosureSource = "DART";
@@ -148,7 +148,8 @@ async function loadUsExtras(src: ExtrasSource, code: string, today: string, out:
     } catch (e) {
       out.errors.push(`SEC 공시: ${msg(e)}`);
     }
-  } else if (out.supported) out.errors.push("SEC 공시: SEC_USER_AGENT가 없어 받지 않았어요(server/.env 참고)");
+  } else if (out.supported)
+    out.notes.push({ tone: "info", text: "미국 공시(SEC)는 server/.env의 SEC_USER_AGENT를 넣어야 받아요." });
   return out;
 }
 
@@ -268,11 +269,17 @@ export class MockMacro implements MacroSource {
     Object.assign(series, sampleIsmProxySeries(now.getTime()));
     // ISM: 직접 입력이 있으면 그 값, 없으면 샘플 ISM
     let ism = await new MockIsmSource(() => now.getTime()).getLatest().then((r): IsmReading => r);
+    const sample = ism;
     if (override?.ism) {
       const m = manualIsm(override.ism, now.toISOString().slice(0, 10));
       if ("error" in m) errors.push(`ISM 수동 입력: ${m.error} — 샘플 값으로 대신해요`);
       else ism = m.reading;
     }
-    return { snapshot: buildMacroSnapshot(series, { ism }), errors, fetchedAt: now.toISOString() };
+    let snapshot = buildMacroSnapshot(series, { ism });
+    if (ism.source === "수동" && !snapshot.ism) {
+      errors.push(`ISM 수동 입력(${ism.month})이 오래돼 쓰지 않고 샘플 값(${sample.month})을 써요`);
+      snapshot = buildMacroSnapshot(series, { ism: sample });
+    }
+    return { snapshot, errors, fetchedAt: now.toISOString() };
   }
 }

@@ -164,7 +164,7 @@ export interface StockExtras {
   /** 공시 목록 출처 */
   disclosureSource?: "네이버" | "DART" | "SEC" | null;
   /** DART 정기보고서 제출 현황(국내, DART 키가 있을 때) */
-  reports?: { period: string; kind: string; filed: string; deadline: string; late: boolean }[];
+  reports?: { period: string; kind: string; filed: string; deadline: string; late: boolean; /** 정정본만 확인됨(원본 제출일 모름) */ amended?: boolean }[];
   /** 미국: 기관·내부자·공매도 현황(야후) */
   us?: { holders: UsHolders | null } | null;
   flows: InvestorFlow[];

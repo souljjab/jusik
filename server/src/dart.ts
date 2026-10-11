@@ -288,7 +288,8 @@ export function periodicReports(list: Disclosure[]): PeriodicReport[] {
     const end = periodEnd(period);
     if (!end) continue;
     const deadline = rollWeekend(addDays(end, DART_PARAMS.reportDeadlineDays[kind]));
-    const r: PeriodicReport = { period, kind, filed: d.date, deadline, late: d.date > deadline, ...(m[1] ? { amended: true as const } : {}) };
+    // 정정본만 보이면 원본 제출일을 알 수 없어 기한 초과로 보지 않는다
+    const r: PeriodicReport = { period, kind, filed: d.date, deadline, late: !m[1] && d.date > deadline, ...(m[1] ? { amended: true as const } : {}) };
     const key = `${kind}|${period}`;
     const prev = best.get(key);
     const better = !prev || (prev.amended && !r.amended) || (!!prev.amended === !!r.amended && r.filed < prev.filed);
@@ -303,7 +304,8 @@ export function periodicReports(list: Disclosure[]): PeriodicReport[] {
  * 이미 filed가 있으면 그대로 둔다.
  */
 export function attachFiledDates(periods: PeriodFinancials[], reports: PeriodicReport[]): PeriodFinancials[] {
-  const filed = new Map(reports.filter((r) => r.kind === "사업보고서").map((r) => [r.period, r.filed]));
+  // 정정본 제출일은 원래 공시일이 아니므로 쓰지 않는다
+  const filed = new Map(reports.filter((r) => r.kind === "사업보고서" && !r.amended).map((r) => [r.period, r.filed]));
   return periods.map((p) => (p.filed || !filed.has(p.period) ? p : { ...p, filed: filed.get(p.period)! }));
 }
 

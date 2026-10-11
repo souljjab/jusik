@@ -8,7 +8,7 @@ import type { MacroSnapshot } from "./macro";
 import { marketRegime, REGIME_LABEL, type RegimeResult } from "./regime";
 import { assessRegime, DEFAULT_POSTURE_CAPS, POSTURE_LABEL, type Posture, type RegimeAssessment } from "./regimeScore";
 import { screenFundamentals, screeningNotes, type ScreeningResult } from "./screening";
-import { MIN_WEEKS, prepareStage, relativeStrength, stageAt, STAGE_LABEL, type StageResult } from "./stage";
+import { MIN_WEEKS, prepareStage, relativeStrength, stageAt, STAGE_LABEL, type Stage, type StageResult } from "./stage";
 import { technicalScoreAt } from "./technical";
 import { perBand, psr, valuationNotes, type PerBand, type PsrResult } from "./valuation";
 import type { Action, Candle, Fundamentals, Note, Region, ScoreResult } from "./types";
@@ -119,18 +119,18 @@ export function analyze({ candles, fundamentals, indexCandles, macro, region, po
     candlePatterns: detectCandlePatterns(candles),
     shortTerm: technicalScoreAt(candles, ind, candles.length - 1),
     dailySignals: dailySignals(candles, { regime: regime?.regime ?? null }),
-    valuation: valuationOf(candles, fundamentals, screening, macro),
+    valuation: valuationOf(candles, fundamentals, screening, macro, timing.stage),
     candleMaster: candleMaster(candles),
   };
 }
 
-function valuationOf(candles: Candle[], f: Fundamentals | undefined, screening: ScreeningResult, macro: MacroSnapshot | null | undefined): Analysis["valuation"] {
+function valuationOf(candles: Candle[], f: Fundamentals | undefined, screening: ScreeningResult, macro: MacroSnapshot | null | undefined, stage: Stage | null): Analysis["valuation"] {
   const band = perBand(candles, f ?? {});
   const p = f ? psr(f) : null;
   const g = screening.metrics.epsGrowth;
   const notes = valuationNotes({
     band, psr: p, rateRising: macro?.rateRising ?? null, growthGroup: screening.growthGroup,
-    epsGrowthPositive: g != null ? g > 0 : undefined,
+    epsGrowthPositive: g != null ? g > 0 : undefined, stage,
   });
   return { band, psr: p, notes };
 }

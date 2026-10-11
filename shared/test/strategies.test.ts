@@ -700,6 +700,21 @@ describe("candle master strategy", () => {
     expect(t.entryReason).toContain("비표준");
   });
 
+  it("defers entry to the price where the stop fits within −20% when the signal stop is too wide (M4-01)", () => {
+    const fri = { date: "2024-03-15", open: 60, high: 61, low: 59, close: 60, volume: 1 };
+    const res = (over: Record<string, unknown>) => ({ valid: false, stop: 40, waitPrice: 50, close: 56, signals: [{ name: "양봉 스프링" }], entry: null, entryMid: null, targetMultiple: null, ...over });
+    const prep = (r: unknown) => ({ candles: [fri], weekly: [], weekOf: [0], results: [r] }) as never;
+    const e = candleMasterStrategy().entry(0, prep(res({})))!;
+    expect(e).toMatchObject({ stop: 40, limitPrice: 50, targetPct: 100, targetFraction: 1, rule: "M4-01 캔들마스터" });
+    expect(e.reason).toContain("비표준");
+    // 중간 지점 모드: 중간 지점이 더 낮으면 그 가격
+    expect(candleMasterStrategy({ entryMode: "mid" }).entry(0, prep(res({})))!.limitPrice).toBe(48);
+    expect(candleMasterStrategy({ entryMode: "mid" }).entry(0, prep(res({ close: 64 })))!.limitPrice).toBe(50);
+    // 손절가가 없거나 기다릴 가격이 없으면(파동이 해석 대상이 아님) 들어가지 않는다
+    expect(candleMasterStrategy().entry(0, prep(res({ waitPrice: null })))).toBeNull();
+    expect(candleMasterStrategy().entry(0, prep(res({ stop: null })))).toBeNull();
+  });
+
   it("needs a year of weekly candles", () => {
     expect(runStrategy(candleMasterStrategy(), bars(base.slice(0, 40 * 5)))).toBeNull();
     expect(compareStrategies(bars(base.slice(0, 40 * 5))).find((x) => x.id === "candle-master")!.result).toBeNull();

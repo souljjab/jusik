@@ -276,3 +276,17 @@ describe("MacroProvider + ISM", () => {
     expect(down.calls).toContain(`${ISM_URL}february/`);
   });
 });
+
+describe("MacroProvider manual ISM", () => {
+  it("falls back to the scraped ISM when the manual value is too old to use", async () => {
+    const now = Date.parse("2024-03-18T00:00:00Z");
+    const ism: IsmLatestSource = { async getLatest() { return { value: 49.1, month: "2024-02", date: "2024-03-01", source: "ISM" }; } };
+    const p = new MacroProvider(fakeHttp(ALL), 1000, { now: () => now, ism });
+    const { snapshot, errors } = await p.getSnapshot({ ism: { value: 47, month: "2023-06" } });
+    expect(snapshot.ism).toMatchObject({ value: 49.1, month: "2024-02", source: "ISM" });
+    expect(errors.some((e) => e.includes("수동 입력(2023-06)") && e.includes("사이트 값(2024-02)"))).toBe(true);
+    // 수동 값이 신선하면 수동 값을 쓴다
+    const fresh = await p.getSnapshot({ ism: { value: 47, month: "2024-02" } });
+    expect(fresh.snapshot.ism).toMatchObject({ value: 47, source: "수동" });
+  });
+});

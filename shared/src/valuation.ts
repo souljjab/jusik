@@ -1,4 +1,5 @@
 import { confirmedPeriods, type GrowthGroup } from "./screening";
+import type { Stage } from "./stage";
 import type { Candle, Fundamentals, Note, PeriodFinancials } from "./types";
 
 /*
@@ -288,6 +289,8 @@ export interface ValuationNoteInput {
   epsGrowthPositive?: boolean;
   /** 시장 평균 PER(배). 있으면 안전마진(3.3 최병운)도 본다 */
   marketPer?: number | null;
+  /** 와인스타인 주봉 단계. 4단계(하락)면 낮은 PER을 가치 후보로 보지 않는다(3.3 와인스타인) */
+  stage?: Stage | null;
   /** 밴드 백분위 표기용(perBand에 넘긴 값과 같게) */
   params?: Partial<PerBandParams>;
 }
@@ -299,6 +302,7 @@ const CHEAP_RULE = "3.3 강영현·최병운·와인스타인·강동진";
 /**
  * PER 밴드·안전마진·PSR 근거 Note.
  * - 현재 PER ≤ 밴드 하단(p20) → 가치 후보(good, M2-09). 이익 성장이 확인되지 않으면 '싸다는 이유만으로 사지 말라'(warn, 3.3 공통 경고)
+ *   주가가 4단계(하락)면 가치 후보 대신 info로 낮추고 '4단계 종목은 PER이 낮아도 사지 말라'(warn, 3.3 와인스타인)를 붙인다
  * - 현재 PER ≥ 밴드 상단(p80) → 비싸게 거래 중(warn)
  * - PSR ≥ 20: 금리 상승기면 bad(M2-10), 금리를 모르면 warn, 금리 상승기가 아니면 info. PSR ≥ 10 → info(3.3 김연수)
  */
@@ -309,6 +313,7 @@ export function valuationNotes(input: ValuationNoteInput): Note[] {
   const cur = band?.current;
   const per = cur?.per ?? null;
   const years = band ? `최근 ${fx(band.years)}년` : "";
+  const falling = input.stage === 4;
   let cheap = false;
 
   if (cur && per == null) {
@@ -320,7 +325,11 @@ export function valuationNotes(input: ValuationNoteInput): Note[] {
     } else if (band.position === "below" || band.position === "low") {
       cheap = true;
       const where = band.position === "below" ? `PER 밴드 최저(${fx(s.min)}배) 수준까지 내려왔어요` : `PER 밴드 하단(하위 ${P.lowPct}% ${fx(s.p20)}배) 이하예요`;
-      notes.push({ tone: "good", text: `현재 PER ${fx(per)}배로 ${years} ${where}. 가치 후보예요`, rule: BAND_RULE });
+      notes.push(
+        falling
+          ? { tone: "info", text: `현재 PER ${fx(per)}배로 ${years} ${where}. 다만 주가가 4단계(하락)라 아직 가치 후보로 보지 않아요`, rule: BAND_RULE }
+          : { tone: "good", text: `현재 PER ${fx(per)}배로 ${years} ${where}. 가치 후보예요`, rule: BAND_RULE },
+      );
       const t = band.target;
       if (t && t.upsidePct > 0)
         notes.push({ tone: "info", text: `PER이 밴드 중앙값 ${fx(t.multiple)}배로 돌아가면 주가는 약 ${fx(t.upsidePct, 0)}% 오를 수 있는 자리예요(목표가 역산)`, rule: "3.3 최병운" });
@@ -335,9 +344,11 @@ export function valuationNotes(input: ValuationNoteInput): Note[] {
   const mp = input.marketPer;
   if (per != null && mp != null && mp > 0 && per <= mp) {
     cheap = true;
-    notes.push({ tone: "good", text: `현재 PER ${fx(per)}배가 시장 평균 PER ${fx(mp)}배 이하라 안전마진이 생긴 자리예요`, rule: "3.3 최병운" });
+    notes.push({ tone: falling ? "info" : "good", text: `현재 PER ${fx(per)}배가 시장 평균 PER ${fx(mp)}배 이하라 안전마진이 생긴 자리예요`, rule: "3.3 최병운" });
   }
 
+  if (cheap && falling)
+    notes.push({ tone: "warn", text: "주가가 30주선 아래로 내려가는 4단계(하락)예요. 4단계 종목은 PER이 아무리 낮아도 사지 말고 2단계 돌파를 기다리세요", rule: "3.3 와인스타인" });
   if (cheap) {
     const negative = input.epsGrowthPositive === false || input.growthGroup === "B";
     const positive = !negative && (input.epsGrowthPositive === true || input.growthGroup === "A");

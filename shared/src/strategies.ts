@@ -732,7 +732,7 @@ export function candleMasterStrategy(partial: Partial<CandleMasterStrategyParams
     name: "캔들마스터 주봉 캔들",
     source: "캔들마스터",
     timeframe: "weekly",
-    description: `직전 파동과 간격을 둔 수평 파동에서 주봉 매수 신호 캔들(양봉 스프링·꼬리 양봉·꼬리군)이 나오면 종가와 손절가 사이 ${P.entryMode === "mid" ? "중간" : "1/3"} 지점에 약 ${Math.round(P.limitBars / 5)}주 동안 지정가로 기다려요. 손절은 신호 저점 아래(최대 −${CP.maxStopPct}%), 목표는 표준 ${CP.standardMultiple}배·비표준 ${CP.nonStandardMultiple}배이고, +100%에 닿은 뒤엔 손절을 본전으로 올려요.`,
+    description: `직전 파동과 간격을 둔 수평 파동에서 주봉 매수 신호 캔들(양봉 스프링·꼬리 양봉·꼬리군)이 나오면 종가와 손절가 사이 ${P.entryMode === "mid" ? "중간" : "1/3"} 지점에 약 ${Math.round(P.limitBars / 5)}주 동안 지정가로 기다려요(손절폭이 −${CP.maxStopPct}%를 넘으면 범위 안에 드는 가격까지). 손절은 신호 저점 아래(최대 −${CP.maxStopPct}%), 목표는 표준 ${CP.standardMultiple}배·비표준 ${CP.nonStandardMultiple}배이고, +100%에 닿은 뒤엔 손절을 본전으로 올려요.`,
     rules: ["4.5 캔들마스터", "M3-12 캔들마스터", "M3-13 캔들마스터", "M4-01 캔들마스터"],
     prepare(candles) {
       const weekly = toWeekly(candles);
@@ -746,15 +746,27 @@ export function candleMasterStrategy(partial: Partial<CandleMasterStrategyParams
     entry(i, p) {
       if (!isWeekEnd(p.candles, i)) return null;
       const r = p.results[p.weekOf[i]!];
-      if (!r?.valid || r.entry == null || r.entryMid == null || r.stop == null || r.targetMultiple == null) return null;
-      const limit = P.entryMode === "mid" ? r.entryMid : r.entry;
+      if (!r || r.stop == null) return null;
       const names = r.signals.map((s) => s.name).join(" · ");
+      if (r.valid && r.entry != null && r.entryMid != null && r.targetMultiple != null) {
+        const limit = P.entryMode === "mid" ? r.entryMid : r.entry;
+        return {
+          stop: r.stop, stopRule: "M4-01 캔들마스터",
+          targetPct: (r.targetMultiple - 1) * 100, targetFraction: 1, targetRule: "M3-13 캔들마스터",
+          limitPrice: limit, limitBars: P.limitBars, sizeFraction: P.sizeFraction,
+          reason: `주봉 ${names}(${r.standard ? "표준" : "비표준"} — 목표 ${r.targetMultiple}배), 지정가 ${px(limit)} 대기`,
+          rule: "M3-12 캔들마스터",
+        };
+      }
+      // 손절폭이 최대(M4-01)를 넘는 신호: 손절폭이 범위 안에 드는 가격(waitPrice)까지 내려올 때 지정가로 들어간다(비표준 → 목표 2배)
+      if (r.waitPrice == null) return null;
+      const limit = P.entryMode === "mid" ? Math.min(r.waitPrice, (r.close + r.stop) / 2) : r.waitPrice;
       return {
         stop: r.stop, stopRule: "M4-01 캔들마스터",
-        targetPct: (r.targetMultiple - 1) * 100, targetFraction: 1, targetRule: "M3-13 캔들마스터",
+        targetPct: (CP.nonStandardMultiple - 1) * 100, targetFraction: 1, targetRule: "M3-13 캔들마스터",
         limitPrice: limit, limitBars: P.limitBars, sizeFraction: P.sizeFraction,
-        reason: `주봉 ${names}(${r.standard ? "표준" : "비표준"} — 목표 ${r.targetMultiple}배), 지정가 ${px(limit)} 대기`,
-        rule: "M3-12 캔들마스터",
+        reason: `주봉 ${names} — 손절폭이 커 손절폭 −${CP.maxStopPct}% 이내가 되는 ${px(limit)}까지 지정가 대기(비표준 — 목표 ${CP.nonStandardMultiple}배)`,
+        rule: "M4-01 캔들마스터",
       };
     },
     exit: () => null,

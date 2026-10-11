@@ -41,7 +41,11 @@ export function buildTables(state: AppState, meta: { provider: string; sample: b
     ["매크로 기준일", scan?.macroAsOf ?? "-"],
     [
       "ISM 제조업지수",
-      scan?.macroSummary?.ism ? `${scan.macroSummary.ism.value} (${scan.macroSummary.ism.month}, ${scan.macroSummary.ism.source === "수동" ? "직접 입력" : "ISM"})` : s.ismManual ? `${s.ismManual.value} (${s.ismManual.month}, 직접 입력)` : "-",
+      scan?.macroSummary?.ism
+        ? `${scan.macroSummary.ism.value} (${scan.macroSummary.ism.month}, ${scan.macroSummary.ism.source === "수동" ? "직접 입력" : "ISM"})`
+        : s.ismManual
+          ? `${s.ismManual.value} (${s.ismManual.month}, 직접 입력 — ${scan?.macroSummary ? "오래되거나 맞지 않아 미적용" : "다음 스캔부터 적용"})`
+          : "-",
     ],
     ["금리 추세(미 10년물 6개월)", scan?.macroSummary?.us10yChange6m != null ? `${r2(scan.macroSummary.us10yChange6m)}%p${scan.macroSummary.rateRising ? " · 금리 상승기" : ""}` : "-"],
     [

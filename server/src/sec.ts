@@ -192,6 +192,9 @@ const round2 = (v: number) => Math.round(v * 100) / 100;
  *    여러 태그에 같은 기간 값이 있으면 먼저 제출된 쪽, 같은 날이면 태그 우선순위로 고른다
  *  - 한 기간의 filed는 그 기간 항목들의 제출일 중 가장 늦은 날(모든 값이 공개된 뒤에만 보이게)
  *  - 4분기 = 연간 − 1·2·3분기(셋 다 있을 때만, 항목별로). derived: true, filed = 연간 제출일
+ *  - EPS는 주식 분할을 맞춘다: 같은 기간 EPS가 나중 제출에서 분할 비율(2·3·1.5배 등)만큼 바뀌었으면 그 사이에 분할이 있던 것으로 보고,
+ *    분할 전에 제출된 EPS를 최신 주식 수 기준으로 나눈다(시세가 분할 조정돼 있어 PER·EPS 성장률이 맞도록).
+ *    값 자체(이익)는 처음 보고된 값이라 재작성은 미리 보지 않는다. 연간·분기의 주식 수 기준이 다르면 4분기 EPS는 만들지 않는다
  * USD 단위가 없거나 형식을 모르면 빈 배열(미검증).
  */
 export function parseCompanyFacts(input: unknown): SecFinancials {
@@ -221,12 +224,15 @@ export function parseCompanyFacts(input: unknown): SecFinancials {
     });
   }
 
+  const splits = epsSplitEvents(gaap);
+  const splitFactor = (filed: string) => splits.reduce((k, e) => (filed < e.date ? k * e.factor : k), 1);
+
   const rows = (kind: "A" | "Q"): Row[] =>
     [...pick[kind].entries()]
       .map(([end, slot]) => {
         const facts = METRICS.map((m) => slot[m]).filter((f): f is Fact => !!f);
         const vals: Partial<Record<Metric, number>> = {};
-        for (const m of METRICS) if (slot[m]) vals[m] = slot[m]!.val;
+        for (const m of METRICS) if (slot[m]) vals[m] = m === "eps" ? slot[m]!.val / splitFactor(slot[m]!.filed) : slot[m]!.val;
         // 기간 시작은 매출(없으면 첫 항목) 사실 기준
         const start = (slot.revenue ?? facts[0]!).start;
         return { start, end, filed: facts.map((f) => f.filed).sort().at(-1)!, vals };
@@ -247,6 +253,7 @@ export function parseCompanyFacts(input: unknown): SecFinancials {
       const fy = a.vals[m];
       const qs = inside.map((q) => q.vals[m]);
       if (fy == null || qs.some((v) => v == null)) continue;
+      if (m === "eps" && !sameShareBasis(a, inside)) continue;
       vals[m] = fy - qs.reduce<number>((s, v) => s + v!, 0);
     }
     if (!Object.keys(vals).length) continue;
@@ -267,6 +274,70 @@ export function parseCompanyFacts(input: unknown): SecFinancials {
 
   const quarterly = [...quarterRows, ...q4s].sort((a, b) => a.end.localeCompare(b.end)).map(toPeriod);
   return { annual: annualRows.map(toPeriod).slice(-P.annualKeep), quarterly: quarterly.slice(-P.quarterKeep) };
+}
+
+/** 분할로 볼 EPS 변화 배수의 최소값(3:2 분할 = 1.5배까지 잡고, 그보다 작은 재작성은 분할로 보지 않음, 앱 기본값) */
+const SPLIT_MIN_RATIO = 1.4;
+/** 분할 배수(0.5 단위)에서 이만큼(비율) 벗어나면 분할이 아닌 재작성으로 본다(앱 기본값) */
+const SPLIT_SNAP_TOL = 0.04;
+
+/** 두 EPS의 비(이전 / 나중)를 분할 배수로 맞춘다. 분할로 보기 어려우면 1 */
+function snapSplit(r: number): number {
+  if (!(r > 0) || !Number.isFinite(r)) return 1;
+  const big = r >= 1 ? r : 1 / r;
+  if (big < SPLIT_MIN_RATIO) return 1;
+  const h = Math.round(big * 2) / 2;
+  if (Math.abs(big - h) / h > SPLIT_SNAP_TOL) return 1;
+  return r >= 1 ? h : 1 / h;
+}
+
+/**
+ * EPS 사실에서 주식 분할(병합) 시점과 배수를 찾는다. 같은 태그·같은 기간의 EPS를 제출 순서로 보며
+ * 앞뒤 값의 비가 분할 배수면 그 두 제출일 사이에 분할이 반영된 것이다. 여러 기간에서 겹치는 구간은 한 번의 분할로 합치고,
+ * 시점(date)은 새 기준이 처음 보인 제출일이다(그 전에 제출된 EPS는 factor로 나눈다).
+ */
+function epsSplitEvents(gaap: any): { date: string; factor: number }[] {
+  const obs: { after: string; by: string; factor: number }[] = [];
+  for (const tag of SEC_TAGS.eps.tags) {
+    const list = gaap?.[tag]?.units?.[SEC_TAGS.eps.unit];
+    if (!Array.isArray(list)) continue;
+    const byPeriod = new Map<string, { val: number; filed: string }[]>();
+    for (const x of list) {
+      if (!x || !isDate(x.start) || !isDate(x.end) || !isDate(x.filed) || typeof x.val !== "number" || !Number.isFinite(x.val) || x.val === 0) continue;
+      const k = `${x.start}|${x.end}`;
+      byPeriod.set(k, [...(byPeriod.get(k) ?? []), { val: x.val, filed: x.filed }]);
+    }
+    for (const seq of byPeriod.values()) {
+      seq.sort((a, b) => a.filed.localeCompare(b.filed));
+      for (let i = 1; i < seq.length; i++) {
+        const prev = seq[i - 1]!, cur = seq[i]!;
+        if (prev.filed === cur.filed) continue;
+        const factor = snapSplit(prev.val / cur.val);
+        if (factor !== 1) obs.push({ after: prev.filed, by: cur.filed, factor });
+      }
+    }
+  }
+  obs.sort((a, b) => a.by.localeCompare(b.by));
+  const clusters: { lo: string; hi: string; factor: number }[] = [];
+  for (const o of obs) {
+    const c = clusters.find((x) => x.factor === o.factor && o.after < x.hi && x.lo < o.by);
+    if (c) {
+      if (o.after > c.lo) c.lo = o.after;
+      if (o.by < c.hi) c.hi = o.by;
+    } else clusters.push({ lo: o.after, hi: o.by, factor: o.factor });
+  }
+  return clusters.map((c) => ({ date: c.hi, factor: c.factor }));
+}
+
+/** 연간과 분기들의 (순이익 ÷ EPS)로 본 주식 수가 같은 기준인지. 순이익이 없으면 확인할 수 없어 true */
+function sameShareBasis(a: Row, qs: Row[]): boolean {
+  const shares = (r: Row) => (r.vals.netIncome != null && r.vals.eps ? r.vals.netIncome / r.vals.eps : null);
+  const base = shares(a);
+  if (base == null || base <= 0) return true;
+  return qs.every((q) => {
+    const s = shares(q);
+    return s == null || s <= 0 || snapSplit(s / base) === 1;
+  });
 }
 
 function shiftDate(d: string, n: number): string {

@@ -42,9 +42,14 @@ export function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
   });
 }
 
-/** 거래소 전체 상승·하락 종목 수를 그 시장 날짜로 쌓는다(같은 날은 최신 값으로 덮어쓴다) */
-export function logBreadthToday(store: Store, market: Market, date: string, today: BreadthResult["today"]) {
-  if (!today) return;
+/**
+ * 거래소 전체 상승·하락 종목 수를 그 시장 날짜로 쌓는다(같은 날은 최신 값으로 덮어쓴다).
+ * 바스켓 일봉의 마지막 날이 오늘일 때만 기록한다 — 주말·휴장일·개장 전에는 사이트가 직전 장 숫자를 보여 줘서
+ * 그대로 쌓으면 같은 장이 두 번 더해진다
+ */
+export function logBreadthToday(store: Store, market: Market, date: string, r: Pick<BreadthResult, "today" | "days">) {
+  const today = r.today;
+  if (!today || r.days.at(-1)?.date !== date) return;
   const log = (store.state.breadthLog[market] ??= []);
   const row = { date, ...today };
   const i = log.findIndex((r) => r.date === date);
@@ -192,7 +197,7 @@ export async function runScan(deps: Deps): Promise<ScanResult> {
     if (deps.breadth) {
       breadth = await withTimeout(deps.breadth.getBreadth(market), BREADTH_WAIT_MS);
       if (breadth) {
-        logBreadthToday(store, market, marketClock(region, at).date, breadth.today);
+        logBreadthToday(store, market, marketClock(region, at).date, breadth);
         const a = breadth.analysis;
         result.breadth![market] = a
           ? {
@@ -296,9 +301,11 @@ async function autoTrade(deps: Deps, scan: ScanResult, at: Date) {
           // 분봉 확인(4.7·M3-18): 시초가 갭 추격·회피 자리면 이번 스캔에서는 들어가지 않는다(다음 스캔에서 다시 본다)
           if (store.state.settings.minuteMode !== "off" && deps.minute) {
             const m = await minuteFor({ provider, minute: deps.minute }, item.candidate.code, at).catch(() => null);
-            const d = minuteDecision(store.state.settings.minuteMode, m?.assessment ?? null);
+            // 오늘 장 분봉으로 낸 판단만 쓴다(휴장일·장 전에는 직전 장 판단이 오므로 '자료 없음'으로 본다)
+            const a = m && m.sessionDate === clock.date ? m.assessment : null;
+            const d = minuteDecision(store.state.settings.minuteMode, a);
             if (!d.enter) {
-              scan.minuteSkips!.push({ code: item.candidate.code, name: item.candidate.name, verdict: m?.assessment?.entry.verdict ?? "wait", reason: d.reason });
+              scan.minuteSkips!.push({ code: item.candidate.code, name: item.candidate.name, verdict: a?.entry.verdict ?? "wait", reason: d.reason });
               continue;
             }
           }

@@ -115,7 +115,13 @@ export class MacroProvider {
       ism = scraped.reading;
       if (scraped.error) errors.push(`ISM: ${scraped.error}${ism ? ` — 지난번에 받은 값(${ism.month})으로 대신해요` : ""}`);
     }
-    const snapshot = buildMacroSnapshot(r.series, { ism });
+    let snapshot = buildMacroSnapshot(r.series, { ism });
+    // 직접 입력값이 오래돼 빠졌는데 사이트 값이 있으면 사이트 값으로 다시 만든다
+    if (ism?.source === "수동" && !snapshot.ism && scraped.reading) {
+      errors.push(`ISM 수동 입력(${ism.month})이 오래돼 쓰지 않고 사이트 값(${scraped.reading.month})을 써요`);
+      ism = scraped.reading;
+      snapshot = buildMacroSnapshot(r.series, { ism });
+    }
     if (ism && !snapshot.ism) errors.push(`ISM ${ism.month}(${ism.source}) 값이 오래돼 쓰지 않았어요 — 지역 연준 지수로 대신 판단해요`);
     return { snapshot, errors, fetchedAt: r.fetchedAt };
   }
