@@ -1,13 +1,16 @@
 import { useMemo } from "react";
 import {
-  ACTION_LABEL, expectancy, positionSize, POSTURE_LABEL, REGIME_LABEL, regionOfCode, screeningNotes, STAGE_LABEL, summarizeJournal,
-  type Action, type Analysis, type DailySignal, type JournalEntry, type Region, type RegimeAssessment, type ScreeningResult, type Settings,
+  ACTION_LABEL, expectancy, positionSize, POSTURE_LABEL, REGIME_LABEL, regionOfCode, screeningNotes, STAGE_LABEL, summarizeJournal, VALUATION_RULES,
+  type Action, type Analysis, type BandPosition, type BreadthResponse, type DailySignal, type JournalEntry, type Region, type RegimeAssessment,
+  type ScreeningResult, type Settings,
 } from "@jusik/shared";
+import { CandleMasterPanel } from "./CandleMasterPanel";
 import { ExtrasPanel } from "./ExtrasPanel";
 import { MacroStrip } from "./MacroStrip";
 import { NoteList, RuleTag } from "./NoteList";
 import { money, num, tone } from "./format";
 import "./styles/analysis.css";
+import "./styles/analysis2.css";
 
 export function ActionBadge({ action }: { action: Action }) {
   return <span className={`badge ${action}`}>{ACTION_LABEL[action]}</span>;
@@ -40,7 +43,7 @@ const ira = (word: string) => {
   return c >= 0 && c < 11172 && c % 28 !== 0 ? "이라" : "라";
 };
 
-const BREAKDOWN: [keyof RegimeAssessment["breakdown"], string][] = [["stage", "주봉 단계"], ["macd", "MACD"], ["rsi", "RSI"], ["macro", "매크로"]];
+const BREAKDOWN: [keyof RegimeAssessment["breakdown"], string][] = [["stage", "주봉 단계"], ["macd", "MACD"], ["rsi", "RSI"], ["macro", "매크로"], ["breadth", "시장 폭"]];
 
 /** ① 국면 점수·구성·투자 상한 */
 function PostureView({ p }: { p: RegimeAssessment }) {
@@ -51,11 +54,14 @@ function PostureView({ p }: { p: RegimeAssessment }) {
           국면 점수 <b className={tone(p.score)}>{signed(p.score)}</b>
         </span>
         <span className="an-breakdown" title="점수 구성(합이 국면 점수)">
-          {BREAKDOWN.map(([k, label]) => (
-            <span key={k}>
-              {label} <b className={tone(p.breakdown[k])}>{signed(p.breakdown[k])}</b>
-            </span>
-          ))}
+          {BREAKDOWN.map(([k, label]) => {
+            const v = p.breakdown[k] ?? 0;
+            return (
+              <span key={k} title={k === "breadth" ? "시장 폭(A/D선·MI·신고가-신저가) 보조 신호, -1~+1점" : undefined}>
+                {label} <b className={tone(v)}>{signed(v)}</b>
+              </span>
+            );
+          })}
         </span>
         <span>
           주식 투자 상한 <b>{p.exposureCapPct}%</b>
@@ -65,6 +71,75 @@ function PostureView({ p }: { p: RegimeAssessment }) {
       <NoteList notes={p.notes} />
       <p className="muted small">지수 기준일 {p.asOf}</p>
     </>
+  );
+}
+
+/** ① 시장 폭 한 줄: 무엇으로 계산했는지, 아직 계산 중인지 */
+function BreadthLine({ b }: { b: BreadthResponse | null }) {
+  if (!b || b.pending) return <p className="muted small an2-breadth">시장 폭 계산 중이에요 — 잠시 뒤 다시 열면 국면 점수에 더해져요</p>;
+  const x = b.analysis;
+  if (!x)
+    return (
+      <p className="muted small an2-breadth" title={b.errors.join("\n") || undefined}>
+        시장 폭을 계산하지 못해 국면 점수에서 뺐어요{b.errors.length ? ` (받지 못한 항목 ${b.errors.length}개)` : ""}
+      </p>
+    );
+  return (
+    <p className="muted small an2-breadth">
+      <span>
+        시장 폭: {x.basis} · {x.asOf} 집계 {x.sampleSize.toLocaleString("ko-KR")}종목
+      </span>
+      {b.sample && (
+        <span className="pill warn-pill" title="실제 값이 아닌 임의로 만든 시장 폭이에요">
+          샘플
+        </span>
+      )}
+    </p>
+  );
+}
+
+const BAND_POSITION_LABEL: Record<BandPosition, string> = {
+  below: "밴드 최저 이하",
+  low: "밴드 하단 이하",
+  mid: "밴드 중간",
+  high: "밴드 상단 이상",
+  above: "밴드 최고 이상",
+};
+
+/** ② 밸류에이션 요약 한 줄(PER 밴드 위치·PSR). 자세한 밴드는 「재무·스크리닝」 탭에 있다 */
+function ValuationLine({ v }: { v: Analysis["valuation"] }) {
+  const b = v.band;
+  const cur = b.current;
+  const ps = v.psr;
+  let per: React.ReactNode;
+  if (!cur) per = <span className="muted">PER - (확정 EPS 없음)</span>;
+  else if (cur.per == null) per = <span className="muted">PER - (최근 12개월 적자)</span>;
+  else
+    per = (
+      <span title={`EPS ${cur.basis} 기준(${cur.period})`}>
+        PER <b>{num(cur.per, 1)}배</b>
+        {b.position && b.stats ? (
+          <span className={`an2-pos an2-pos-${b.position}`} title={`최근 ${b.years}년 PER 밴드 ${num(b.stats.p20, 1)}~${num(b.stats.p80, 1)}배(하위·상위 20%)`}>
+            최근 {b.years}년 {BAND_POSITION_LABEL[b.position]}
+          </span>
+        ) : (
+          <span className="muted"> (밴드 표본 부족 · {b.n}거래일)</span>
+        )}
+      </span>
+    );
+  return (
+    <div className="an2-val small">
+      <span className="an2-val-title">밸류에이션</span>
+      {per}
+      {ps ? (
+        <span title={`시가총액 ÷ 최근 12개월 매출(${ps.basis}, ${ps.period})`}>
+          PSR <b className={ps.psr >= VALUATION_RULES.psrBubble ? "an2-hot" : ""}>{num(ps.psr, 1)}배</b>
+        </span>
+      ) : (
+        <span className="muted">PSR - (시가총액·매출 확인 불가)</span>
+      )}
+      <span className="an2-rule" title="근거 규칙(자료집 부록 A)">M2-09·M2-10</span>
+    </div>
   );
 }
 
@@ -138,7 +213,19 @@ function DailySignals({ signals }: { signals: DailySignal[] }) {
   );
 }
 
-export function AnalysisCard({ a, journal, region, settings, code }: { a: Analysis | null; journal: JournalEntry[]; region: Region; settings: Settings | null; code?: string }) {
+export function AnalysisCard({
+  a, journal, region, settings, code, breadth, sample,
+}: {
+  a: Analysis | null;
+  journal: JournalEntry[];
+  region: Region;
+  settings: Settings | null;
+  code?: string;
+  /** 시장 폭 응답(StockData.breadth). 넘기지 않으면(undefined) 시장 폭 안내 줄을 그리지 않는다 */
+  breadth?: BreadthResponse | null;
+  /** 샘플 데이터 모드(수급·공시에 샘플 표시) */
+  sample?: boolean;
+}) {
   const capital = settings ? (region === "US" ? settings.depositUSD : settings.depositKRW) : 0;
   const won = (n: number) => money(n, region);
 
@@ -186,6 +273,7 @@ export function AnalysisCard({ a, journal, region, settings, code }: { a: Analys
           }
         >
           {p ? <PostureView p={p} /> : a.regime ? <NoteList notes={a.regime.notes} /> : <p className="muted small">지수 데이터가 없어요.</p>}
+          {breadth !== undefined && <BreadthLine b={breadth} />}
           <MacroStrip region={region} />
         </Step>
 
@@ -205,7 +293,13 @@ export function AnalysisCard({ a, journal, region, settings, code }: { a: Analys
             ))}
             {s.checks.every((c) => c.status !== "fail") && <li className="note-good">✔ 확인된 항목에서 기준 미달이 없어요</li>}
           </ul>
-          <p className="muted small">전체 항목은 「재무·스크리닝」 탭에서 볼 수 있어요.</p>
+          {a.valuation && (
+            <>
+              <ValuationLine v={a.valuation} />
+              {a.valuation.notes.length > 0 && <NoteList notes={a.valuation.notes} />}
+            </>
+          )}
+          <p className="muted small">밸류에이션은 의견을 바꾸지 않는 참고 정보예요. 체크리스트 전체와 PER 밴드는 「재무·스크리닝」 탭에서 볼 수 있어요.</p>
         </Step>
 
         <Step n={3} title="진입·청산 타이밍" badge={<ActionBadge action={a.timingAction} />}>
@@ -280,7 +374,15 @@ export function AnalysisCard({ a, journal, region, settings, code }: { a: Analys
         </Step>
       </div>
 
-      <ExtrasPanel code={code} region={region} />
+      <section className="an2-cm">
+        <h4 className="group">캔들마스터 주봉 캔들 (별도 매매법)</h4>
+        <p className="muted small">
+          이동평균·거래량·보조지표·지지/저항선을 쓰지 않고 파동 → 캔들군 → 캔들 신호만 보는 별도 매매법이에요. 위 의견은 바꾸지 않아요.
+        </p>
+        <CandleMasterPanel r={a.candleMaster ?? null} capital={capital} region={region} />
+      </section>
+
+      <ExtrasPanel code={code} region={region} sample={sample} />
     </div>
   );
 }
