@@ -10,7 +10,7 @@ import {
 } from "@jusik/shared";
 import { getMinute } from "../../api";
 import { CHART_FONT, CHART_LOCALE, useChartColors, type ChartColors } from "../../theme";
-import { Button, Change, fmtPrice, Notice, NoteList, Segmented, Skeleton, Stat, Stats } from "../../ui";
+import { Button, Change, fmtDate, fmtPrice, Notice, NoteList, Segmented, Skeleton, Stat, Stats } from "../../ui";
 
 /*
  * 분봉(1분봉·3분봉)과 강창권 장중 타점 판단(자료집 4.7·M3-18). 예전 분봉 탭을 종목 차트의 '분' 기간으로 옮겼다.
@@ -227,7 +227,7 @@ function Assessment({ a, region, stale, sessionDate, labels }: { a: IntradayAsse
         </h3>
         <span className="row wrap">
           <span className={`stk-verdict ${a.entry.verdict}`}>{v.label}</span>
-          {stale && <span className="stk-tag warn">{sessionDate} 마감 기준</span>}
+          {stale && <span className="stk-tag warn">{fmtDate(sessionDate)} 마감 기준</span>}
           {a.asOf && <span className="t-cap">{a.asOf.slice(11)} 봉까지 반영</span>}
         </span>
       </div>
@@ -388,7 +388,7 @@ export function MinuteView({ code, region, height }: { code: string; region: Reg
     <div className="stack-4">
       <div className="row between wrap">
         <span className="t-2">
-          {data?.sessionDate ? `${data.sessionDate} · ${TZ_LABEL[reg]}` : "분봉"}
+          {data?.sessionDate ? `${fmtDate(data.sessionDate)} · ${TZ_LABEL[reg]}` : "분봉"}
           {data?.sample && <span className="stk-tag warn">샘플</span>}
         </span>
         <span className="row wrap">
@@ -406,7 +406,7 @@ export function MinuteView({ code, region, height }: { code: string; region: Reg
           {st.error}. 서버 연결을 확인한 뒤 다시 불러오세요.
         </Notice>
       )}
-      {data?.message && <Notice tone="info">{data.message}</Notice>}
+      {data?.message && <Notice tone="info">{data.message.replace(/\d{4}-\d{2}-\d{2}/g, (d) => fmtDate(d))}</Notice>}
       {!data && st.loading && <Skeleton h={height} />}
       {data && <MinuteChart bars={data.bars} region={data.region} levels={levels} height={height} />}
       {data && a && <Assessment a={a} region={data.region} stale={stale} sessionDate={data.sessionDate} labels={labels} />}

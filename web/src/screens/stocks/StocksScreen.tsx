@@ -53,17 +53,24 @@ function chartHeight(bp: Breakpoint, vh: number): number {
   return 260;
 }
 
-/** 불러오는 중: 실제 배치와 같은 모양 */
-function DetailSkeleton({ height, side }: { height: number; side?: boolean }) {
+/** 불러오는 중: 실제 배치와 같은 모양. 1초가 넘으면 진행 표시를 더한다(지도서 9.2) */
+function DetailSkeleton({ height, side, back }: { height: number; side?: boolean; back?: boolean }) {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), 1000);
+    return () => clearTimeout(t);
+  }, []);
   return (
-    <div className="stk-skel" role="status" aria-label="불러오는 중">
-      <div className="stack">
+    <div className="stk-skel">
+      {back && <BackLink />}
+      <div className="stack" role="status" aria-label="종목 자료를 불러오는 중">
         <Skeleton w={160} h={24} />
         <Skeleton w={120} h={14} />
         <Skeleton w={200} h={34} />
       </div>
       <Skeleton w={220} h={32} />
       <Skeleton h={height} />
+      {slow && <p className="ui-progress">종목 자료를 받는 중이에요</p>}
       {side && <SkeletonRows rows={5} />}
     </div>
   );
@@ -180,13 +187,15 @@ function Detail({ code, tab, minute, bp, reviewRef, sideW, onSideW }: {
     return (
       <>
         <div className={large ? "stk-pane stk-pane-center" : "stk-detail"}>
-          <DetailSkeleton height={height} side={!large} />
+          <DetailSkeleton height={height} side={!large} back={single} />
         </div>
         {large && (
           <>
             <Resizer value={sideW} onChange={onSideW} min={PANE.side.min} max={PANE.side.max} label="근거·주문 패널 폭 조절" invert />
-            <aside className="stk-pane stk-pane-side">
+            <aside className="stk-pane stk-pane-side stk-skel-side" aria-hidden="true">
+              <Skeleton w={240} h={28} />
               <SkeletonRows rows={8} />
+              <Skeleton h={48} className="stk-skel-btn" />
             </aside>
           </>
         )}

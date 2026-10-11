@@ -123,7 +123,7 @@ export function ChartArea({ data, at, period, onPeriod, signals, onSelect, lines
           </p>
           {afterChart}
           <SignalList signals={signals} marks={marks} today={today} wide={bp === "large" || bp === "expanded"} onSelect={onSelect} />
-          {period === "D" && !toggles.daily && <p className="t-cap">일봉 보조 신호(골든크로스·5일선 이탈 등)는 자주 나와서 '일봉 신호'를 켜면 표시해요.</p>}
+          {period === "D" && !toggles.daily && bp !== "compact" && <p className="t-cap">일봉 보조 신호(골든크로스·5일선 이탈 등)는 자주 나와서 '일봉 신호'를 켜면 표시해요.</p>}
         </>
       )}
     </section>
