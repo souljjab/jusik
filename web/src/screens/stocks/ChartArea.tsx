@@ -2,11 +2,12 @@ import { useMemo, useState, type ReactNode } from "react";
 import { marketSession, regionOf } from "@jusik/shared";
 import type { StockData } from "../../api";
 import { useApp } from "../../app/AppContext";
-import { Button, Chip, fmtAsOf, fmtDate, kstDate, Segmented, type Breakpoint } from "../../ui";
+import { Chip, fmtAsOf, fmtDate, kstDate, Segmented, type Breakpoint } from "../../ui";
 import { MinuteView } from "./MinuteView";
 import { PriceChart, type ChartLine, type ChartToggles } from "./PriceChart";
-import { chartMarkers, marksForPeriod, markWhen, PERIOD_LABEL, SIGNAL_KIND_LABEL, sortMarksDesc, toBars, type Period } from "./stocksModel";
-import type { Signals, SignalView } from "./useSignals";
+import { SignalList } from "./SignalList";
+import { chartMarkers, marksForPeriod, PERIOD_LABEL, sortMarksDesc, toBars, type Period } from "./stocksModel";
+import type { Signals } from "./useSignals";
 
 /*
  * 기간과 지표(지도서 5.2 C) + 차트 + 신호 표식(D) + 신호 목록 + 시세 기준 시각.
@@ -34,20 +35,6 @@ function saveToggles(t: Toggles) {
   }
 }
 
-const SHOWN_MARKS = 6;
-
-function SignalItem({ v, kind, selected, onSelect }: { v: Pick<SignalView, "id" | "title" | "when">; kind: string; selected: boolean; onSelect: () => void }) {
-  return (
-    <li>
-      <button type="button" className="stk-sig" aria-pressed={selected} onClick={onSelect}>
-        <span className="t-cap">{kind}</span>
-        <span className="t-medium ellipsis">{v.title}</span>
-        <span className="t-cap">{v.when}</span>
-      </button>
-    </li>
-  );
-}
-
 export function ChartArea({ data, at, period, onPeriod, signals, onSelect, lines, bp, height, afterChart }: {
   data: StockData;
   at: number | null;
@@ -66,7 +53,6 @@ export function ChartArea({ data, at, period, onPeriod, signals, onSelect, lines
   const region = regionOf(data.info.market);
   const { now } = useApp();
   const [toggles, setToggles] = useState<Toggles>(() => loadToggles(large));
-  const [allMarks, setAllMarks] = useState(false);
   // 컴퓨터가 아니면 보조 지표 패널은 하나만(RSI가 우선)
   const effective: ChartToggles = large ? toggles : { ...toggles, macd: toggles.macd && !toggles.rsi };
   const set = (k: keyof Toggles) => {
@@ -87,8 +73,6 @@ export function ChartArea({ data, at, period, onPeriod, signals, onSelect, lines
   const marks = useMemo(() => sortMarksDesc(marksForPeriod(visible, barPeriod)), [visible, barPeriod]);
   const today = kstDate(now);
   const open = marketSession(region, now).state === "open";
-  const limit = bp === "compact" ? 3 : SHOWN_MARKS;
-  const shownMarks = allMarks ? marks : marks.slice(0, limit);
   const last = data.candles.at(-1);
 
   return (
@@ -138,41 +122,8 @@ export function ChartArea({ data, at, period, onPeriod, signals, onSelect, lines
             {open && last ? ` · 일봉 ${fmtDate(last.date)}` : ""} · 주봉 신호는 마감된 주 기준이에요
           </p>
           {afterChart}
-          <section className="stk-sigarea" aria-labelledby="stk-sig-h">
-            <div className="row between wrap">
-              <h3 id="stk-sig-h" className="t-body t-bold">
-                신호
-              </h3>
-              <span className="t-cap">차트 표식이나 목록을 누르면 신호 근거가 그 신호로 바뀌어요</span>
-            </div>
-            <ul className="stk-sigs">
-              {signals.current.map((v) => (
-                <SignalItem
-                  key={v.id}
-                  v={v}
-                  kind={`지금 · ${v.strategy === "daytrade" ? "단타 후보" : v.strategy === "candle-master" ? SIGNAL_KIND_LABEL.candle : SIGNAL_KIND_LABEL.weinstein}`}
-                  selected={signals.selectedId === v.id}
-                  onSelect={() => onSelect(v.id)}
-                />
-              ))}
-              {shownMarks.map((m) => (
-                <SignalItem
-                  key={m.id}
-                  v={{ id: m.id, title: m.label, when: markWhen(m, today) }}
-                  kind={SIGNAL_KIND_LABEL[m.kind]}
-                  selected={signals.selectedId === m.id}
-                  onSelect={() => onSelect(m.id)}
-                />
-              ))}
-            </ul>
-            {marks.length > limit && (
-              <Button variant="link" className="stk-more" onClick={() => setAllMarks((v) => !v)}>
-                {allMarks ? "최근 신호만 보기" : `지난 신호 ${marks.length - limit}개 더 보기`}
-              </Button>
-            )}
-            {!marks.length && <p className="t-2">이 기간 차트에 표시할 지난 신호가 없어요.</p>}
-            {period === "D" && !toggles.daily && <p className="t-cap">일봉 보조 신호(골든크로스·5일선 이탈 등)는 자주 나와서 '일봉 신호'를 켜면 표시해요.</p>}
-          </section>
+          <SignalList signals={signals} marks={marks} today={today} wide={bp === "large" || bp === "expanded"} onSelect={onSelect} />
+          {period === "D" && !toggles.daily && <p className="t-cap">일봉 보조 신호(골든크로스·5일선 이탈 등)는 자주 나와서 '일봉 신호'를 켜면 표시해요.</p>}
         </>
       )}
     </section>

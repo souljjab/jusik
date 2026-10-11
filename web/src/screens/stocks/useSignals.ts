@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   candleMasterEvidence, dayTradeEvidence, regionOf, weekKeyOf, weinsteinEvidence,
   type DayTradeCandidate, type Evidence, type Note, type Posture,
@@ -33,6 +33,8 @@ export interface SignalView {
   /** 일봉 보조 신호(의견을 바꾸지 않는 참고 신호) */
   daily?: SignalMark["daily"];
   mark?: SignalMark;
+  /** 신호가 없는 근거(캔들마스터 '신호 없음'). 근거 패널의 보조 구역에만 보이고 신호 목록에는 넣지 않는다 */
+  quiet?: boolean;
 }
 
 export interface Signals {
@@ -42,6 +44,8 @@ export interface Signals {
   select: (id: string) => void;
   /** 지금 고를 수 있는 '지금' 항목(목록 맨 위) */
   current: SignalView[];
+  /** 신호 하나(지금 항목 또는 차트 표식)의 근거. 없으면 null */
+  viewOf: (id: string) => SignalView | null;
   /** 주문 미리 보기에 쓸 손절·목표와 근거 */
   plan: { plan: OrderPlan; evidence: Evidence } | null;
   candidate: DayTradeCandidate | null;
@@ -73,7 +77,11 @@ export function useSignals(data: StockData | null, candidate: DayTradeCandidate 
       out.push({ id: NOW, strategy: "weinstein", title: ev.headline, when: week(a.timing.weekDate), evidence: ev, notes: [...a.gates, ...a.timing.notes], historical: false });
       const cm = a.candleMaster;
       const cev = candleMasterEvidence(cm);
-      if (cm && cev && cm.signals.length) out.push({ id: NOW_CANDLE, strategy: "candle-master", title: cev.headline, when: week(cm.date), evidence: cev, notes: cm.notes, historical: false });
+      if (cm && cev)
+        out.push({
+          id: NOW_CANDLE, strategy: "candle-master", title: cm.signals.length ? cev.headline : "캔들 신호 없음", when: week(cm.date), evidence: cev, notes: cm.notes,
+          historical: false, quiet: !cm.signals.length,
+        });
     }
     return out;
   }, [a, candidate]);
@@ -82,11 +90,12 @@ export function useSignals(data: StockData | null, candidate: DayTradeCandidate 
   const [selectedId, setSelectedId] = useState<string>(defaultId);
   useEffect(() => setSelectedId(defaultId), [code, defaultId]);
 
-  const selected = useMemo<SignalView>(() => {
-    const now = current.find((v) => v.id === selectedId);
-    if (now) return now;
-    const m = marks.find((x) => x.id === selectedId);
-    if (m && a) {
+  const viewOf = useCallback(
+    (id: string): SignalView | null => {
+      const now = current.find((v) => v.id === id);
+      if (now) return now;
+      const m = marks.find((x) => x.id === id);
+      if (!m || !a) return null;
       if (m.kind === "weinstein" && m.stage) {
         const posture = postureAt(data?.indexCandles, m.date, caps, region);
         const ev = weinsteinEvidence(analysisAt(a, m.stage, posture));
@@ -101,9 +110,18 @@ export function useSignals(data: StockData | null, candidate: DayTradeCandidate 
         const ev = st ? weinsteinEvidence(analysisAt(a, st, postureAt(data?.indexCandles, m.date, caps, region))) : null;
         return { id: m.id, strategy: "weinstein", title: m.label, when: markWhen(m, today()), evidence: ev, notes: [], historical: !m.latest, daily: m.daily, mark: m };
       }
-    }
-    return current.find((v) => v.id === NOW) ?? current[0] ?? { id: NOW, strategy: "weinstein", title: "분석 없음", when: "", evidence: null, notes: [], historical: false };
-  }, [selectedId, current, marks, a, stages, data, caps, region]);
+      return null;
+    },
+    [current, marks, a, stages, data, caps, region],
+  );
+
+  const selected = useMemo<SignalView>(
+    () =>
+      viewOf(selectedId) ??
+      current.find((v) => v.id === NOW) ??
+      current[0] ?? { id: NOW, strategy: "weinstein", title: "분석 없음", when: "", evidence: null, notes: [], historical: false },
+    [viewOf, selectedId, current],
+  );
 
   const plan = useMemo(() => {
     if (!a) return null;
@@ -116,5 +134,5 @@ export function useSignals(data: StockData | null, candidate: DayTradeCandidate 
     return { plan: weinsteinPlan(a), evidence: weinsteinEvidence(a) };
   }, [a, selected, candidate]);
 
-  return { marks, selected, selectedId: selected.id, select: setSelectedId, current, plan, candidate };
+  return { marks, selected, selectedId: selected.id, select: setSelectedId, current, viewOf, plan, candidate };
 }

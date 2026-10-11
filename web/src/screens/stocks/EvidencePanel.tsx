@@ -138,18 +138,22 @@ export function EvidencePanel({ data, signals, settings, journal, brief = false 
     <div className="stk-evpanel">
       <SignalBlock view={sel} name={info.name} code={info.code} variant={brief ? "brief" : "full"} onlyUnmet={brief} />
       {brief && <KeyFigures data={data} />}
-      <SignalStatsView code={info.code} strategy={sel.strategy} />
+      <div className="stk-stats">
+        <SignalStatsView code={info.code} strategy={sel.strategy} />
+      </div>
       {others.length > 0 && (
         <section className="stk-others" aria-labelledby="stk-others-h">
           <h3 id="stk-others-h" className="t-body t-bold">
-            이 종목의 다른 신호
+            다른 매매법의 근거
           </h3>
           {others.map((v) => (
             <div key={v.id} className="stk-other">
               <SignalBlock view={v} name={info.name} code={info.code} variant="mini" headingLevel="h3" />
-              <Button variant="secondary" size="sm" onClick={() => signals.select(v.id)}>
-                이 신호로 근거 보기
-              </Button>
+              {!v.quiet && (
+                <Button variant="secondary" size="sm" onClick={() => signals.select(v.id)}>
+                  이 신호로 근거 보기
+                </Button>
+              )}
             </div>
           ))}
         </section>

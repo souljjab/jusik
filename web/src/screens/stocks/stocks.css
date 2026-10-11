@@ -107,18 +107,33 @@
 .stk-chart-empty { display: grid; place-items: center; border-radius: var(--radius-panel); background: var(--color-surface-2); padding: var(--space-4); text-align: center; }
 .stk-asof { margin-top: calc(-1 * var(--space-1)); }
 
-/* 신호 목록 */
-.stk-sigarea { display: flex; flex-direction: column; gap: var(--space-2); }
+/* 신호 목록: 넓은 화면은 구분선 행, 좁은 화면은 가로로 넘기는 한 줄 */
+.stk-sigarea { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
 .stk-sigarea > .ui-btn.link { align-self: flex-start; }
-.stk-sigs { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: var(--space-2); }
-.stk-sig {
-  width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 0; min-height: var(--touch-min); padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--color-border); border-radius: var(--radius-chip); background: var(--color-surface); color: var(--color-text); text-align: left;
+.stk-sigarea-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
+.stk-sigarea-head h3 { display: inline-flex; align-items: baseline; gap: var(--space-2); }
+.stk-siglist { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--color-border); }
+.stk-siglist li { border-bottom: 1px solid var(--color-border); }
+.stk-sigrow {
+  width: 100%; display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; align-items: center; gap: var(--space-3);
+  min-height: 48px; padding: var(--space-1) var(--space-2); border: 0; border-left: 3px solid transparent; border-radius: 0; background: transparent; color: var(--color-text); text-align: left;
   transition: background-color var(--motion-fast) var(--motion-ease);
 }
-.stk-sig > span { max-width: 100%; }
-.stk-sig:hover { background: var(--color-surface-2); }
-.stk-sig[aria-pressed="true"] { border-color: var(--color-accent); background: var(--color-accent-soft); }
+.stk-sigrow:hover { background: var(--color-surface-2); }
+.stk-sigrow[aria-pressed="true"] { background: var(--color-accent-soft); border-left-color: var(--color-accent); }
+.stk-sigrow-main { display: flex; flex-direction: column; min-width: 0; }
+.stk-sigrow-ev { display: flex; justify-content: flex-end; }
+.stk-sigchips {
+  list-style: none; margin: 0 calc(-1 * var(--gutter)); padding: 0 var(--gutter) var(--space-1); display: flex; gap: var(--space-2);
+  overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scrollbar-width: thin;
+}
+.stk-sigchips li { flex: none; scroll-snap-align: start; }
+.stk-sigchip {
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; width: 152px; min-height: var(--touch-min);
+  padding: var(--space-1) var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-chip); background: transparent; color: var(--color-text); text-align: left;
+}
+.stk-sigchip > span { max-width: 100%; }
+.stk-sigchip[aria-pressed="true"] { border-color: var(--color-accent); background: var(--color-accent-soft); }
 
 /* ───────── 신호 근거(E·F) ───────── */
 .stk-tabs { flex: none; }
@@ -133,6 +148,10 @@
 .stk-evmini li.met .mk { color: var(--color-accent); }
 .stk-evmini li.unmet { color: var(--color-warn-text); }
 .stk-evmini li.na { color: var(--color-text-2); }
+/* 미충족 규칙은 이름도 경고색(지도서 5.2 E: 부분 충족은 경고색 짧은 선과 문장) */
+.stk-evpanel .ui-ev-list li:has(.mark.unmet) .name { color: var(--color-warn-text); }
+.stk-stats .row { flex-wrap: wrap; row-gap: 2px; }
+.stk-stats h3 { white-space: nowrap; }
 .stk-others { display: flex; flex-direction: column; gap: var(--space-4); border-top: 1px solid var(--color-border); padding-top: var(--space-5); }
 .stk-other { display: flex; flex-direction: column; gap: var(--space-2); }
 .stk-other > .ui-btn { align-self: flex-start; }
