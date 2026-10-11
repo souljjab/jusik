@@ -70,6 +70,8 @@
 
 /* ───────── 표(컴퓨터·태블릿) ───────── */
 .trd-table td { vertical-align: top; }
+.trd-table td:first-child .t-medium { white-space: nowrap; }
+.trd-table td:first-child .t-cap { word-break: keep-all; }
 .trd-table td.r .trd-cell-stack { align-items: flex-end; }
 .trd-cell-stack { display: inline-flex; flex-direction: column; gap: 2px; }
 .trd-table tr.trd-warnrow td:first-child { border-left: 3px solid var(--color-warn); }

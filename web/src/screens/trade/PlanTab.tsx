@@ -34,6 +34,8 @@ interface PlanEntry {
   executed: boolean;
   minuteHeld: boolean;
   blocked: boolean;
+  /** 잠긴 이유(리스크 가드의 첫 '걸림' 문장) */
+  blockReason: string | null;
   /** 손절 시 손실의 계좌 대비(%) — 모의매매를 켜면 모의계좌 총자산, 끄면 예수금 기준 */
   lossPct: number | null;
 }
@@ -184,7 +186,7 @@ function PlanDetail({ x, server }: { x: PlanEntry | null; server: ServerState })
 
       {x.blocked ? (
         <Notice tone="warn" title="오늘은 신규 매수가 잠겼어요">
-          리스크 한도에 닿아 다음 거래일에 풀려요. 계획은 참고로만 보여요.
+          {x.blockReason ?? "리스크 한도에 닿았어요."} 다음 거래일에 풀려요. 계획은 참고로만 보여요.
         </Notice>
       ) : (
         <div className="stack">
@@ -205,7 +207,6 @@ function PlanDetail({ x, server }: { x: PlanEntry | null; server: ServerState })
 
 function CashLine({ server, cur, plan }: { server: ServerState; cur: Currency; plan: Plan }) {
   const base = planCashBase(server, cur);
-  const s = server.settings;
   return (
     <dl className="trd-cash">
       <div>
@@ -215,7 +216,7 @@ function CashLine({ server, cur, plan }: { server: ServerState; cur: Currency; p
       <div>
         <dt>쓸 수 있는 돈</dt>
         <dd className="num">{fmtMoneyByCurrency(plan.spendable, cur)}</dd>
-        <span className="t-cap">예비 현금 {fmtRatio(s.reservePct, 0)}·국면 상한 반영</span>
+        <span className="t-cap">예비 현금·국면 상한 반영</span>
       </div>
       <div>
         <dt>계획 투자</dt>
@@ -429,10 +430,12 @@ export function planEntries(server: ServerState): PlanEntry[] {
     const plan = scan.plans[cur];
     if (!plan) return [];
     const base = accountBase(server, cur);
-    const blocked = !!scan.guards?.[cur]?.blocked;
+    const guard = scan.guards?.[cur];
+    const blocked = !!guard?.blocked;
+    const blockReason = blocked ? (guard?.notes.find((n) => n.tone === "bad")?.text ?? null) : null;
     return plan.items.map((item) => ({
       cur, key: planKey(cur, item.candidate.code), item, ev: dayTradeEvidence(item.candidate), executed: executed.has(item.candidate.code),
-      minuteHeld: held.has(item.candidate.code), blocked, lossPct: base > 0 ? (item.riskAmount / base) * 100 : null,
+      minuteHeld: held.has(item.candidate.code), blocked, blockReason, lossPct: base > 0 ? (item.riskAmount / base) * 100 : null,
     }));
   });
 }

@@ -213,7 +213,7 @@ function PaperAccountBlock({ v, today, big, bp }: { v: AccountView; today: { pnl
             {v.positions.length}종목 보유 · 보유 평가 <span className="num">{fmtMoneyByCurrency(v.heldValue, v.currency)}</span>
             {near > 0 && <span className="warn-text"> · 손절가 근접 {near}종목</span>}
           </p>
-          {bp === "compact" ? <PositionRows v={v} /> : <PositionsTable v={v} />}
+          {atLeast(bp, "expanded") ? <PositionsTable v={v} /> : <PositionRows v={v} />}
         </>
       )}
     </div>
@@ -455,7 +455,7 @@ function ManualSection({ bp }: { bp: Breakpoint }) {
         >
           <span className="t-2">증권사에서 산 종목을 매매일지에 기록하면 여기서 평균 단가와 손익을 볼 수 있어요.</span>
         </EmptyState>
-      ) : bp === "compact" ? (
+      ) : !atLeast(bp, "expanded") ? (
         <ManualRows rows={rows} onMenu={setMenu} />
       ) : (
         <ManualTable rows={rows} onMenu={setMenu} bp={bp} />
@@ -473,7 +473,7 @@ function PaperTracking({ server, currencies, side }: { server: ServerState; curr
   const rows = regions.flatMap((r) => (server.paperTracking?.[r] ? [{ r, t: server.paperTracking[r] }] : []));
   return (
     <Section title="모의투자 기간" as="h2" sub={<RuleTag rule="M5-02 캔들마스터" />}>
-      <p className="t-2">실전 전에 최소 3개월은 모의투자로 연습하길 권해요. 자동 모의매매 기록만 세요.</p>
+      <p className="t-2">실전 전에 최소 3개월은 모의투자로 연습하길 권해요. 자동 모의매매 기록만 세고, 거래당 기대값은 청산 거래의 평균 순수익률이에요.</p>
       {rows.length === 0 ? (
         <p className="t-2">서버가 아직 모의투자 기간을 계산하지 않았어요.</p>
       ) : (
@@ -493,9 +493,7 @@ function PaperTracking({ server, currencies, side }: { server: ServerState; curr
               <Progress label="모의투자 기간" value={t.days} max={DEFAULT_PAPER_TRACKING.minDays} unit="일" />
               <Progress label="청산 거래" value={t.closedTrades} max={DEFAULT_PAPER_TRACKING.minClosedTrades} unit="건" />
               <div className="row between t-2">
-                <span>
-                  거래당 기대값 <span className="t-cap">청산 거래의 평균 순수익률</span>
-                </span>
+                <span>거래당 기대값</span>
                 {t.expectancyPct == null ? <span className="t-cap">청산 거래가 없어 아직 몰라요</span> : <Change pct={t.expectancyPct} showAbs={false} />}
               </div>
               <div className="t-2">
