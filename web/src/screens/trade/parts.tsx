@@ -38,7 +38,7 @@ export function StopDistance({ leftPct, className = "" }: { leftPct: number | nu
   const near = leftPct <= NEAR_STOP_PCT;
   return (
     <span className={`trd-stopdist ${near ? "is-near" : ""} ${className}`}>
-      {near && <AlertTriangle size={12} strokeWidth={2} aria-hidden="true" />}
+      {near && <AlertTriangle size={12} strokeWidth={1.5} aria-hidden="true" />}
       {leftPct <= 0 ? "손절가 아래" : `손절가까지 ${fmtRatio(leftPct)}`}
       {near && leftPct > 0 && <span className="sr-only">, 손절가 근접</span>}
     </span>

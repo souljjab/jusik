@@ -269,6 +269,7 @@ function GuardBlock({ guard, hasScan }: { guard: GuardResult | undefined; hasSca
 
 function Skipped({ plan, cap, paperEnabled, openInitially }: { plan: Plan; cap: number | undefined; paperEnabled: boolean; openInitially: boolean }) {
   const { openStock } = useApp();
+  const { openEvidence } = useActions();
   const [open, setOpen] = useState(openInitially);
   if (!plan.skipped.length) return null;
   const counts = reasonCounts(plan);
@@ -289,16 +290,18 @@ function Skipped({ plan, cap, paperEnabled, openInitially }: { plan: Plan; cap: 
         <ChevronDown size={16} strokeWidth={1.5} aria-hidden="true" className={open ? "trd-rot" : ""} />
       </Button>
       {open && (
-        <ul id={id} className="trd-skip-list">
+        <ul id={id} className="trd-skip-list ev">
           {plan.skipped.map((x) => {
             const capped = x.reason === EXPOSURE_CAP_REASON;
+            const ev = dayTradeEvidence(x.candidate);
             return (
               <li key={x.candidate.code}>
                 <button type="button" className="trd-skip-name" onClick={() => openStock(x.candidate.code)}>
                   <span className="t-medium">{x.candidate.name}</span> <span className="t-cap">{x.candidate.code}</span>
                 </button>
+                <EvidenceStrip evidence={ev} onOpen={() => openEvidence({ title: `${x.candidate.name} 근거`, evidence: ev, code: x.candidate.code, notes: x.candidate.notes })} />
                 <span className={`t-2 ${capped ? "warn-text" : ""}`}>
-                  {capped && <AlertTriangle size={12} strokeWidth={2} aria-hidden="true" className="trd-inline-ico" />}
+                  {capped && <AlertTriangle size={12} strokeWidth={1.5} aria-hidden="true" className="trd-inline-ico" />}
                   {x.reason}
                 </span>
               </li>
@@ -399,7 +402,7 @@ function ActionBar({ x, bp }: { x: PlanEntry; bp: Breakpoint }) {
       </div>
       {x.blocked ? (
         <span className="trd-actionbar-lock">
-          <Lock size={16} strokeWidth={1.75} aria-hidden="true" />
+          <Lock size={16} strokeWidth={1.5} aria-hidden="true" />
           신규 매수 잠김
         </span>
       ) : (

@@ -63,7 +63,7 @@ export default function TradeScreen() {
           {near > 0 && (
             <>
               <span className="trd-tabmark is-warn" aria-hidden="true">
-                <AlertTriangle size={12} strokeWidth={2} />
+                <AlertTriangle size={12} strokeWidth={1.5} />
                 {near}
               </span>
               <span className="sr-only">, 손절가 근접 {near}종목</span>
@@ -80,7 +80,7 @@ export default function TradeScreen() {
           {locked && (
             <>
               <span className="trd-tabmark is-warn" aria-hidden="true">
-                <AlertTriangle size={12} strokeWidth={2} />
+                <AlertTriangle size={12} strokeWidth={1.5} />
                 잠김
               </span>
               <span className="sr-only">, 신규 매수 잠김</span>

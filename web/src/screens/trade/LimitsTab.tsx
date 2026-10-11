@@ -35,7 +35,7 @@ function LockState({ r, hasGuard, paperOff }: { r: CurrencyRisk; hasGuard: boole
     return (
       <div className="trd-lock is-warn" role="status">
         <p className="trd-lock-title">
-          <Lock size={20} strokeWidth={1.75} aria-hidden="true" />
+          <Lock size={20} strokeWidth={1.5} aria-hidden="true" />
           신규 매수 잠김
         </p>
         <p className="t-2">
