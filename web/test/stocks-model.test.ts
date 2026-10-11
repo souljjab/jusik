@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Candle } from "@jusik/shared";
 import {
-  barLabel, barTimeOf, candleMarks, chartMarkers, chartSummary, clampStopPct, dailyMarks, defaultPeriod, krTick, loadMemo, marksForPeriod, moveItem, objParticle,
+  barLabel, barTimeOf, candleMarks, fmtInputPrice, parseInputPrice, chartMarkers, chartSummary, clampStopPct, dailyMarks, defaultPeriod, krTick, loadMemo, marksForPeriod, moveItem, objParticle,
   orderPreview, parseStockRoute, restoreAt, saveMemo, stateLabel, stepCode, stopFromPct, toBars, weinsteinMarks, type SignalMark,
 } from "../src/screens/stocks/stocksModel";
 
@@ -182,6 +182,16 @@ describe("stop slider", () => {
     expect(stopFromPct(23_950, -5, "KR")).toBe(22_750); // 22,752.5 → 22,750
     expect(stopFromPct(187.37, -5, "US")).toBe(178);
     expect(stopFromPct(0, -5, "KR")).toBe(0);
+  });
+  it("formats price inputs with commas and parses them back", () => {
+    expect(fmtInputPrice("84300", "KR")).toBe("84,300");
+    expect(fmtInputPrice("84,3001", "KR")).toBe("843,001");
+    expect(fmtInputPrice("007", "KR")).toBe("7");
+    expect(fmtInputPrice("", "KR")).toBe("");
+    expect(fmtInputPrice("187.375", "US")).toBe("187.37");
+    expect(fmtInputPrice("1.2.3", "US")).toBe("1.23");
+    expect(parseInputPrice("84,300")).toBe(84300);
+    expect(parseInputPrice("")).toBe(0);
   });
   it("clamps to −15%~−1%", () => {
     expect(clampStopPct(-30)).toBe(-15);

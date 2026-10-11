@@ -57,7 +57,7 @@ export function useSignals(data: StockData | null, candidate: DayTradeCandidate 
   const marks = useMemo<SignalMark[]>(() => {
     if (!data) return [];
     const idx = data.indexCandles;
-    return [...weinsteinMarks(data.candles, idx), ...candleMarks(data.candles), ...dailyMarks(data.candles, idx)];
+    return [...weinsteinMarks(data.candles, idx), ...candleMarks(data.candles), ...dailyMarks(data.candles, idx, 160)];
   }, [data]);
   const stages = useMemo(() => (data ? stagesByWeek(data.candles, data.indexCandles) : new Map()), [data]);
 

@@ -41,17 +41,21 @@ interface Pane {
 const priceText = (region: Region) => (p: number) =>
   region === "US" || Math.abs(p) < 100 ? p.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Math.round(p).toLocaleString("ko-KR");
 
-function options(c: ChartColors, region: Region, showTime: boolean) {
+function options(c: ChartColors, region: Region, showTime: boolean, main: boolean, formatter?: (p: number) => string) {
   return {
     autoSize: true,
-    layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: c.text, fontSize: 11, fontFamily: CHART_FONT },
+    // 출처 표시(TradingView 로고)는 가격 패널에 한 번만
+    layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: c.text, fontSize: 11, fontFamily: CHART_FONT, attributionLogo: main },
     grid: { vertLines: { visible: false }, horzLines: { color: c.grid, style: LineStyle.Dotted } },
     rightPriceScale: { borderVisible: false, minimumWidth: 72 },
     timeScale: { borderColor: c.grid, rightOffset: 4, visible: showTime, minBarSpacing: 2 },
     crosshair: { mode: CrosshairMode.Normal },
-    localization: { locale: CHART_LOCALE, priceFormatter: priceText(region) },
+    localization: { locale: CHART_LOCALE, priceFormatter: formatter ?? priceText(region) },
   } as const;
 }
+
+/** 거래량 눈금: 1,000만·1.2억처럼 짧게 */
+const volText = (p: number) => (p >= 1e4 ? fmtBig(p) : Math.round(p).toLocaleString("ko-KR"));
 
 const hexA = (color: string, alpha: string) => (/^#[0-9a-f]{6}$/i.test(color) ? `${color}${alpha}` : color);
 
@@ -105,7 +109,7 @@ export function PriceChart({
     if (!el) return;
     const below = [volPane && volEl.current, toggles.rsi && rsiEl.current, toggles.macd && macdEl.current].filter(Boolean) as HTMLDivElement[];
     const lastEl = below.at(-1) ?? el;
-    const make = (node: HTMLDivElement) => createChart(node, options(colors, region, node === lastEl));
+    const make = (node: HTMLDivElement, formatter?: (p: number) => string) => createChart(node, options(colors, region, node === lastEl, node === el, formatter));
 
     const main = make(el);
     const candle = main.addCandlestickSeries({
@@ -119,7 +123,7 @@ export function PriceChart({
 
     let vol: ISeriesApi<"Histogram"> | null = null;
     if (volPane && volEl.current) {
-      const c = make(volEl.current);
+      const c = make(volEl.current, volText);
       vol = c.addHistogramSeries({ priceFormat: { type: "volume" }, priceLineVisible: false, lastValueVisible: false });
       panes.push({ chart: c, series: vol, values: new Map() });
     } else {
@@ -130,7 +134,7 @@ export function PriceChart({
 
     let rsi: ISeriesApi<"Line"> | null = null;
     if (toggles.rsi && rsiEl.current) {
-      const c = make(rsiEl.current);
+      const c = make(rsiEl.current, (p) => p.toFixed(0));
       rsi = c.addLineSeries({ color: colors.accent, lineWidth: 1, priceLineVisible: false, lastValueVisible: true, crosshairMarkerRadius: 3 });
       rsi.createPriceLine({ price: 70, color: colors.muted, lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: true });
       rsi.createPriceLine({ price: 30, color: colors.muted, lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: true });

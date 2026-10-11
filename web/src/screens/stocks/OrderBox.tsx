@@ -4,7 +4,7 @@ import type { StockData } from "../../api";
 import { useApp } from "../../app/AppContext";
 import { heldQty, type OrderRequest } from "../../features/OrderReviewSheet";
 import { Button, fmtInt, fmtPct, fmtPnl, fmtPrice, fmtRatio, Segmented } from "../../ui";
-import { clampStopPct, orderPreview, STOP_SLIDER, stopFromPct, type OrderPlan } from "./stocksModel";
+import { clampStopPct, fmtInputPrice, orderPreview, parseInputPrice, STOP_SLIDER, stopFromPct, type OrderPlan } from "./stocksModel";
 
 /*
  * 주문 미리 보기(UI 지도서 5.2 G·6.1 E·7.1 E). 위험을 버튼보다 먼저: 손절가('필수'), 손절 시 손실 금액, 계좌 대비 비율을 버튼 위에 둔다.
@@ -57,10 +57,6 @@ export function orderRequest(ctx: OrderContext, side: "BUY" | "SELL", v: { price
   };
 }
 
-const num = (s: string) => {
-  const n = Number(s.replace(/[^\d.]/g, ""));
-  return Number.isFinite(n) ? n : 0;
-};
 const MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 const PLAN_LABEL = { weinstein: "와인스타인 참고 손절가", candle: "캔들마스터 신호 손절가", daytrade: "단타 후보 손절가" } as const;
 
@@ -79,16 +75,17 @@ export function OrderBox({ ctx, onReview, reviewRef }: { ctx: OrderContext; onRe
 
   // 신호(계획)가 바뀌면 손절·목표를 다시 채운다. 가격은 직접 고치지 않았으면 현재가를 따라간다
   useEffect(() => {
-    setStop(ctx.plan?.stop ? String(roundPx(ctx.plan.stop, ctx.region)) : "");
-    setTarget(ctx.plan?.target ? String(roundPx(ctx.plan.target, ctx.region)) : "");
+    setStop(ctx.plan?.stop ? fmtInputPrice(String(roundPx(ctx.plan.stop, ctx.region)), ctx.region) : "");
+    setTarget(ctx.plan?.target ? fmtInputPrice(String(roundPx(ctx.plan.target, ctx.region)), ctx.region) : "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [planKey]);
   useEffect(() => setPriceDirty(false), [ctx.code]);
   useEffect(() => {
-    if (!priceDirty) setPrice(String(ctx.price));
-  }, [ctx.price, priceDirty]);
+    if (!priceDirty) setPrice(fmtInputPrice(String(ctx.price), ctx.region));
+  }, [ctx.price, ctx.region, priceDirty]);
 
-  const p = num(price), st = num(stop), tg = num(target);
+  const p = parseInputPrice(price), st = parseInputPrice(stop), tg = parseInputPrice(target);
+  const fmtIn = (v: string) => fmtInputPrice(v, ctx.region);
   const pv = useMemo(
     () => orderPreview({ side, price: p, stop: st, capital: ctx.capital, riskPct: ctx.settings?.riskPct ?? 1, maxWeightPct: ctx.settings?.maxWeightPct ?? 100, held: ctx.held }),
     [side, p, st, ctx.capital, ctx.settings, ctx.held],
@@ -124,7 +121,7 @@ export function OrderBox({ ctx, onReview, reviewRef }: { ctx: OrderContext; onRe
         <label htmlFor={`${id}-price`} className="t-2">
           가격
         </label>
-        <input id={`${id}-price`} className="ui-input num" inputMode="decimal" value={price} onChange={(e) => (setPrice(e.target.value), setPriceDirty(true))} />
+        <input id={`${id}-price`} className="ui-input num" inputMode="decimal" value={price} onChange={(e) => (setPrice(fmtIn(e.target.value)), setPriceDirty(true))} />
 
         <span className="t-2">수량</span>
         <span className="num t-medium right" aria-live="polite">
@@ -145,7 +142,7 @@ export function OrderBox({ ctx, onReview, reviewRef }: { ctx: OrderContext; onRe
               aria-invalid={st > 0 && !pv.stopOk}
               aria-describedby={`${id}-stop-hint`}
               value={stop}
-              onChange={(e) => setStop(e.target.value)}
+              onChange={(e) => setStop(fmtIn(e.target.value))}
             />
             <span id={`${id}-stop-hint`} className={`stk-order-hint ${st > 0 && !pv.stopOk ? "warn-text" : "t-cap"}`}>
               {!st ? "매수 전에 손실 한도를 정해요" : !pv.stopOk ? "손절가는 가격보다 낮아야 해요" : ctx.plan ? `${PLAN_LABEL[ctx.plan.source]}로 채웠어요` : ""}
@@ -153,7 +150,7 @@ export function OrderBox({ ctx, onReview, reviewRef }: { ctx: OrderContext; onRe
             <label htmlFor={`${id}-target`} className="t-2 stk-order-lbl">
               목표가 <span className="t-cap num">{pct(tg)}</span>
             </label>
-            <input id={`${id}-target`} className="ui-input num" inputMode="decimal" value={target} onChange={(e) => setTarget(e.target.value)} />
+            <input id={`${id}-target`} className="ui-input num" inputMode="decimal" value={target} onChange={(e) => setTarget(fmtIn(e.target.value))} />
           </>
         )}
       </div>

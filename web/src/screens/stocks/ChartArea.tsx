@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
-import { regionOf } from "@jusik/shared";
+import { marketSession, regionOf } from "@jusik/shared";
 import type { StockData } from "../../api";
+import { useApp } from "../../app/AppContext";
 import { Button, Chip, fmtAsOf, fmtDate, Segmented, type Breakpoint } from "../../ui";
 import { MinuteView } from "./MinuteView";
 import { PriceChart, type ChartLine, type ChartToggles } from "./PriceChart";
@@ -14,16 +15,18 @@ import type { Signals, SignalView } from "./useSignals";
  */
 
 const TOGGLE_KEY = "jusik.stocks.chart.v1";
-function loadToggles(large: boolean): ChartToggles {
-  const base: ChartToggles = { ma: true, volume: true, rsi: large, macd: false };
+/** 차트 켜고 끄기: 지표 + 일봉 보조 신호 표식(자주 나와 기본은 끈다) */
+type Toggles = ChartToggles & { daily: boolean };
+function loadToggles(large: boolean): Toggles {
+  const base: Toggles = { ma: true, volume: true, rsi: large, macd: false, daily: false };
   try {
-    const raw = JSON.parse(localStorage.getItem(TOGGLE_KEY) ?? "null") as Partial<ChartToggles> | null;
+    const raw = JSON.parse(localStorage.getItem(TOGGLE_KEY) ?? "null") as Partial<Toggles> | null;
     return raw && typeof raw === "object" ? { ...base, ...raw } : base;
   } catch {
     return base;
   }
 }
-function saveToggles(t: ChartToggles) {
+function saveToggles(t: Toggles) {
   try {
     localStorage.setItem(TOGGLE_KEY, JSON.stringify(t));
   } catch {
@@ -59,11 +62,12 @@ export function ChartArea({ data, at, period, onPeriod, signals, onSelect, lines
 }) {
   const large = bp === "large";
   const region = regionOf(data.info.market);
-  const [toggles, setToggles] = useState<ChartToggles>(() => loadToggles(large));
+  const { now } = useApp();
+  const [toggles, setToggles] = useState<Toggles>(() => loadToggles(large));
   const [allMarks, setAllMarks] = useState(false);
   // 컴퓨터가 아니면 보조 지표 패널은 하나만(RSI가 우선)
   const effective: ChartToggles = large ? toggles : { ...toggles, macd: toggles.macd && !toggles.rsi };
-  const set = (k: keyof ChartToggles) => {
+  const set = (k: keyof Toggles) => {
     const next = { ...toggles, [k]: !toggles[k] };
     if (!large && next[k] && (k === "rsi" || k === "macd")) next[k === "rsi" ? "macd" : "rsi"] = false;
     setToggles(next);
@@ -72,8 +76,14 @@ export function ChartArea({ data, at, period, onPeriod, signals, onSelect, lines
 
   const barPeriod = period === "m" ? "D" : period;
   const bars = useMemo(() => toBars(data.candles, barPeriod), [data.candles, barPeriod]);
-  const markers = useMemo(() => chartMarkers(signals.marks, bars, barPeriod), [signals.marks, bars, barPeriod]);
-  const marks = useMemo(() => [...marksForPeriod(signals.marks, barPeriod)].reverse(), [signals.marks, barPeriod]);
+  // 일봉 보조 신호는 자주 나와서 '일봉 신호'를 켰을 때만 표식·목록에 넣는다(지금 고른 신호는 늘 보인다)
+  const visible = useMemo(
+    () => signals.marks.filter((m) => m.kind !== "daily" || toggles.daily || m.id === signals.selectedId),
+    [signals.marks, toggles.daily, signals.selectedId],
+  );
+  const markers = useMemo(() => chartMarkers(visible, bars, barPeriod), [visible, bars, barPeriod]);
+  const marks = useMemo(() => [...marksForPeriod(visible, barPeriod)].reverse(), [visible, barPeriod]);
+  const open = marketSession(region, now).state === "open";
   const shownMarks = allMarks ? marks : marks.slice(0, SHOWN_MARKS);
   const last = data.candles.at(-1);
 
@@ -93,6 +103,11 @@ export function ChartArea({ data, at, period, onPeriod, signals, onSelect, lines
             <Chip pressed={toggles.volume} onClick={() => set("volume")}>거래량</Chip>
             <Chip pressed={effective.rsi} onClick={() => set("rsi")}>RSI</Chip>
             <Chip pressed={effective.macd} onClick={() => set("macd")}>MACD</Chip>
+            {period === "D" && (
+              <Chip pressed={toggles.daily} onClick={() => set("daily")}>
+                일봉 신호
+              </Chip>
+            )}
           </div>
         )}
       </div>
@@ -115,8 +130,8 @@ export function ChartArea({ data, at, period, onPeriod, signals, onSelect, lines
             lines={lines}
           />
           <p className="t-cap stk-asof">
-            시세 {at ? fmtAsOf(at) : "-"}
-            {last ? ` · 마지막 봉 ${fmtDate(last.date)}` : ""} · 주봉 신호는 마감된 주 기준이에요
+            {open ? `시세 ${at ? fmtAsOf(at) : "-"}` : `시세 ${last ? fmtDate(last.date) : "-"} 종가 기준`}
+            {open && last ? ` · 일봉 ${fmtDate(last.date)}` : ""} · 주봉 신호는 마감된 주 기준이에요
           </p>
           <section className="stk-sigarea" aria-labelledby="stk-sig-h">
             <div className="row between wrap">
@@ -151,6 +166,7 @@ export function ChartArea({ data, at, period, onPeriod, signals, onSelect, lines
               </Button>
             )}
             {!marks.length && <p className="t-2">이 기간 차트에 표시할 지난 신호가 없어요.</p>}
+            {period === "D" && !toggles.daily && <p className="t-cap">일봉 보조 신호(골든크로스·5일선 이탈 등)는 자주 나와서 '일봉 신호'를 켜면 표시해요.</p>}
           </section>
         </>
       )}
