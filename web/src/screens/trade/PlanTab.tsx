@@ -12,7 +12,7 @@ import {
   RiskMeter, RuleTag, Section, useBreakpoint, type Breakpoint,
 } from "../../ui";
 import { AccountTitle, asOfText, Loss, ScanButton } from "./parts";
-import { capHit, CUR_NAME, currenciesShown, distPct, planCashBase, planKey, planRisk, reasonCounts, regionOfCur } from "./tradeModel";
+import { accountBase, capHit, CUR_NAME, currenciesShown, distPct, planCashBase, planKey, planRisk, reasonCounts, regionOfCur } from "./tradeModel";
 
 /*
  * 오늘의 계획(지도서 2장 매매 = M3 신호 + M4 리스크).
@@ -34,7 +34,7 @@ interface PlanEntry {
   executed: boolean;
   minuteHeld: boolean;
   blocked: boolean;
-  /** 손절 시 손실의 기준 현금 대비(%) */
+  /** 손절 시 손실의 계좌 대비(%) — 모의매매를 켜면 모의계좌 총자산, 끄면 예수금 기준 */
   lossPct: number | null;
 }
 
@@ -428,7 +428,7 @@ export function planEntries(server: ServerState): PlanEntry[] {
   return currenciesShown(server).flatMap((cur) => {
     const plan = scan.plans[cur];
     if (!plan) return [];
-    const base = planCashBase(server, cur).cash;
+    const base = accountBase(server, cur);
     const blocked = !!scan.guards?.[cur]?.blocked;
     return plan.items.map((item) => ({
       cur, key: planKey(cur, item.candidate.code), item, ev: dayTradeEvidence(item.candidate), executed: executed.has(item.candidate.code),
@@ -487,17 +487,23 @@ export function PlanTab({ server }: { server: ServerState }) {
       {currencies.map((cur) => (
         <CurrencyPlan key={cur} cur={cur} server={server} entries={entries.filter((x) => x.cur === cur)} selKey={selected?.key ?? null} onSelect={setSelKey} onKey={onKey} />
       ))}
-      <Disclaimer />
+      <div className="stack" style={{ gap: "var(--space-2)" }}>
+        <p className="t-cap trd-lead">
+          모의매매는 실제 주문이 아니라 규칙을 시험하는 가상 체결이에요(수수료·세금·슬리피지 반영). 단타 규칙은 경험칙이고 수익이 검증되지 않았어요. 모의매매 결과가 충분히
+          쌓이기 전에는 실제 자금으로 따라 하지 마세요.
+        </p>
+        <Disclaimer />
+      </div>
     </div>
   );
 
   return (
-    <div className={`trd-plan ${!split && selected ? "with-bar" : ""}`}>
+    <div className="trd-plan">
       <div className="trd-plan-head">
         <div className="stack" style={{ gap: 2 }}>
           <h2 className="t-section">오늘의 계획</h2>
           <span className="t-cap">
-            <span className="num">{asOfText(scan.at, now)}</span> 스캔 · 후보 <span className="num">{fmtInt(total)}</span>종목 중 <span className="num">{fmtInt(entries.length)}</span>종목 계획
+            마지막 스캔 <span className="num">{asOfText(scan.at, now)}</span> · 후보 <span className="num">{fmtInt(total)}</span>종목 중 <span className="num">{fmtInt(entries.length)}</span>종목 계획
             {next && (
               <>
                 {" "}
@@ -512,6 +518,11 @@ export function PlanTab({ server }: { server: ServerState }) {
         점수 순으로 예수금과 위험 한도 안에서 살 수 있는 조합이에요.{" "}
         {server.settings.paperEnabled ? "모의매매가 켜져 있어 서버가 이 계획대로 모의로 들어가요." : "모의매매가 꺼져 있어 예수금 기준으로만 계산했어요."} 실제 주문은 증권사 앱에서 내요.
       </p>
+      {server.status.scheduler.lastError && (
+        <Notice tone="warn" title="최근 스캔에 오류가 있었어요">
+          {server.status.scheduler.lastError} 다음 스캔에서 다시 시도해요. 계속되면 서버 기록을 확인하세요.
+        </Notice>
+      )}
       {scan.errors.length > 0 && (
         <Notice tone="warn" title={`일부 시장·종목을 읽지 못했어요(${scan.errors.length}건)`}>
           {scan.errors[0]} 다음 스캔에서 다시 읽어요.

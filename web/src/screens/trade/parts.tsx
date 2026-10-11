@@ -1,5 +1,5 @@
 import { AlertTriangle, RefreshCw } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { Currency, Region } from "@jusik/shared";
 import { getOverview, startScan } from "../../api";
 import { useApp } from "../../app/AppContext";
@@ -101,9 +101,9 @@ export function useQuotes(codes: string[]): { quotes: Record<string, QuoteInfo>;
   const [at, setAt] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const key = [...new Set(codes)].sort().join(",");
-  const alive = useRef(true);
   useEffect(() => {
-    alive.current = true;
+    // 실행마다 따로 둔다: 종목이 바뀐 뒤 늦게 온 이전 응답이 새 값을 덮지 않게
+    let alive = true;
     if (!key) return;
     const list = key.split(",").slice(0, 30);
     const load = async () => {
@@ -114,7 +114,7 @@ export function useQuotes(codes: string[]): { quotes: Record<string, QuoteInfo>;
             .catch(() => [c, null] as const),
         ),
       );
-      if (!alive.current) return;
+      if (!alive) return;
       const next: Record<string, QuoteInfo> = {};
       let miss = 0;
       for (const [c, q] of got) q ? (next[c] = q) : miss++;
@@ -125,7 +125,7 @@ export function useQuotes(codes: string[]): { quotes: Record<string, QuoteInfo>;
     void load();
     const t = setInterval(() => void load(), 60_000);
     return () => {
-      alive.current = false;
+      alive = false;
       clearInterval(t);
     };
   }, [key]);

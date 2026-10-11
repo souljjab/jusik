@@ -1,13 +1,13 @@
-import { MoreHorizontal } from "lucide-react";
+import { CheckCircle2, Download, MoreHorizontal, RefreshCw } from "lucide-react";
 import { useMemo, useState, type KeyboardEvent } from "react";
-import { DEFAULT_PAPER_TRACKING, type Currency, type ServerState } from "@jusik/shared";
-import { resetPaper } from "../../api";
+import { DEFAULT_PAPER_TRACKING, type Currency, type Region, type ServerState } from "@jusik/shared";
+import { excelUrl, resetPaper, syncExport } from "../../api";
 import { useActions } from "../../app/actions";
 import { useApp } from "../../app/AppContext";
 import { Link, navigate } from "../../app/router";
 import {
-  atLeast, Button, Change, EmptyState, fmtDate, fmtInt, fmtMoneyByCurrency, fmtPct, fmtPrice, fmtRatio, IconButton, Notice, NoteList, RuleTag, Section, Sheet,
-  srQuote, useBreakpoint, useToast, type Breakpoint,
+  atLeast, Button, Change, EmptyState, fmtDate, fmtInt, fmtMoneyByCurrency, fmtPct, fmtPrice, fmtRatio, fmtWhen, IconButton, MarketStatus, Notice, NoteList, RuleTag, Section,
+  Sheet, srQuote, useBreakpoint, useToast, type Breakpoint,
 } from "../../ui";
 import { AccountTitle, asOfText, Pnl, Progress, REGION_NAME, StopDistance, useQuotes, type QuoteInfo } from "./parts";
 import { accountView, CUR_NAME, currenciesShown, holdingPnl, manualHoldings, regionOfCur, todayOf, type AccountView, type ManualHolding, type PositionView } from "./tradeModel";
@@ -279,9 +279,11 @@ function buyMoreRequest({ h, q }: HoldingRow) {
   };
 }
 
-function ManualTable({ rows, onMenu }: { rows: HoldingRow[]; onMenu: (r: HoldingRow) => void }) {
+function ManualTable({ rows, onMenu, bp }: { rows: HoldingRow[]; onMenu: (r: HoldingRow) => void; bp: Breakpoint }) {
   const { openStock } = useApp();
   const { openOrderReview } = useActions();
+  // 태블릿은 손가락으로 누르니 버튼을 터치 크기로(컴퓨터는 표 밀도를 지키려고 작게)
+  const small = bp === "large";
   return (
     <div className="ui-table-wrap">
       <table className="ui-table trd-table">
@@ -353,10 +355,10 @@ function ManualTable({ rows, onMenu }: { rows: HoldingRow[]; onMenu: (r: Holding
                 <td className="num">{fmtDate(h.since)}</td>
                 <td className="r">
                   <span className="row end" style={{ gap: 4 }} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-                    <Button size="sm" variant="secondary" onClick={() => openOrderReview(sellRequest(row))}>
+                    <Button size={small ? "sm" : "md"} variant="secondary" className={small ? "" : "trd-touch-btn"} onClick={() => openOrderReview(sellRequest(row))}>
                       매도 주문 검토
                     </Button>
-                    <IconButton size="sm" label={`${h.name} 더 보기`} onClick={() => onMenu(row)}>
+                    <IconButton size={small ? "sm" : "md"} label={`${h.name} 더 보기`} onClick={() => onMenu(row)}>
                       <MoreHorizontal size={18} strokeWidth={1.5} aria-hidden="true" />
                     </IconButton>
                   </span>
@@ -400,7 +402,7 @@ function ManualRows({ rows, onMenu }: { rows: HoldingRow[]; onMenu: (r: HoldingR
               </span>
             </button>
             <div className="trd-row-actions">
-              <Button variant="secondary" className="grow trd-touch" onClick={() => openOrderReview(sellRequest(row))}>
+              <Button variant="secondary" className="trd-touch-btn" onClick={() => openOrderReview(sellRequest(row))}>
                 매도 주문 검토
               </Button>
               <IconButton label={`${h.name} 더 보기`} onClick={() => onMenu(row)}>
@@ -421,8 +423,9 @@ function ManualSection({ bp }: { bp: Breakpoint }) {
   const [menu, setMenu] = useState<HoldingRow | null>(null);
   const rows: HoldingRow[] = holdings.map((h) => ({ h, q: quotes[h.code], r: holdingPnl(h, quotes[h.code]?.price) }));
   const oversoldNames = oversold.map((c) => journal.find((e) => e.code === c)?.name ?? c);
+  const regions = [...new Set(holdings.map((h) => h.region))].sort() as Region[];
   return (
-    <Section title="내 기록(직접)" sub={holdings.length ? `${holdings.length}종목${at ? ` · 현재가 ${asOfText(at, now)}` : ""}` : undefined}>
+    <Section title="내 기록(직접)" sub={holdings.length ? `${holdings.length}종목` : undefined}>
       <p className="t-2 trd-lead">
         매매일지에 직접 쓴 매수·매도로 계산한 보유예요. 이 앱은 증권사에 주문을 내지 않아요. 실제 주문은 증권사 앱에서 내고, 여기서 매도 주문을 검토해 확인하면 매매일지에
         기록돼요.
@@ -432,7 +435,15 @@ function ManualSection({ bp }: { bp: Breakpoint }) {
           {oversoldNames.join(", ")}의 매도 수량이 매수보다 많아요. 매매일지에서 수량을 확인해 주세요.
         </Notice>
       )}
-      {failed && holdings.length > 0 && <Notice tone="warn">현재가를 받지 못했어요. 평가 손익은 비워 두고 1분 뒤에 다시 받아요.</Notice>}
+      {holdings.length > 0 && (
+        <div className="row wrap trd-status-row">
+          {regions.map((r) => (
+            <MarketStatus key={r} region={r} now={now} asOf={at} />
+          ))}
+          {at && <span className="t-cap">현재가 {asOfText(at, now)} · 1분마다 다시 받아요</span>}
+        </div>
+      )}
+      {failed && holdings.length > 0 && <Notice tone="warn">현재가를 받지 못했어요. 평가 손익은 비워 두고 1분 뒤에 다시 받아요. 계속되면 서버 연결을 확인하세요.</Notice>}
       {holdings.length === 0 ? (
         <EmptyState
           title="직접 기록한 보유 종목이 없어요"
@@ -447,7 +458,7 @@ function ManualSection({ bp }: { bp: Breakpoint }) {
       ) : bp === "compact" ? (
         <ManualRows rows={rows} onMenu={setMenu} />
       ) : (
-        <ManualTable rows={rows} onMenu={setMenu} />
+        <ManualTable rows={rows} onMenu={setMenu} bp={bp} />
       )}
       <HoldingMenu row={menu} onClose={() => setMenu(null)} />
     </Section>
@@ -457,7 +468,7 @@ function ManualSection({ bp }: { bp: Breakpoint }) {
 // ───────────────────────── 모의투자 기간·계좌 관리 ─────────────────────────
 
 /** 모의투자 기간 추적(M5-02 캔들마스터): 기간·청산 건수·기대값 */
-function PaperTracking({ server, currencies }: { server: ServerState; currencies: Currency[] }) {
+function PaperTracking({ server, currencies, side }: { server: ServerState; currencies: Currency[]; side: boolean }) {
   const regions = currencies.map(regionOfCur);
   const rows = regions.flatMap((r) => (server.paperTracking?.[r] ? [{ r, t: server.paperTracking[r] }] : []));
   return (
@@ -466,17 +477,25 @@ function PaperTracking({ server, currencies }: { server: ServerState; currencies
       {rows.length === 0 ? (
         <p className="t-2">서버가 아직 모의투자 기간을 계산하지 않았어요.</p>
       ) : (
-        <div className="trd-tracks">
+        <div className={`trd-tracks ${side ? "" : "cols"}`}>
           {rows.map(({ r, t }) => (
             <div key={r} className="trd-track">
               <div className="row between wrap">
                 <span className="t-medium">{REGION_NAME[r]}</span>
                 <span className="t-cap">{t.startedAt ? `첫 기록 ${fmtDate(t.startedAt)}` : "아직 기록 없음"}</span>
               </div>
+              {t.ready && (
+                <span className="trd-ready">
+                  <CheckCircle2 size={16} strokeWidth={1.5} aria-hidden="true" />
+                  기간과 청산 건수를 채웠어요. 소액 실전을 검토할 수 있어요
+                </span>
+              )}
               <Progress label="모의투자 기간" value={t.days} max={DEFAULT_PAPER_TRACKING.minDays} unit="일" />
               <Progress label="청산 거래" value={t.closedTrades} max={DEFAULT_PAPER_TRACKING.minClosedTrades} unit="건" />
               <div className="row between t-2">
-                <span>거래당 기대값</span>
+                <span>
+                  거래당 기대값 <span className="t-cap">청산 거래의 평균 순수익률</span>
+                </span>
                 {t.expectancyPct == null ? <span className="t-cap">청산 거래가 없어 아직 몰라요</span> : <Change pct={t.expectancyPct} showAbs={false} />}
               </div>
               <div className="t-2">
@@ -518,7 +537,7 @@ function PaperReset({ server }: { server: ServerState }) {
         모의계좌를 예수금(<span className="num">{amounts}</span>)으로 되돌려요. 매매일지는 그대로 남아요.
       </p>
       <div>
-        <Button variant="secondary" size={atLeast(bp, "large") ? "sm" : "md"} onClick={() => setOpen(true)}>
+        <Button variant="secondary" size={atLeast(bp, "large") ? "sm" : "md"} className={atLeast(bp, "large") ? "" : "trd-touch-btn"} onClick={() => setOpen(true)}>
           모의계좌 초기화
         </Button>
       </div>
@@ -549,6 +568,74 @@ function PaperReset({ server }: { server: ServerState }) {
   );
 }
 
+/** 기록 내보내기: 1차 로컬 엑셀, 2차 구글 스프레드시트(서버 설정). 모의매매·매매일지·스캔 기록이 함께 나간다 */
+function ExportSection({ server }: { server: ServerState }) {
+  const { refreshServer, now } = useApp();
+  const toast = useToast();
+  const bp = useBreakpoint();
+  const [busy, setBusy] = useState(false);
+  const ex = server.status.export;
+  const when = (iso: string | null) => (iso ? fmtWhen(iso, now) : "");
+  const run = async () => {
+    setBusy(true);
+    try {
+      await syncExport();
+      await refreshServer();
+      toast("기록을 내보냈어요", "ok");
+    } catch (e) {
+      toast(`내보내지 못했어요. ${e instanceof Error ? e.message : ""} 서버 연결을 확인해 주세요.`, "warn");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const size = atLeast(bp, "large") ? "sm" : "md";
+  return (
+    <Section title="기록 내보내기" as="h2">
+      <p className="t-2">모의매매·매매일지·스캔 기록을 엑셀 파일로 저장해요. 기록이 바뀌면 서버가 자동으로 다시 저장해요.</p>
+      <dl className="trd-export">
+        <div>
+          <dt>로컬 엑셀</dt>
+          <dd>
+            {ex.excel.ok === false ? (
+              <span className="warn-text">저장하지 못했어요{ex.excel.error ? `: ${ex.excel.error}` : ""}</span>
+            ) : ex.excel.at ? (
+              <span className="num">{when(ex.excel.at)} 저장</span>
+            ) : (
+              "아직 저장 전"
+            )}
+            <span className="t-cap trd-path">{ex.excel.path}</span>
+          </dd>
+        </div>
+        <div>
+          <dt>구글 스프레드시트</dt>
+          <dd>
+            {!ex.sheets.configured ? (
+              <span className="t-2">연결하지 않았어요. 서버 설정(server/.env.example)을 참고하세요</span>
+            ) : ex.sheets.ok === false ? (
+              <span className="warn-text">동기화하지 못했어요{ex.sheets.error ? `: ${ex.sheets.error}` : ""}</span>
+            ) : ex.sheets.at ? (
+              <span className="num">
+                {when(ex.sheets.at)} 동기화{ex.sheets.rows != null ? ` · ${fmtInt(ex.sheets.rows)}행` : ""}
+              </span>
+            ) : (
+              "아직 동기화 전"
+            )}
+          </dd>
+        </div>
+      </dl>
+      <div className="row wrap">
+        <a className={`ui-btn secondary ${size === "sm" ? "sm" : ""} trd-a-btn`} href={excelUrl} download>
+          <Download size={16} strokeWidth={1.5} aria-hidden="true" />
+          엑셀 내려받기
+        </a>
+        <Button variant="ghost" size={size} busy={busy} icon={<RefreshCw size={16} strokeWidth={1.5} aria-hidden="true" />} onClick={run}>
+          지금 내보내기
+        </Button>
+      </div>
+    </Section>
+  );
+}
+
 // ───────────────────────── 탭 ─────────────────────────
 
 export function HoldingsTab({ server }: { server: ServerState }) {
@@ -560,8 +647,9 @@ export function HoldingsTab({ server }: { server: ServerState }) {
   const paperOff = !server.settings.paperEnabled;
   const side = (
     <>
-      <PaperTracking server={server} currencies={currencies} />
+      <PaperTracking server={server} currencies={currencies} side={large} />
       <PaperReset server={server} />
+      <ExportSection server={server} />
     </>
   );
   return (

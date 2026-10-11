@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useApp } from "../../app/AppContext";
 import { navigate, useRoute } from "../../app/router";
 import { riskSummary } from "../../features/risk/riskSummary";
-import { Button, EmptyState, Skeleton, SkeletonRows, Tabs, useBreakpoint } from "../../ui";
+import { Button, Notice, Skeleton, SkeletonRows, Tabs, useBreakpoint } from "../../ui";
 import { HoldingsTab, nearStopCount } from "./HoldingsTab";
 import { LimitsTab } from "./LimitsTab";
 import { planEntries, PlanTab } from "./PlanTab";
@@ -110,25 +110,30 @@ export default function TradeScreen() {
   let body;
   if (!server) {
     body = offline ? (
-      <EmptyState
-        title="서버에 연결되면 보유 종목과 한도가 여기에 나와요"
+      <Notice
+        tone="warn"
+        title="서버에 연결하지 못해 보유 종목과 한도를 불러오지 못했어요"
         action={
           <Button
             variant="secondary"
+            className="trd-touch-btn"
             busy={retrying}
             icon={<RefreshCw size={16} strokeWidth={1.5} aria-hidden="true" />}
             onClick={async () => {
               setRetrying(true);
-              await refreshServer();
-              setRetrying(false);
+              try {
+                await refreshServer();
+              } finally {
+                setRetrying(false);
+              }
             }}
           >
             다시 연결
           </Button>
         }
       >
-        <span className="t-2">연결되면 자동으로 다시 받아요.</span>
-      </EmptyState>
+        서버가 켜져 있는지 확인해 주세요. 연결되면 자동으로 다시 받아요.
+      </Notice>
     ) : (
       <LoadingShape />
     );
