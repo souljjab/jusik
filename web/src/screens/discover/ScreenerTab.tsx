@@ -453,7 +453,15 @@ function ResultTable({ list }: { list: DayTradeCandidate[] }) {
   const { openStock } = useApp();
   const { openEvidence } = useActions();
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "score", desc: true });
-  const rows = useMemo(() => [...list].sort((a, b) => (b[sort.key] - a[sort.key]) * (sort.desc ? 1 : -1)), [list, sort]);
+  // 거래대금은 원과 달러를 섞어 비교할 수 없어 국내를 먼저 두고 같은 통화끼리 정렬한다
+  const rows = useMemo(
+    () =>
+      [...list].sort((a, b) => {
+        if (sort.key === "tradeValue" && regionOf(a.market) !== regionOf(b.market)) return regionOf(a.market) === "KR" ? -1 : 1;
+        return (b[sort.key] - a[sort.key]) * (sort.desc ? 1 : -1);
+      }),
+    [list, sort],
+  );
   const sparks = useSparks(useMemo(() => [...list].sort((a, b) => b.score - a.score).map((c) => c.code), [list]));
   const th = (key: SortKey, label: string) => (
     <th className="r" aria-sort={sort.key === key ? (sort.desc ? "descending" : "ascending") : undefined}>
