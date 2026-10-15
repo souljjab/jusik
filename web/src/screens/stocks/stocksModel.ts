@@ -1,3 +1,4 @@
+import { defaultBuyQty } from "../../features/orderMath";
 import {
   BUY_ACTIONS, SELL_ACTIONS, STAGE_LABEL, assessRegimeAt, candleMasterAt, candleMasterSignals, completedWeeks, dailyRegimeLookup,
   dailySignalsFromPrep, macd, prepareDailySignals, prepareStage, relativeStrength, rsi, shortDateKo, sma, stageAt, toWeekly,
@@ -398,10 +399,7 @@ export function orderPreview(i: OrderPreviewInput): OrderPreview {
   let qty: number;
   if (i.side === "SELL") qty = Math.max(0, i.held);
   else {
-    const risk = i.capital > 0 ? (i.capital * i.riskPct) / 100 : 0;
-    const byRisk = perShare > 0 ? Math.floor(risk / perShare) : 0;
-    const byWeight = i.capital > 0 && price > 0 ? Math.floor((i.capital * i.maxWeightPct) / 100 / price) : 0;
-    qty = Math.max(perShare > 0 ? 1 : 0, Math.min(byRisk || byWeight, byWeight || byRisk));
+    qty = defaultBuyQty({ capital: i.capital, riskPct: i.riskPct, maxWeightPct: i.maxWeightPct, price, stop: stopOk ? i.stop : 0 }).qty;
   }
   const loss = perShare * qty;
   const after = i.side === "BUY" ? i.held + qty : Math.max(0, i.held - qty);

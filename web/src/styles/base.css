@@ -10,6 +10,9 @@ body {
   line-height: var(--line-height-body);
   font-weight: var(--font-weight-regular);
   -webkit-font-smoothing: antialiased;
+  /* 한글은 낱말 단위로 줄바꿈(좁은 칸에서 글자 중간에 꺾이지 않게), 아주 긴 문자열만 끊는다 */
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 h1, h2, h3, h4, p { margin: 0; }
 h1 { font-size: var(--font-size-title); line-height: var(--line-height-title); font-weight: var(--font-weight-bold); }

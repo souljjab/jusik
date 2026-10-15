@@ -303,3 +303,16 @@ describe("minute evidence", () => {
     expect(failed.cells[3]!.state).toBe("unmet");
   });
 });
+
+describe("defaultBuyQty (shared with the order review sheet)", () => {
+  it("caps by the loss budget and the weight cap, and proposes 1 share with overRisk when even 1 share breaks the loss budget", async () => {
+    const { defaultBuyQty } = await import("../src/features/orderMath");
+    // 1천만 원, 1회 손실 1% = 10만 원, 주당 손절폭 5천 원 → 20주, 비중 30% = 300만 원 / 5만 원 = 60주 → 20주
+    expect(defaultBuyQty({ capital: 10_000_000, riskPct: 1, maxWeightPct: 30, price: 50_000, stop: 45_000 })).toEqual({ qty: 20, overRisk: false });
+    // 비중 상한이 더 좁으면 비중 상한: 10% = 100만 원 / 5만 원 = 20주, 손실 기준 40주 → 20주
+    expect(defaultBuyQty({ capital: 10_000_000, riskPct: 1, maxWeightPct: 10, price: 50_000, stop: 47_500 })).toEqual({ qty: 20, overRisk: false });
+    // 7천 달러, 1% = 70달러, 주당 손절폭 100달러 → 손실 기준 0주 → 1주 + 경고(비중 상한 수량으로 넘어가지 않음)
+    expect(defaultBuyQty({ capital: 7_000, riskPct: 1, maxWeightPct: 30, price: 700, stop: 600 })).toEqual({ qty: 1, overRisk: true });
+    expect(defaultBuyQty({ capital: 7_000, riskPct: 1, maxWeightPct: 30, price: 700, stop: 0 })).toEqual({ qty: 0, overRisk: false });
+  });
+});

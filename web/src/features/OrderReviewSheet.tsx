@@ -2,6 +2,9 @@ import { AlertTriangle, Check, Minus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { currencyOfRegion, marketClock, paperEquity, regionOfCode, type Currency, type Evidence, type JournalCheck, type JournalEntry, type ServerState } from "@jusik/shared";
 import { addJournal, checkJournal, type JournalInput } from "../api";
+import { accountBaseOf, defaultBuyQty } from "./orderMath";
+
+export { accountBaseOf, defaultBuyQty };
 import { useApp } from "../app/AppContext";
 import {
   Button, Chip, EvidenceStrip, Field, fmtPct, fmtPnl, fmtPrice, fmtRatio, meterState, Notice, NumberStepper, RiskMeter, Sheet, useToast,
@@ -32,15 +35,6 @@ export interface OrderRequest {
   qty?: number;
 }
 
-/**
- * 계좌 기준 금액: 모의매매를 켰으면 모의계좌 자산, 아니면 설정한 예수금.
- * 주문 검토의 '계좌 대비'·'주문 후 비중'과 매매 화면이 같은 기준을 쓴다.
- */
-export function accountBaseOf(st: Pick<ServerState, "settings" | "paper"> | null | undefined, cur: Currency): number {
-  if (!st) return 0;
-  const s = st.settings;
-  return s.paperEnabled ? paperEquity(st.paper[cur]) : cur === "KRW" ? s.depositKRW : s.depositUSD;
-}
 
 /** 직접 쓴 일지 기준으로 지금 보유 수량(매수 − 매도) */
 export function heldQty(journal: JournalEntry[], code: string): number {
@@ -93,11 +87,7 @@ export function OrderReviewSheet({ req, onClose }: { req: OrderRequest | null; o
     setCheck(null);
     if (req.side === "SELL") return setQty(req.qty != null && req.qty > 0 ? Math.min(req.qty, Math.max(held, req.qty)) : Math.max(0, held));
     if (req.qty != null && req.qty > 0) return setQty(Math.floor(req.qty));
-    const risk = s && deposit ? (deposit * s.riskPct) / 100 : 0;
-    const perShare = req.stop && p > req.stop ? p - req.stop : 0;
-    const byRisk = perShare > 0 ? Math.floor(risk / perShare) : 0;
-    const byWeight = s && p > 0 ? Math.floor((deposit * s.maxWeightPct) / 100 / p) : 0;
-    setQty(Math.max(perShare > 0 ? 1 : 0, Math.min(byRisk || byWeight, byWeight || byRisk)));
+    setQty(s ? defaultBuyQty({ capital: deposit, riskPct: s.riskPct, maxWeightPct: s.maxWeightPct, price: p, stop: req.stop ?? 0 }).qty : 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [req]);
 
@@ -106,6 +96,8 @@ export function OrderReviewSheet({ req, onClose }: { req: OrderRequest | null; o
   const lossPerShare = stopOk && buy ? price - stop : 0;
   const loss = lossPerShare * qty;
   const lossPctOfAccount = deposit > 0 ? (loss / deposit) * 100 : null;
+  // 1회 손실 한도(riskPct)를 넘는 주문은 막지 않지만 위험 상자에 알린다
+  const overRiskLimit = buy && s != null && lossPctOfAccount != null && lossPctOfAccount > s.riskPct + 1e-9;
   const afterWeight = deposit > 0 && price > 0 ? (((buy ? held + qty : Math.max(0, held - qty)) * price) / deposit) * 100 : null;
   const cap = s?.maxWeightPct ?? null;
   const weightState = meterState(afterWeight, cap);
@@ -225,7 +217,10 @@ export function OrderReviewSheet({ req, onClose }: { req: OrderRequest | null; o
             <div className="ui-panel flat stack-3" aria-label="위험 상자">
               <div className="row between base">
                 <span className="t-2">손절 시 예상 손실</span>
-                <span className="t-cap">계좌의 {lossPctOfAccount == null ? "-" : fmtRatio(lossPctOfAccount)}</span>
+                <span className={overRiskLimit ? "t-cap warn-text t-medium" : "t-cap"}>
+                  계좌의 {lossPctOfAccount == null ? "-" : fmtRatio(lossPctOfAccount)}
+                  {overRiskLimit && s ? ` · 1회 손실 한도 ${fmtRatio(s.riskPct)} 초과` : ""}
+                </span>
               </div>
               <span className="t-price">{stopOk && qty > 0 ? fmtPnl(-loss, region) : "-"}</span>
               <RiskMeter label="주문 후 종목 비중" value={afterWeight} limit={cap} format={(n) => fmtRatio(n)} limitLabel={cap != null ? `상한 ${fmtRatio(cap)}` : undefined} overText="상한 초과" />

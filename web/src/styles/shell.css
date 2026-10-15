@@ -54,8 +54,9 @@
 .kbd { font-size: var(--font-size-caption); border: 1px solid var(--color-border); border-radius: var(--radius-chip); padding: 0 var(--space-1); color: var(--color-text-2); background: var(--color-surface-2); white-space: nowrap; }
 .topbar .status { display: flex; align-items: center; gap: var(--space-2); flex-wrap: nowrap; }
 .topbar .asof { font-size: var(--font-size-secondary); color: var(--color-text-2); white-space: nowrap; }
-.indices { display: flex; align-items: baseline; gap: var(--space-4); font-size: var(--font-size-secondary); white-space: nowrap; overflow: hidden; }
-.indices .ix { display: inline-flex; gap: var(--space-2); align-items: baseline; }
+/* 들어가지 않는 지수는 다음 줄로 넘겨 숨긴다(숫자 중간에서 잘리지 않게) */
+.indices { display: flex; flex-wrap: wrap; align-items: baseline; align-content: flex-start; column-gap: var(--space-4); row-gap: 8px; font-size: var(--font-size-secondary); line-height: 20px; max-height: 20px; overflow: hidden; min-width: 0; flex: 1 1 0; }
+.indices .ix { display: inline-flex; gap: var(--space-2); align-items: baseline; white-space: nowrap; }
 .indices .nm { color: var(--color-text-2); }
 .indices .v { font-weight: var(--font-weight-medium); font-variant-numeric: tabular-nums; }
 .topbar .actions { margin-left: auto; display: flex; align-items: center; gap: var(--space-1); }
@@ -81,6 +82,11 @@
 }
 @media (max-width: 839.98px) {
   .indices { display: none; }
+  /* 태블릿 세로: 상단 바에 국내 장 상태만, 검색은 짧게 */
+  .topbar .status .ui-mstatus + .ui-mstatus { display: none; }
+  .cmd-trigger { width: auto; flex: 1 1 auto; min-width: 0; max-width: 240px; }
+  .cmd-trigger .kbd { display: none; }
+  .topbar .actions { flex: none; }
 }
 @media (max-width: 599.98px) {
   .shell { grid-template-columns: minmax(0, 1fr); grid-template-areas: "top" "main"; }
