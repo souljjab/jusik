@@ -270,6 +270,12 @@ export function StockSearch({ code, name, onPick, id, invalid }: { code: string;
   );
 }
 
+/** 서버 오류 문구 끝에 마침표가 없으면 붙인다(다음 문장과 붙어 읽히지 않게) */
+export const sentence = (msg: string) => {
+  const t = msg.trim();
+  return !t || /[.!?]$/.test(t) ? t : `${t}.`;
+};
+
 /** CSV 내려받기(엑셀에서 한글이 깨지지 않게 BOM) */
 export function downloadText(filename: string, text: string) {
   const url = URL.createObjectURL(new Blob(["﻿" + text], { type: "text/csv;charset=utf-8" }));

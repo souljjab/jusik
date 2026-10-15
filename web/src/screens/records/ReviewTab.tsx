@@ -246,7 +246,7 @@ function TradeItem({ r }: { r: TradeRow }) {
         </span>
       </div>
       <div className="rec-trade-sub">
-        <span className="t-cap num">
+        <span className="t-cap rec-tnum">
           {fmtDate(r.date)} 매도 · {sourceOf({ source: r.source }) === "자동(모의)" ? "자동(모의)" : "직접"}
           {r.result && !r.result.net && r.result.pnl != null ? " · 수수료 제외" : ""}
         </span>

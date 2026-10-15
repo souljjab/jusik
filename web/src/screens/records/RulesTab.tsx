@@ -4,8 +4,8 @@ import { MIN_RELIABLE, type Evaluation, type Market, type ReplayRun, type Stats 
 import { getPaperEval, getReplay, runReplay, saveSettings } from "../../api";
 import { useApp } from "../../app/AppContext";
 import { navigate } from "../../app/router";
-import { Button, Chip, EmptyState, fmtDate, fmtInt, fmtNum, fmtWhen, Notice, Section, Segmented, Sheet, Skeleton, SkeletonRows, Stat, Stats as StatRow, useBreakpoint, useToast } from "../../ui";
-import { Ret } from "./parts";
+import { Button, Chip, EmptyState, fmtDate, fmtInt, fmtNum, fmtPct, fmtWhen, Notice, Section, Segmented, Sheet, Skeleton, SkeletonRows, Stat, Stats as StatRow, useBreakpoint, useToast } from "../../ui";
+import { Ret, sentence } from "./parts";
 
 /*
  * 규칙 점검: 단타 규칙(최소 점수 기준)이 실제로 통했는지 본다.
@@ -69,7 +69,35 @@ function StatHead() {
   );
 }
 
+/** 핸드폰: 표 대신 목록 행(이름 — 기대값 / 거래·승률·하한·PF) */
+function StatRows({ items, label }: { items: { key: string; name: string; current?: boolean; s: Stats; extra?: string }[]; label: string }) {
+  return (
+    <ul className="rec-statrows" aria-label={label}>
+      {items.map((x) => (
+        <li key={x.key} className={x.current ? "is-current" : ""} aria-current={x.current ? "true" : undefined}>
+          <div className="rec-statrows-top">
+            <span className="t-medium">
+              {x.name}
+              {x.current && <span className="t-cap"> 지금 기준</span>}
+            </span>
+            <span className="row" style={{ gap: 4 }}>
+              <span className="t-cap">기대값</span>
+              <Ret pct={x.s.expectancyPct} className="t-medium" />
+            </span>
+          </div>
+          <span className="t-cap rec-tnum">
+            거래 {fmtInt(x.s.n)}
+            {!x.s.reliable && "*"} · 승률 {winText(x.s)} · 하한 {x.s.lowerBoundPct == null ? "-" : fmtPct(x.s.lowerBoundPct)} · PF {x.s.profitFactor == null ? "-" : fmtNum(x.s.profitFactor, 2)}
+            {x.extra ? ` · ${x.extra}` : ""}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function EvaluationPanel({ ev, currentMin, onApply, idBase }: { ev: Evaluation; currentMin: number; onApply: (n: number) => void; idBase: string }) {
+  const compact = useBreakpoint() === "compact";
   const o = ev.overall;
   const s = ev.suggestion;
   const canApply = s.minScore != null && s.minScore !== currentMin;
@@ -106,40 +134,52 @@ function EvaluationPanel({ ev, currentMin, onApply, idBase }: { ev: Evaluation; 
         <h3 className="rec-lbl" id={`${idBase}-th`}>
           최소 점수 기준별 성과 <span className="t-cap">앞 절반에서 고른 기준이 뒤 절반에서도 통하는지 봐요. 지금 {currentMin}점</span>
         </h3>
-        <div className="ui-table-wrap">
-          <table className="ui-table rec-eval-table" aria-labelledby={`${idBase}-th`}>
-            <thead>
-              <tr>
-                <th scope="col">기준</th>
-                <StatHead />
-                <th scope="col" className="r">
-                  앞 절반 기대값
-                </th>
-                <th scope="col" className="r">
-                  뒤 절반 기대값
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {ev.thresholds
-                .filter((t) => t.all.n > 0)
-                .map((t) => (
-                  <tr key={t.minScore} className={t.minScore === currentMin ? "sel" : ""} aria-current={t.minScore === currentMin ? "true" : undefined}>
-                    <th scope="row" className="rec-cellname num">
-                      {t.minScore}점 이상{t.minScore === currentMin && <span className="t-cap"> 지금</span>}
-                    </th>
-                    <StatCells s={t.all} />
-                    <td className="r">
-                      <Ret pct={t.firstHalf.expectancyPct} /> <span className="t-cap num">({fmtInt(t.firstHalf.n)})</span>
-                    </td>
-                    <td className="r">
-                      <Ret pct={t.secondHalf.expectancyPct} /> <span className="t-cap num">({fmtInt(t.secondHalf.n)})</span>
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
+        {compact ? (
+          <StatRows
+            label="최소 점수 기준별 성과"
+            items={ev.thresholds
+              .filter((t) => t.all.n > 0)
+              .map((t) => ({
+                key: String(t.minScore), name: `${t.minScore}점 이상`, current: t.minScore === currentMin, s: t.all,
+                extra: `앞 ${fmtPct(t.firstHalf.expectancyPct)}(${fmtInt(t.firstHalf.n)}) / 뒤 ${fmtPct(t.secondHalf.expectancyPct)}(${fmtInt(t.secondHalf.n)})`,
+              }))}
+          />
+        ) : (
+          <div className="ui-table-wrap">
+            <table className="ui-table rec-eval-table" aria-labelledby={`${idBase}-th`}>
+              <thead>
+                <tr>
+                  <th scope="col">기준</th>
+                  <StatHead />
+                  <th scope="col" className="r">
+                    앞 절반 기대값
+                  </th>
+                  <th scope="col" className="r">
+                    뒤 절반 기대값
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {ev.thresholds
+                  .filter((t) => t.all.n > 0)
+                  .map((t) => (
+                    <tr key={t.minScore} className={t.minScore === currentMin ? "sel" : ""} aria-current={t.minScore === currentMin ? "true" : undefined}>
+                      <th scope="row" className="rec-cellname num">
+                        {t.minScore}점 이상{t.minScore === currentMin && <span className="t-cap"> 지금</span>}
+                      </th>
+                      <StatCells s={t.all} />
+                      <td className="r">
+                        <Ret pct={t.firstHalf.expectancyPct} /> <span className="t-cap num">({fmtInt(t.firstHalf.n)})</span>
+                      </td>
+                      <td className="r">
+                        <Ret pct={t.secondHalf.expectancyPct} /> <span className="t-cap num">({fmtInt(t.secondHalf.n)})</span>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className="rec-eval-groups">
@@ -148,26 +188,30 @@ function EvaluationPanel({ ev, currentMin, onApply, idBase }: { ev: Evaluation; 
             <h3 className="rec-lbl" id={`${idBase}-g-${g.title}`}>
               {g.title}별
             </h3>
-            <div className="ui-table-wrap">
-              <table className="ui-table rec-eval-table" aria-labelledby={`${idBase}-g-${g.title}`}>
-                <thead>
-                  <tr>
-                    <th scope="col">조건</th>
-                    <StatHead />
-                  </tr>
-                </thead>
-                <tbody>
-                  {g.buckets.map((b) => (
-                    <tr key={b.label}>
-                      <th scope="row" className="rec-cellname">
-                        {b.label}
-                      </th>
-                      <StatCells s={b.stats} />
+            {compact ? (
+              <StatRows label={`${g.title}별 성과`} items={g.buckets.map((b) => ({ key: b.label, name: b.label, s: b.stats }))} />
+            ) : (
+              <div className="ui-table-wrap">
+                <table className="ui-table rec-eval-table" aria-labelledby={`${idBase}-g-${g.title}`}>
+                  <thead>
+                    <tr>
+                      <th scope="col">조건</th>
+                      <StatHead />
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {g.buckets.map((b) => (
+                      <tr key={b.label}>
+                        <th scope="row" className="rec-cellname">
+                          {b.label}
+                        </th>
+                        <StatCells s={b.stats} />
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -228,7 +272,7 @@ export function RulesTab() {
       setReplay(r.run);
       toast(`과거 재현을 마쳤어요. 거래 ${fmtInt(r.run.tradeCount)}건`, "ok");
     } catch (e) {
-      setErr(`재현하지 못했어요. ${e instanceof Error ? e.message : String(e)}`);
+      setErr(`재현하지 못했어요. ${sentence(e instanceof Error ? e.message : String(e))}`);
     } finally {
       setRunning(false);
     }
@@ -256,7 +300,7 @@ export function RulesTab() {
         <p className="t-2 rec-lead">모의매매가 자동으로 남긴 매수·매도 기록을 짝지어, 진입 당시 점수·거래량·상승률·시장 국면별로 실제 결과를 나눠 봐요.</p>
         {paperErr ? (
           <Notice tone="warn" title="모의매매 실적을 불러오지 못했어요" action={<Button variant="secondary" size="sm" icon={<RefreshCw size={16} strokeWidth={1.5} aria-hidden="true" />} onClick={load}>다시 불러오기</Button>}>
-            {paperErr} 서버가 켜져 있는지 확인해 주세요.
+            {sentence(paperErr)} 서버가 켜져 있는지 확인해 주세요.
           </Notice>
         ) : !paper ? (
           <div className="stack-3" role="status" aria-label="불러오는 중">

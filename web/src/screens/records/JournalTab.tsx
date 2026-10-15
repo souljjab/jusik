@@ -77,7 +77,7 @@ export function JournalTab({ loaded }: { loaded: boolean }) {
     <section className="rec-list" aria-labelledby="rec-list-h">
       <div className="rec-list-head">
         <h2 id="rec-list-h" className="t-section">
-          기록 <span className="t-cap num">{fmtInt(shown.length)}건</span>
+          기록 {(loaded || journal.length > 0) && <span className="t-cap num">{fmtInt(shown.length)}건</span>}
         </h2>
         <div className="row wrap">
           <Segmented
@@ -290,7 +290,7 @@ function EntryDetail({ e, result, onDelete }: { e: JournalEntry; result: SellRes
         emotion: composeEmotion(d.chips, d.text),
         strategy: d.strategy.trim(),
         ...(sell ? { exitReason: exitValue(d.exitReason, d.exitDetail) } : {}),
-        ...(!sell && JSON.stringify(d.check) !== JSON.stringify(base.check) ? { selfCheck: d.check } : {}),
+        ...(!sell && sourceOf(e) !== "자동(모의)" && JSON.stringify(d.check) !== JSON.stringify(base.check) ? { selfCheck: d.check } : {}),
       });
       await refreshJournal();
       toast("복기를 저장했어요", "ok");
@@ -346,7 +346,7 @@ function EntryDetail({ e, result, onDelete }: { e: JournalEntry; result: SellRes
         {sell && (
           <div>
             <dt title="R = (청산가 − 진입가) ÷ (진입가 − 계획 손절가). 1R은 계획한 1회 손실만큼이에요">R 배수</dt>
-            <dd className="num">
+            <dd className="rec-tnum">
               {result?.r != null ? fmtR(result.r) : "-"}
               {result?.r != null && result.rDerived && <span className="t-cap"> 매수 손절가로 계산</span>}
             </dd>
@@ -373,7 +373,7 @@ function EntryDetail({ e, result, onDelete }: { e: JournalEntry; result: SellRes
       {e.meta && (
         <div className="stack" style={{ gap: 2 }}>
           <span className="rec-lbl">진입 당시 신호(모의매매 규칙)</span>
-          <p className="t-2 num">
+          <p className="t-2 rec-tnum">
             점수 {fmtInt(e.meta.score)}점 · 거래량 {fmtNum(e.meta.volumeRatio, 1)}배 · 당일 {fmtPct(e.meta.changePct)} · 손절폭 {fmtRatio(e.meta.stopPct)}
           </p>
         </div>
@@ -422,7 +422,8 @@ function EntryDetail({ e, result, onDelete }: { e: JournalEntry; result: SellRes
             <StrategyField id={`${idb}-strategy`} value={d.strategy} onChange={(strategy) => setD({ ...d, strategy })} />
           </Field>
         </div>
-        {!sell && (
+        {!sell && sourceOf(e) === "자동(모의)" && <span className="t-cap">모의매매 규칙이 낸 주문이라, 서버가 찾은 위반이 없으면 규칙을 지킨 것으로 봐요.</span>}
+        {!sell && sourceOf(e) !== "자동(모의)" && (
           <fieldset className="rec-checks">
             <legend className="rec-lbl">
               규칙 체크{" "}
@@ -561,6 +562,7 @@ function NewJournalSheet({ open, onClose }: { open: boolean; onClose: () => void
       open={open}
       onClose={close}
       title="새 일지"
+      initialFocus="#rec-sheet-code"
       footer={
         saved ? (
           <div className="rec-del-actions">

@@ -4,7 +4,7 @@ import { INDEX_TREND_DAYS, REVIEW_RULE, type DailyReview, type MarketRowLike, ty
 import { buildReview, getReviews, saveReviewComment } from "../../api";
 import { useApp } from "../../app/AppContext";
 import { Button, Change, EmptyState, fmtBig, fmtDate, fmtInt, fmtNum, fmtWhen, Notice, RuleTag, Section, Segmented, SkeletonRows, useBreakpoint, useToast } from "../../ui";
-import { Pnl } from "./parts";
+import { Pnl, sentence } from "./parts";
 
 /*
  * 일일 복기(M5-01 김연수 6항목: 지수·섹터·신고가·특징주·실적·코멘트).
@@ -47,7 +47,7 @@ export function DailyReviews() {
       setBuilt(await buildReview(region));
       await reload();
     } catch (e) {
-      setBuildErr(`${REGION_LABEL[region]} 복기를 만들지 못했어요. ${e instanceof Error ? e.message : String(e)}`);
+      setBuildErr(`${REGION_LABEL[region]} 복기를 만들지 못했어요. ${sentence(e instanceof Error ? e.message : String(e))}`);
     } finally {
       setBusy(null);
     }
@@ -121,7 +121,7 @@ export function DailyReviews() {
             </Button>
           }
         >
-          {loadErr} 서버가 켜져 있는지 확인한 뒤 다시 불러오세요.
+          {sentence(loadErr)} 서버가 켜져 있는지 확인한 뒤 다시 불러오세요.
         </Notice>
       ) : reviews == null ? (
         <SkeletonRows rows={5} h={22} />

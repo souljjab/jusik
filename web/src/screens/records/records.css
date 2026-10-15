@@ -22,6 +22,8 @@
 .rec-lead { max-width: 72ch; }
 .rec-prose { max-width: 72ch; white-space: pre-wrap; overflow-wrap: anywhere; }
 .rec-center { text-align: center; }
+/* 줄바꿈은 허용하는 고정폭 숫자(긴 요약 문장) */
+.rec-tnum { font-variant-numeric: tabular-nums; font-feature-settings: var(--font-feature-tnum); }
 .rec-foot { max-width: 72ch; }
 .rec-rot { transform: rotate(180deg); }
 .ui-btn.link.rec-touchlink, .ui-btn.link.rec-morelink { min-height: 32px; font-size: var(--font-size-secondary); gap: 2px; align-self: flex-start; }
@@ -221,11 +223,16 @@ th.rec-cellname { font-weight: var(--font-weight-regular); color: var(--color-te
 .rec-rules { min-width: 0; }
 .rec-rules > .ui-section + .ui-section { border-top: 1px solid var(--color-border); padding-top: var(--space-5); }
 .rec-eval-table td, .rec-eval-table th { white-space: nowrap; }
+.rec-rules .ui-table-wrap { max-width: 960px; }
 .rec-eval-table td, .rec-eval-table thead th { padding: var(--space-2) var(--space-3); }
 .rec-eval-table th[scope="row"] { padding: var(--space-2) var(--space-3) var(--space-2) 0; }
 .rec-eval-table tr.sel th { background: var(--color-accent-soft); }
 .rec-eval-table thead th:first-child { padding-left: 0; }
 .rec-eval-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: var(--space-5) var(--space-6); }
+.rec-statrows { list-style: none; margin: 0; padding: 0; }
+.rec-statrows > li { display: flex; flex-direction: column; gap: 2px; padding: var(--space-2) 0; border-bottom: 1px solid var(--color-border); }
+.rec-statrows > li.is-current { border-left: 2px solid var(--color-accent); padding-left: var(--space-2); }
+.rec-statrows-top { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
 .rec-replay-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-4) var(--space-5); }
 .rec-rules .ui-stat .v .num { font-size: inherit; }
 @media (max-width: 599.98px) {
