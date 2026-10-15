@@ -68,7 +68,7 @@ export default function RecordsScreen() {
 
   return (
     <div className={`rec reading is-${bp}`}>
-      <div className="rec-head">
+      <div className="rec-intro">
         <h1 className={bp === "compact" ? "sr-only" : "t-title"}>기록</h1>
         {bp !== "compact" && <p className="t-2">매매를 기록하고 규칙을 지켰는지 돌아봐요. 모의매매 기록은 서버가 자동으로 남겨요.</p>}
       </div>

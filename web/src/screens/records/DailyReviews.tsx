@@ -205,8 +205,7 @@ function ReviewItem({ r }: { r: DailyReview }) {
 
       {open && (
         <div id={dataId} className="stack-4">
-          <div className="rec-dgrid">
-            <div className="rec-dsec rec-dsec-wide">
+          <div className="rec-dsec rec-dsec-index">
               <h5 className="rec-h5">지수 흐름</h5>
               {r.indexMoves.length === 0 ? (
                 <p className="t-cap">지수 자료가 없어요.</p>
@@ -245,8 +244,9 @@ function ReviewItem({ r }: { r: DailyReview }) {
                   </table>
                 </div>
               )}
-            </div>
+          </div>
 
+          <div className="rec-dcols">
             {r.sectorMoves && (
               <div className="rec-dsec">
                 <h5 className="rec-h5">섹터 흐름</h5>

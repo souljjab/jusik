@@ -5,7 +5,7 @@
  */
 
 .rec { min-width: 0; }
-.rec-head { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); }
+.rec-intro { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); }
 .rec-tabs { margin-bottom: var(--space-5); }
 .rec-panel { min-width: 0; }
 .rec.is-compact .rec-tabs { margin: calc(var(--space-2) * -1) 0 var(--space-4); }
@@ -85,15 +85,26 @@
 .rec-e-result { grid-area: result; text-align: right; white-space: nowrap; }
 .rec-e-meta { grid-area: meta; display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--space-3); min-width: 0; }
 .rec-e-emo { max-width: 100%; }
+.rec-e-emo:empty, .rec-e-verdict:empty { display: none; }
 .rec-e-chev { grid-area: chev; color: var(--color-text-2); transition: transform var(--motion-fast) var(--motion-ease); }
 .rec-entry.is-open .rec-e-chev { transform: rotate(180deg); }
 @container (min-width: 720px) {
+  /* 넓으면 한 줄: 구분 | 종목 | 수량×가격 | 결과 | 감정 | 판정 | 출처 — 칸을 맞춘다 */
   .rec-entry-btn {
-    grid-template-columns: 3em minmax(120px, 1.1fr) minmax(120px, auto) minmax(110px, auto) minmax(0, 1.6fr) 16px;
-    grid-template-areas: "side name qty result meta chev";
+    grid-template-columns: 2.75em minmax(110px, 1.2fr) auto minmax(96px, auto) minmax(64px, 1fr) 6.5em 5em 16px;
+    grid-template-areas: none; column-gap: var(--space-3);
   }
-  .rec-e-side { align-self: center; padding-top: 0; }
-  .rec-e-meta { justify-content: flex-start; padding-left: var(--space-3); }
+  .rec-entry-btn > * { grid-area: auto; grid-row: 1; }
+  .rec-e-side { grid-column: 1; align-self: center; padding-top: 0; }
+  .rec-e-name { grid-column: 2; }
+  .rec-e-qty { grid-column: 3; }
+  .rec-e-result { grid-column: 4; }
+  .rec-e-meta { display: contents; }
+  .rec-e-emo { grid-column: 5; grid-row: 1; padding-left: var(--space-2); }
+  .rec-e-verdict { grid-column: 6; grid-row: 1; }
+  .rec-e-src { grid-column: 7; grid-row: 1; }
+  .rec-e-emo:empty, .rec-e-verdict:empty { display: block; }
+  .rec-e-chev { grid-column: 8; }
 }
 .rec-entry-detail { padding: var(--space-3) 0 var(--space-5) var(--space-4); margin-left: var(--space-1); border-left: 2px solid var(--color-accent-line); }
 
@@ -131,6 +142,12 @@
 .rec-dropdown li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: var(--touch-min); padding: var(--space-2) var(--space-3); border-radius: var(--radius-chip); cursor: pointer; }
 .rec-dropdown li[aria-selected="true"] { background: var(--color-accent-soft); }
 .rec-quick { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+/* 핸드폰: 바로 고르기는 한 줄로 두고 옆으로 밀어 본다(페이지는 가로로 밀리지 않는다) */
+@media (max-width: 599.98px) {
+  .rec-quick { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 calc(-1 * var(--space-4)); padding: 0 var(--space-4); }
+  .rec-quick::-webkit-scrollbar { display: none; }
+  .rec-quick .ui-chip { flex: none; }
+}
 
 /* 아래 붙는 버튼 줄(핸드폰은 하단 탭 바로 위, 태블릿 세로는 화면 맨 아래) */
 .rec-actionbar {
@@ -181,7 +198,10 @@
 .rec-daily-list > .rec-daily:first-child { border-top: 0; padding-top: 0; }
 .rec-daily-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2) var(--space-3); flex-wrap: wrap; }
 .rec-dgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: var(--space-4) var(--space-5); }
-@media (min-width: 840px) { .rec-dsec-wide { grid-column: span 2; } }
+/* 길이가 다른 묶음(섹터·신고가·후보·모의매매)은 여러 단으로 흘려 빈칸을 줄인다 */
+.rec-dcols { columns: 3 220px; column-gap: var(--space-5); }
+.rec-dcols > .rec-dsec { break-inside: avoid; margin-bottom: var(--space-4); }
+.rec-dsec-index { max-width: 640px; }
 .rec-dsec { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
 .rec-h5 { margin: 0; font-size: var(--font-size-secondary); font-weight: var(--font-weight-bold); display: flex; gap: var(--space-2); align-items: baseline; }
 .rec-mini { list-style: none; margin: 0; padding: 0; font-size: var(--font-size-table); }
@@ -204,7 +224,7 @@ th.rec-cellname { font-weight: var(--font-weight-regular); color: var(--color-te
 .rec-eval-table th[scope="row"] { padding: var(--space-2) var(--space-3) var(--space-2) 0; }
 .rec-eval-table thead th:first-child { padding-left: 0; }
 .rec-eval-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: var(--space-5) var(--space-6); }
-.rec-replay-form { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-4) var(--space-5); }
+.rec-replay-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-4) var(--space-5); }
 .rec-rules .ui-stat .v .num { font-size: inherit; }
 @media (max-width: 599.98px) {
   .rec-rules .ui-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }

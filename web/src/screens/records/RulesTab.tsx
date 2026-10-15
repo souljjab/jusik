@@ -185,6 +185,8 @@ export function RulesTab() {
   const [replay, setReplay] = useState<ReplayRun | null>(null);
   const [replayLoaded, setReplayLoaded] = useState(false);
   const [running, setRunning] = useState(false);
+  /** 다른 화면에서 시작한 재현이 아직 도는 중(끝날 때까지 5초마다 확인) */
+  const [remote, setRemote] = useState(false);
   const [markets, setMarkets] = useState<Record<Market, boolean>>({ KOSPI: true, KOSDAQ: true, US: true });
   const [count, setCount] = useState("500");
   const [err, setErr] = useState("");
@@ -198,12 +200,24 @@ export function RulesTab() {
     getReplay()
       .then((r) => {
         setReplay(r.run);
-        setRunning((x) => x || r.running);
+        setRemote(r.running);
       })
       .catch(() => {})
       .finally(() => setReplayLoaded(true));
   }, []);
   useEffect(load, [load]);
+  useEffect(() => {
+    if (!remote || running) return;
+    const t = setInterval(() => {
+      getReplay()
+        .then((r) => {
+          setReplay(r.run);
+          setRemote(r.running);
+        })
+        .catch(() => {});
+    }, 5000);
+    return () => clearInterval(t);
+  }, [remote, running]);
 
   const chosen = (Object.keys(markets) as Market[]).filter((m) => markets[m]);
   const run = async () => {
@@ -293,13 +307,13 @@ export function RulesTab() {
             <span className="rec-lbl">기간</span>
             <Segmented label="재현 기간" value={count} onChange={setCount} options={COUNTS} />
           </div>
-          <div className="stack" style={{ gap: 4 }}>
-            <Button variant="primary" busy={running} disabled={!chosen.length} icon={<Play size={16} strokeWidth={1.5} aria-hidden="true" />} onClick={run}>
-              {running ? "재현 중" : "재현 실행"}
-            </Button>
-            <span className="t-cap">{running ? "종목 수에 따라 1~3분 걸려요." : !chosen.length ? "시장을 하나 이상 고르세요." : bp === "compact" ? "1~3분 걸려요." : "종목 수에 따라 1~3분 걸려요."}</span>
-          </div>
+          <Button variant="primary" busy={running || remote} disabled={!chosen.length} icon={<Play size={16} strokeWidth={1.5} aria-hidden="true" />} onClick={run}>
+            {running || remote ? "재현 중" : "재현 실행"}
+          </Button>
         </div>
+        <span className="t-cap" aria-live="polite">
+          {!chosen.length ? "시장을 하나 이상 고르세요." : "종목 수에 따라 1~3분 걸려요. 그동안 다른 화면을 봐도 돼요."}
+        </span>
         {err && <Notice tone="warn">{err} 잠시 뒤 다시 실행해 보세요.</Notice>}
         {!replayLoaded ? (
           <SkeletonRows rows={3} h={20} />

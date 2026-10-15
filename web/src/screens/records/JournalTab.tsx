@@ -257,9 +257,11 @@ function EntryRow({ e, result, expanded, onToggle, onDelete }: { e: JournalEntry
           )}
         </span>
         <span className="rec-e-meta">
-          {emos.length > 0 && <span className="rec-e-emo t-2 ellipsis">{emos.join(" · ")}</span>}
-          <Verdict v={v} />
-          <span className="t-cap">{sourceText(e)}</span>
+          <span className="rec-e-emo t-2 ellipsis">{emos.join(" · ")}</span>
+          <span className="rec-e-verdict">
+            <Verdict v={v} />
+          </span>
+          <span className="rec-e-src t-cap">{sourceText(e)}</span>
         </span>
         <ChevronDown size={16} strokeWidth={1.5} className="rec-e-chev" aria-hidden="true" />
       </button>

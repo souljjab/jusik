@@ -63,7 +63,7 @@ export function TagList({ tags, emotions = [], label }: { tags: Tag[]; emotions?
 
 /** 규칙 판정 문구: '규칙 지킴'(보조색 + 체크) / '위반 n건'(경고색 + 아이콘) */
 export function Verdict({ v }: { v: { ok: boolean; text: string } | null }) {
-  if (!v) return <span className="t-cap">규칙 판단 없음</span>;
+  if (!v) return null;
   return (
     <span className={`rec-verdict ${v.ok ? "is-ok" : "is-warn"}`}>
       {v.ok ? <Check size={12} strokeWidth={1.5} aria-hidden="true" /> : <AlertTriangle size={12} strokeWidth={1.5} aria-hidden="true" />}
