@@ -1,0 +1,79 @@
+/*
+ * 알림 센터(UI 지도서 7.2 그림 10 가운데). 카드 대신 구분선 목록, 리스크는 왼쪽 경고색 막대.
+ * 방해 금지·브라우저 알림 조절(설정 > 알림에서도 쓴다)
+ */
+.glb-al { display: flex; flex-direction: column; gap: var(--space-4); max-width: var(--content-max); }
+.glb-al-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.glb-al.is-compact .glb-al-head { align-items: center; margin-top: calc(-1 * var(--space-2)); }
+
+.glb-al-body { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
+.glb-al-body.has-side { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 340px); gap: var(--space-6); align-items: start; }
+.glb-al-col { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.glb-al-side {
+  display: flex; flex-direction: column; gap: var(--space-5); min-width: 0;
+  border-left: 1px solid var(--color-border); padding-left: var(--space-5);
+  position: sticky; top: calc(var(--topbar-h) + var(--space-4)); max-height: calc(100dvh - var(--topbar-h) - var(--space-6)); overflow-y: auto;
+}
+
+/* 방해 금지 한 줄(핸드폰·태블릿 세로) — 독립된 조절이라 면으로 띄운다 */
+.glb-al-dnd {
+  display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;
+  background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-panel); padding: var(--space-2) var(--space-3);
+}
+.glb-al-dnd .glb-dndrow { flex: 1; min-width: 220px; }
+.glb-al-dnd-more { margin-left: auto; min-height: var(--touch-min); }
+
+.glb-dndrow { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.glb-dndrow-ico { color: var(--color-text-2); }
+.glb-dndrow-toggle { flex: 1; min-width: 0; }
+
+/* 범주 탭 */
+.glb-al-tabs { margin-top: var(--space-1); }
+.glb-al-tab { display: inline-flex; align-items: center; gap: var(--space-1); }
+.glb-al-tabn { font-size: var(--font-size-caption); color: var(--color-text-2); font-weight: var(--font-weight-medium); }
+
+/* 목록 */
+.glb-al-panel { min-width: 0; }
+.glb-al-list { display: flex; flex-direction: column; gap: var(--space-4); }
+.glb-al-group { display: flex; flex-direction: column; gap: var(--space-1); }
+.glb-al-day { font-size: var(--font-size-secondary); font-weight: var(--font-weight-medium); color: var(--color-text-2); padding-top: var(--space-2); }
+.glb-al-items { list-style: none; margin: 0; padding: 0; }
+.glb-al-item { border-bottom: 1px solid var(--color-border); }
+.glb-al-link {
+  display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-2) var(--space-3) var(--space-3);
+  border-left: 3px solid transparent; color: inherit; text-decoration: none; min-height: var(--touch-min);
+}
+a.glb-al-link:hover { background: var(--color-surface-2); }
+.glb-al-item.cat-risk .glb-al-link { border-left-color: var(--color-warn); }
+.glb-al-main { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.glb-al-top { display: flex; align-items: baseline; gap: var(--space-2); }
+.glb-al-time { margin-left: auto; font-size: var(--font-size-secondary); color: var(--color-text-2); }
+.glb-al-new { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--font-size-caption); color: var(--color-text-2); }
+.glb-al-new .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-accent); }
+.glb-al-title { font-weight: var(--font-weight-bold); overflow-wrap: anywhere; }
+.glb-al-text { font-size: var(--font-size-table); line-height: var(--line-height-table); color: var(--color-text-2); overflow-wrap: anywhere; }
+.glb-al-item.is-new .glb-al-text { color: var(--color-text); }
+.glb-al-chev { color: var(--color-text-2); }
+.glb-al-ev { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; padding: 0 var(--space-2) var(--space-3) calc(var(--space-3) + 3px); }
+.glb-al-item.cat-risk .glb-al-ev { border-left: 3px solid var(--color-warn); padding-left: var(--space-3); }
+.glb-al-ev .ui-ev-open { min-height: var(--touch-min); }
+@media (min-width: 1200px) { .glb-al-ev .ui-ev-open { min-height: 0; } }
+.glb-al-foot { padding-top: var(--space-2); }
+.glb-al-skel { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3) 0 var(--space-3) var(--space-3); border-bottom: 1px solid var(--color-border); }
+
+.glb-spin { animation: ui-spin 0.9s linear infinite; }
+
+/* 방해 금지 편집 */
+.glb-dnd-editor { display: flex; flex-direction: column; gap: var(--space-3); }
+.glb-times { display: flex; align-items: flex-end; gap: var(--space-2); flex-wrap: wrap; }
+.glb-time { display: flex; flex-direction: column; gap: var(--space-1); }
+.glb-time .ui-input { width: 128px; }
+.glb-times-sep { padding-bottom: var(--space-2); color: var(--color-text-2); }
+
+.glb-notify { display: flex; flex-direction: column; gap: var(--space-3); }
+
+/* 알림이 생기는 때 */
+.glb-sources { display: flex; flex-direction: column; gap: var(--space-3); }
+.glb-sources dl { margin: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.glb-sources dl > div { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: var(--space-2); align-items: baseline; }
+.glb-sources dd { margin: 0; font-size: var(--font-size-secondary); line-height: 1.5; }
