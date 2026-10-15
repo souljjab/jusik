@@ -1,8 +1,8 @@
 import {
   BUY_ACTIONS, SELL_ACTIONS, STAGE_LABEL, assessRegimeAt, candleMasterAt, candleMasterSignals, completedWeeks, dailyRegimeLookup,
   dailySignalsFromPrep, macd, prepareDailySignals, prepareStage, relativeStrength, rsi, shortDateKo, sma, stageAt, toWeekly,
-  type Analysis, type Candle, type CandleMasterResult, type DailySignal, type DayTradeCandidate, type Posture, type Region,
-  type RegimeAssessment, type StageResult,
+  type Analysis, type Candle, type CandleMasterResult, type DailySignal, type DayTradeCandidate, type Evidence, type EvidenceCell,
+  type IntradayAssessment, type Posture, type Region, type RegimeAssessment, type StageResult,
 } from "@jusik/shared";
 
 /*
@@ -475,6 +475,32 @@ export function candlePlan(r: CandleMasterResult): OrderPlan | null {
   return { source: "candle", stop: r.stop, target: r.target };
 }
 export const dayTradePlan = (c: DayTradeCandidate): OrderPlan => ({ source: "daytrade", stop: c.stop, target: c.target });
+
+// ───────────────────────── 분봉 타점 근거 ─────────────────────────
+
+/**
+ * 분봉 타점 판단(강창권 4.7·M3-18)의 근거 칸: 보유 기준선 유지, 3분봉 첫 눌림, 5·20분선 동시 이탈 없음, 전일 고가 돌파 뒤 지지.
+ * 봉이 모자라 계산하지 못한 칸은 '데이터 없음'. 판단 머리에 근거 스트립으로 붙인다.
+ */
+export function minuteEvidence(a: IntradayAssessment): Pick<Evidence, "cells" | "met" | "total"> {
+  const ready = a.asOf != null;
+  const holdNa = a.hold.ma20on1m == null && a.hold.ma10on3m == null;
+  const cells: EvidenceCell[] = [
+    {
+      id: "m-hold", label: "기준선 위",
+      state: !ready || holdNa ? "na" : a.hold.below1m20 || a.hold.below3m10 ? "unmet" : "met",
+      detail: a.hold.note.text, rule: a.hold.note.rule ?? "4.7",
+    },
+    { id: "m-pull", label: "3분봉 첫 눌림", state: !ready ? "na" : a.pullback3m.signal ? "met" : "unmet", detail: a.pullback3m.note.text, rule: a.pullback3m.note.rule ?? "4.7" },
+    { id: "m-stop", label: "동시 이탈 없음", state: !ready ? "na" : a.stop3m.signal ? "unmet" : "met", detail: a.stop3m.note.text, rule: a.stop3m.note.rule ?? "4.7" },
+    {
+      id: "m-break", label: "전일 고가 지지",
+      state: !ready ? "na" : a.breakout.supportConfirmed && a.breakout.note.tone !== "warn" && a.breakout.note.tone !== "bad" ? "met" : "unmet",
+      detail: a.breakout.note.text, rule: a.breakout.note.rule ?? "M3-18",
+    },
+  ];
+  return { cells, met: cells.filter((c) => c.state === "met").length, total: cells.length };
+}
 
 // ───────────────────────── 관심종목 ─────────────────────────
 

@@ -101,7 +101,10 @@ export function ChartArea({ data, at, period, onPeriod, signals, onSelect, lines
       </div>
 
       {period === "m" ? (
-        <MinuteView code={data.info.code} region={region} height={height} />
+        <>
+          <MinuteView code={data.info.code} region={region} height={height} />
+          {afterChart}
+        </>
       ) : (
         <>
           <PriceChart

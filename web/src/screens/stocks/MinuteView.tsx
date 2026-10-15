@@ -10,7 +10,8 @@ import {
 } from "@jusik/shared";
 import { getMinute } from "../../api";
 import { CHART_FONT, CHART_LOCALE, useChartColors, type ChartColors } from "../../theme";
-import { Button, Change, fmtDate, fmtPrice, Notice, NoteList, Segmented, Skeleton, Stat, Stats } from "../../ui";
+import { Button, Change, EvidenceStrip, fmtDate, fmtPrice, Notice, NoteList, Segmented, Skeleton, Stat, Stats } from "../../ui";
+import { minuteEvidence } from "./stocksModel";
 
 /*
  * 분봉(1분봉·3분봉)과 강창권 장중 타점 판단(자료집 4.7·M3-18). 예전 분봉 탭을 종목 차트의 '분' 기간으로 옮겼다.
@@ -226,6 +227,7 @@ function Assessment({ a, region, stale, sessionDate, labels }: { a: IntradayAsse
           분봉 타점 판단
         </h3>
         <span className="row wrap">
+          {a.asOf && <EvidenceStrip evidence={minuteEvidence(a)} size="md" />}
           <span className={`stk-verdict ${a.entry.verdict}`}>{v.label}</span>
           {stale && <span className="stk-tag warn">{fmtDate(sessionDate)} 마감 기준</span>}
           {a.asOf && <span className="t-cap">{a.asOf.slice(11)} 봉까지 반영</span>}

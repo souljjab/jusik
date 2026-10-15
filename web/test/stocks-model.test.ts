@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { Candle } from "@jusik/shared";
+import type { Candle, IntradayAssessment } from "@jusik/shared";
 import {
-  barLabel, barTimeOf, crosshairTime, markDate, timeToYmd, markWhen, sortMarksDesc, candleMarks, fmtInputPrice, parseInputPrice, chartMarkers, chartSummary, clampStopPct, dailyMarks, declutterLabels, defaultPeriod, krTick, loadMemo, marksForPeriod, moveItem, objParticle,
+  barLabel, barTimeOf, crosshairTime, markDate, timeToYmd, markWhen, sortMarksDesc, candleMarks, fmtInputPrice, parseInputPrice, chartMarkers, chartSummary, clampStopPct, dailyMarks, declutterLabels, minuteEvidence, defaultPeriod, krTick, loadMemo, marksForPeriod, moveItem, objParticle,
   orderPreview, parseStockRoute, restoreAt, saveMemo, stateLabel, stepCode, stopFromPct, toBars, weinsteinMarks, type SignalMark,
 } from "../src/screens/stocks/stocksModel";
 
@@ -275,5 +275,31 @@ describe("watchlist helpers", () => {
   it("memo storage degrades without localStorage", () => {
     expect(loadMemo("005930")).toBe("");
     expect(saveMemo("005930", "메모")).toBe(false);
+  });
+});
+
+describe("minute evidence", () => {
+  const note = (text: string, tone: "good" | "warn" | "info" | "bad" = "info") => ({ text, tone });
+  const base: IntradayAssessment = {
+    asOf: "2026-10-15T14:28", gapPct: 1, minutesSinceOpen: 300, sessionLow: 100, last: 110,
+    entry: { verdict: "wait", notes: [], splitPrices: [], stop: null },
+    hold: { ma20on1m: 105, ma10on3m: 104, below1m20: false, below3m10: false, note: note("기준선 위", "good") },
+    pullback3m: { signal: false, firstTouchAt: null, note: note("아직 없음") },
+    stop3m: { signal: false, note: note("이탈 없음") },
+    breakout: { prevHighBroken: true, supportConfirmed: true, note: note("지지 확인", "good") },
+    notes: [],
+  };
+  it("counts met rules and marks missing data", () => {
+    const ev = minuteEvidence(base);
+    expect(ev.cells.map((c) => c.state)).toEqual(["met", "unmet", "met", "met"]);
+    expect(ev.met).toBe(3);
+    expect(ev.total).toBe(4);
+    const early = minuteEvidence({ ...base, asOf: null });
+    expect(early.cells.every((c) => c.state === "na")).toBe(true);
+    const broke = minuteEvidence({ ...base, stop3m: { signal: true, note: note("동시 이탈", "bad") }, hold: { ...base.hold, below1m20: true } });
+    expect(broke.cells[0]!.state).toBe("unmet");
+    expect(broke.cells[2]!.state).toBe("unmet");
+    const failed = minuteEvidence({ ...base, breakout: { prevHighBroken: true, supportConfirmed: true, note: note("돌파 실패", "warn") } });
+    expect(failed.cells[3]!.state).toBe("unmet");
   });
 });

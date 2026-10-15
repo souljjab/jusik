@@ -17,15 +17,25 @@ function StockMemo({ code }: { code: string }) {
   const [text, setText] = useState(() => loadMemo(code));
   const [state, setState] = useState<"idle" | "saved" | "failed">("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 아직 저장하지 않은 입력(탭을 바꾸거나 다른 종목으로 가도 잃지 않게 떠날 때 저장한다) */
+  const pending = useRef<{ code: string; text: string } | null>(null);
+  const flush = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    const p = pending.current;
+    pending.current = null;
+    return p ? saveMemo(p.code, p.text) : true;
+  };
   useEffect(() => {
     setText(loadMemo(code));
     setState("idle");
-  }, [code]);
-  useEffect(() => () => void (timer.current && clearTimeout(timer.current)), []);
+    return () => void flush();
+  }, [code]); // eslint-disable-line react-hooks/exhaustive-deps
   const change = (v: string) => {
     setText(v);
+    pending.current = { code, text: v };
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => setState(saveMemo(code, v) ? "saved" : "failed"), 400);
+    timer.current = setTimeout(() => setState(flush() ? "saved" : "failed"), 400);
   };
   return (
     <div className="ui-field">
