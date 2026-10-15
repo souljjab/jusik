@@ -7,7 +7,7 @@ import type { Region } from "@jusik/shared";
 import { CHART_FONT, CHART_LOCALE, useChartColors, type ChartColors } from "../../theme";
 import { fmtBig, fmtPrice, kstDate } from "../../ui";
 import {
-  barLabel, chartSummary, crosshairTime, INITIAL_BARS, MA_SETS, macdPoints, maPoints, PERIOD_NAME, rsiPoints,
+  barLabel, chartSummary, crosshairTime, declutterLabels, INITIAL_BARS, MA_SETS, macdPoints, maPoints, PERIOD_NAME, rsiPoints,
   type Bar, type BarPeriod, type ChartMarker,
 } from "./stocksModel";
 
@@ -241,7 +241,11 @@ export function PriceChart({
   useEffect(() => {
     const a = api.current;
     if (!a) return;
-    const list: SeriesMarker<Time>[] = markers.map((m) => ({
+    // 이름표가 겹치면 최근·고른 표식만 이름표를 단다(화살표는 모두 남긴다). 처음 보이는 봉 간격으로 이름표 하나(약 36px)에 드는 봉 수를 잡는다
+    const width = mainEl.current?.clientWidth || 400;
+    const perBar = Math.max(1, (width - 72) / Math.max(1, Math.min(bars.length, INITIAL_BARS[period])));
+    const gap = Math.max(3, Math.ceil(36 / perBar));
+    const list: SeriesMarker<Time>[] = declutterLabels(markers, bars, selectedId, gap).map((m) => ({
       time: m.time as Time,
       id: m.id,
       position: m.side === "buy" ? "belowBar" : "aboveBar",
@@ -251,7 +255,7 @@ export function PriceChart({
       size: m.id === selectedId ? 2 : 1,
     }));
     a.candle.setMarkers(list);
-  }, [markers, selectedId, colors, paneKey, dataKey]);
+  }, [markers, bars, period, selectedId, colors, paneKey, dataKey]);
 
   // 손절가·목표가 가로선(주문 미리 보기 값)
   useEffect(() => {

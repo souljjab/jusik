@@ -310,6 +310,35 @@ export function chartMarkers(marks: SignalMark[], bars: Bar[], period: BarPeriod
   return out.sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
 }
 
+/**
+ * 표식 이름표 겹침 줄이기: 최근 표식부터 보며 바로 뒤(오른쪽) 이름표와 minGap봉 안에 붙은 표식은 이름표를 뺀다(화살표는 남긴다).
+ * 고른 표식은 늘 이름표를 단다. 이름은 차트 아래 신호 목록과 근거 패널에서 읽을 수 있다.
+ */
+export function declutterLabels(markers: ChartMarker[], bars: Pick<Bar, "time">[], selectedId: string | null, minGap = 6): ChartMarker[] {
+  const index = new Map(bars.map((b, i) => [b.time, i]));
+  const keep = new Set<string>();
+  let lastIdx = Number.POSITIVE_INFINITY;
+  const sel = markers.find((m) => m.id === selectedId);
+  const selIdx = sel ? (index.get(sel.time) ?? null) : null;
+  for (let k = markers.length - 1; k >= 0; k--) {
+    const m = markers[k]!;
+    if (!m.text) continue;
+    const i = index.get(m.time);
+    if (i == null) continue;
+    if (m.id === selectedId) {
+      keep.add(m.id);
+      lastIdx = i;
+      continue;
+    }
+    const nearSel = selIdx != null && Math.abs(i - selIdx) < minGap;
+    if (lastIdx - i >= minGap && !nearSel) {
+      keep.add(m.id);
+      lastIdx = i;
+    }
+  }
+  return markers.map((m) => (m.text && !keep.has(m.id) ? { ...m, text: "" } : m));
+}
+
 /** 그 주 지수로 다시 계산한 시장 국면(과거 신호의 '시장 국면' 칸용. 매크로·시장 폭은 빼고 계산한다) */
 export function postureAt(indexCandles: Candle[] | null | undefined, date: string, caps?: Record<Posture, number>, region?: Region): RegimeAssessment | null {
   if (!indexCandles?.length) return null;

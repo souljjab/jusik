@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Candle } from "@jusik/shared";
 import {
-  barLabel, barTimeOf, crosshairTime, markDate, timeToYmd, markWhen, sortMarksDesc, candleMarks, fmtInputPrice, parseInputPrice, chartMarkers, chartSummary, clampStopPct, dailyMarks, defaultPeriod, krTick, loadMemo, marksForPeriod, moveItem, objParticle,
+  barLabel, barTimeOf, crosshairTime, markDate, timeToYmd, markWhen, sortMarksDesc, candleMarks, fmtInputPrice, parseInputPrice, chartMarkers, chartSummary, clampStopPct, dailyMarks, declutterLabels, defaultPeriod, krTick, loadMemo, marksForPeriod, moveItem, objParticle,
   orderPreview, parseStockRoute, restoreAt, saveMemo, stateLabel, stepCode, stopFromPct, toBars, weinsteinMarks, type SignalMark,
 } from "../src/screens/stocks/stocksModel";
 
@@ -132,6 +132,20 @@ describe("signal marks", () => {
     // 주봉에는 일봉 보조 신호를 그리지 않는다
     expect(w.map((m) => m.kind)).toEqual(["candle", "weinstein"]);
     expect(marksForPeriod(marks, "M").some((m) => m.kind === "daily")).toBe(false);
+  });
+
+  it("drops crowded marker labels but keeps the newest and the selected one", () => {
+    const bars = Array.from({ length: 40 }, (_, i) => ({ time: `t${String(i).padStart(2, "0")}` }));
+    const mk = (i: number, text = "돌파") => ({ id: `m${i}`, time: `t${String(i).padStart(2, "0")}`, side: "buy" as const, kind: "weinstein" as const, text });
+    const ms = [mk(5), mk(8), mk(20), mk(30), mk(33), mk(36, "")];
+    const out = declutterLabels(ms, bars, null, 6);
+    // 36은 원래 이름표 없음, 33은 가장 최근 이름표, 30은 33과 3봉 차이라 빠짐, 20·8은 남고 5는 8과 붙어 빠짐
+    expect(out.map((m) => m.text)).toEqual(["", "돌파", "돌파", "", "돌파", ""]);
+    // 고른 표식(30)은 늘 이름표, 그 곁(33)은 비켜 준다
+    const sel = declutterLabels(ms, bars, "m30", 6);
+    expect(sel.find((m) => m.id === "m30")!.text).toBe("돌파");
+    expect(sel.find((m) => m.id === "m33")!.text).toBe("");
+    expect(sel).toHaveLength(ms.length);
   });
 
   it("labels and sorts signals newest first", () => {
