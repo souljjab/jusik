@@ -1,5 +1,5 @@
 import { ChevronDown, Download, NotebookPen, PenLine, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { regionOfCode, type JournalEntry } from "@jusik/shared";
 import { deleteJournal, patchJournal } from "../../api";
 import { useApp } from "../../app/AppContext";
@@ -526,9 +526,14 @@ function NewJournalPanel() {
   const { now } = useApp();
   const api = useJournalForm(() => emptyForm(kstDate(now)));
   const [saved, setSaved] = useState<Saved | null>(null);
-  const { busy, err, save } = useSaveJournal(api, setSaved);
+  const top = useRef<HTMLDivElement>(null);
+  // 저장 결과는 패널 맨 위에 나오므로, 저장하면 패널을 위로 올려 결과(위반 문장)를 보여 준다
+  const { busy, err, save } = useSaveJournal(api, (r) => {
+    setSaved(r);
+    top.current?.closest(".rec-journal-side")?.scrollTo({ top: 0 });
+  });
   return (
-    <div className="rec-new stack-4">
+    <div className="rec-new stack-4" ref={top}>
       <div className="stack" style={{ gap: 4 }}>
         <h2 id="rec-new-h" className="t-section">
           새 일지
