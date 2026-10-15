@@ -200,13 +200,15 @@ function Ism({ server, compact, drafts, setDraft }: { server: ServerState; compa
         <span className="t-2 glb-actions-note">{dirty ? "다음 스캔부터 적용돼요" : "저장한 값과 같아요"}</span>
         <div className="glb-actions-btns">
           {dirty ? (
-            <Button variant="ghost" onClick={() => (setDraft("ism", null), setTried(false), setError(null))}>
+            <Button variant="ghost" size={compact ? "lg" : "md"} onClick={() => (setDraft("ism", null), setTried(false), setError(null))}>
               되돌리기
             </Button>
           ) : (
-            <Button variant="ghost" disabled={!draft.value && !draft.month} icon={<X size={16} strokeWidth={1.5} aria-hidden="true" />} onClick={() => edit({ value: "", month: "" })}>
-              직접 입력 지우기
-            </Button>
+            (draft.value || draft.month) && (
+              <Button variant="ghost" icon={<X size={16} strokeWidth={1.5} aria-hidden="true" />} onClick={() => edit({ value: "", month: "" })}>
+                직접 입력 지우기
+              </Button>
+            )
           )}
           <Button variant="primary" size={compact ? "lg" : "md"} disabled={!dirty} busy={saving} onClick={() => void save()}>
             ISM 저장

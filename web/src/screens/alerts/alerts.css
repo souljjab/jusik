@@ -54,7 +54,8 @@ a.glb-al-link:hover { background: var(--color-surface-2); }
 .glb-al-text { font-size: var(--font-size-table); line-height: var(--line-height-table); color: var(--color-text-2); overflow-wrap: anywhere; }
 .glb-al-item.is-new .glb-al-text { color: var(--color-text); }
 .glb-al-chev { color: var(--color-text-2); }
-.glb-al-ev { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; padding: 0 var(--space-2) var(--space-3) calc(var(--space-3) + 3px); }
+.glb-al-item.has-ev .glb-al-link { padding-bottom: var(--space-1); }
+.glb-al-ev { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; padding: 0 var(--space-2) var(--space-2) calc(var(--space-3) + 3px); }
 .glb-al-item.cat-risk .glb-al-ev { border-left: 3px solid var(--color-warn); padding-left: var(--space-3); }
 .glb-al-ev .ui-ev-open { min-height: var(--touch-min); }
 @media (min-width: 1200px) { .glb-al-ev .ui-ev-open { min-height: 0; } }

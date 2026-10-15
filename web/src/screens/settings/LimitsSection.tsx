@@ -50,12 +50,12 @@ export function LimitsSection({ gh, bp, drafts, setDraft }: SecProps & DraftProp
     const n = parseNum(draft[c === "KRW" ? "depositKRW" : "depositUSD"]);
     return n ?? accountBaseOf(server, c);
   };
-  const amountOf = (k: LimitKey) => {
+  const amountOf = (k: LimitKey, prefix: string) => {
     const p = parseNum(draft[k]);
-    if (p == null || errors[k]) return "";
+    if (p == null || errors[k]) return undefined;
     const krw = fmtMoneyByCurrency((base("KRW") * p) / 100, "KRW");
     const usd = fmtMoneyByCurrency((base("USD") * p) / 100, "USD");
-    return `계좌 기준 ${krw} · ${usd}`;
+    return `${prefix} ${krw} · ${usd}`;
   };
 
   const save = async () => {
@@ -82,7 +82,7 @@ export function LimitsSection({ gh, bp, drafts, setDraft }: SecProps & DraftProp
     }
   };
 
-  const field = (k: LimitKey, hint: string, rule?: string, extra?: string) => {
+  const field = (k: LimitKey, hint: string, rule?: string, note?: string) => {
     const spec = LIMIT_SPEC[k];
     return (
       <NumField
@@ -94,7 +94,8 @@ export function LimitsSection({ gh, bp, drafts, setDraft }: SecProps & DraftProp
         onBlur={() => blur(k)}
         integer={spec.integer}
         commas={k === "depositKRW" || k === "depositUSD"}
-        hint={extra ? `${hint} ${extra}` : hint}
+        hint={hint}
+        note={note}
         rule={rule}
         error={errOf(k)}
       />
@@ -122,8 +123,8 @@ export function LimitsSection({ gh, bp, drafts, setDraft }: SecProps & DraftProp
 
       <Section title="한 번의 매매" as={gh}>
         <div className="glb-grid">
-          {field("riskPct", `손절가에 닿을 때 잃는 돈이 계좌의 이 비율이 되도록 수량을 정해요. 책 기준 ${GUARD_DEFAULTS.maxPerTradeRiskPct}% 이하.`, "M4-04 슈웨거", amountOf("riskPct"))}
-          {field("maxWeightPct", `한 종목에 넣는 최대 비율이에요. 넘으면 주문 검토가 수량을 줄여 제안해요. 책 기준 ${GUARD_DEFAULTS.maxWeightPct}% 이하.`, "M4-03 강영현")}
+          {field("riskPct", `손절가에 닿을 때 잃는 돈이 계좌의 이 비율이 되도록 수량을 정해요. 책 기준 ${GUARD_DEFAULTS.maxPerTradeRiskPct}% 이하.`, "M4-04 슈웨거", amountOf("riskPct", "손절 1회 최대"))}
+          {field("maxWeightPct", `한 종목에 넣는 최대 비율이에요. 넘으면 주문 검토가 수량을 줄여 제안해요. 책 기준 ${GUARD_DEFAULTS.maxWeightPct}% 이하.`, "M4-03 강영현", amountOf("maxWeightPct", "한 종목 최대"))}
           {field("maxPositions", "동시에 들고 있을 최대 종목 수예요. 다 차면 계획에서 더 고르지 않아요.", "M4-03 캔들마스터")}
           {field("reservePct", "계획을 짤 때 쓰지 않고 남겨 두는 현금 비율이에요.")}
         </div>
@@ -175,17 +176,19 @@ export function LimitsSection({ gh, bp, drafts, setDraft }: SecProps & DraftProp
       {tried && errCount > 0 && <Notice tone="warn">입력을 확인해 주세요. 고칠 칸이 {errCount}개 있어요.</Notice>}
       {error && <Notice tone="warn">{error}</Notice>}
 
-      <ActionBar sticky={compact}>
-        <span className="t-2 glb-actions-note">{dirty ? `바뀐 칸 ${changed.length}개 · 저장해야 적용돼요` : "저장한 값과 같아요"}</span>
+      <ActionBar sticky={compact && dirty}>
+        <span className="t-2 glb-actions-note">{dirty ? `바뀐 칸 ${changed.length}개 · 저장해야 적용돼요` : isDefault ? "기본값과 같아요" : "저장한 값과 같아요"}</span>
         <div className="glb-actions-btns">
           {dirty ? (
-            <Button variant="ghost" onClick={() => (setDraft("limits", null), setTried(false), setShown(new Set()), setError(null))}>
+            <Button variant="ghost" size={compact ? "lg" : "md"} onClick={() => (setDraft("limits", null), setTried(false), setShown(new Set()), setError(null))}>
               되돌리기
             </Button>
           ) : (
-            <Button variant="ghost" disabled={isDefault} icon={<RotateCcw size={16} strokeWidth={1.5} aria-hidden="true" />} onClick={() => setDraft("limits", DEFAULT_LIMITS)}>
-              기본값으로
-            </Button>
+            !isDefault && (
+              <Button variant="ghost" icon={<RotateCcw size={16} strokeWidth={1.5} aria-hidden="true" />} onClick={() => setDraft("limits", DEFAULT_LIMITS)}>
+                기본값으로
+              </Button>
+            )
           )}
           <Button variant="primary" size={compact ? "lg" : "md"} disabled={!dirty} busy={saving} onClick={() => void save()}>
             한도 저장

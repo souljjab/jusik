@@ -121,7 +121,7 @@ export function StyleChoice({ showStart = true, onPick }: { showStart?: boolean;
 
 /** 숫자 입력 칸: 이름, 단위, 도움말(규칙 출처), 오류(경고색 + 문장) */
 export function NumField({
-  id, label, unit, value, onChange, onBlur, integer = false, commas = false, hint, rule, error, placeholder,
+  id, label, unit, value, onChange, onBlur, integer = false, commas = false, hint, note, rule, error, placeholder,
 }: {
   id: string;
   label: string;
@@ -133,6 +133,8 @@ export function NumField({
   /** 천 단위 쉼표(금액) */
   commas?: boolean;
   hint?: ReactNode;
+  /** 입력값으로 계산한 보조 숫자(예: 계좌 기준 금액). 도움말 아래 한 줄 */
+  note?: ReactNode;
   rule?: string;
   error?: string | null;
   placeholder?: string;
@@ -140,10 +142,18 @@ export function NumField({
   const descId = `${id}-desc`;
   return (
     <div className="ui-field glb-num">
-      <label className="lbl" htmlFor={id}>
-        {label}
-        <span className="sr-only">({unit})</span>
-      </label>
+      <div className="glb-num-lblrow">
+        <label className="lbl" htmlFor={id}>
+          {label}
+          <span className="sr-only">({unit})</span>
+        </label>
+        {rule && (
+          <span className="glb-rule">
+            <span className="sr-only">근거 규칙 </span>
+            <RuleTag rule={rule} />
+          </span>
+        )}
+      </div>
       <div className="glb-num-box">
         <input
           id={id}
@@ -168,13 +178,8 @@ export function NumField({
         </span>
       ) : (
         <span className="hint" id={descId}>
+          {note && <span className="glb-num-note num">{note}</span>}
           {hint}
-          {rule && (
-            <>
-              {" "}
-              <RuleTag rule={rule} />
-            </>
-          )}
         </span>
       )}
     </div>

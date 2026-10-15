@@ -3,7 +3,7 @@ import { paperEquity, type Currency, type ServerState } from "@jusik/shared";
 import { resetPaper, saveSettings } from "../../api";
 import { useApp } from "../../app/AppContext";
 import { Link } from "../../app/router";
-import { Button, Notice, Section, Sheet, Toggle, fmtAsOf, fmtInt, fmtMoneyByCurrency, fmtPnlByCurrency, toneOf, useToast } from "../../ui";
+import { Button, Notice, Section, Sheet, Toggle, arrowOf, fmtAsOf, fmtInt, fmtMoneyByCurrency, fmtPnlByCurrency, toneOf, useToast } from "../../ui";
 import { ActionBar, NumField } from "./parts";
 import { MONITOR_RANGE, monitorError, parseNum } from "./settingsModel";
 import { SectionLoading, ServerMissing } from "./status";
@@ -41,7 +41,10 @@ function AccountSummary({ server }: { server: ServerState }) {
             </div>
             <div>
               <dt className="t-2">실현 손익</dt>
-              <dd className={`num ${toneOf(a.realizedPnl)}`}>{fmtPnlByCurrency(a.realizedPnl, c)}</dd>
+              <dd className={`num ${toneOf(a.realizedPnl)}`}>
+                {arrowOf(a.realizedPnl) && <span aria-hidden="true">{arrowOf(a.realizedPnl)} </span>}
+                {fmtPnlByCurrency(a.realizedPnl, c)}
+              </dd>
             </div>
             <div>
               <dt className="t-2">청산 · 이긴 거래</dt>

@@ -65,7 +65,7 @@ function AlertRow({ a, unread, candidate, wide }: { a: AlertItem; unread: boolea
     </>
   );
   return (
-    <li className={`glb-al-item cat-${a.category} ${unread ? "is-new" : ""}`}>
+    <li className={`glb-al-item cat-${a.category} ${unread ? "is-new" : ""} ${ev ? "has-ev" : ""}`}>
       {a.route ? (
         <a className="glb-al-link" href={href(a.route)} aria-label={srAlert(a, time, unread)}>
           <span className="glb-al-main">{inner}</span>
