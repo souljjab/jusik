@@ -182,7 +182,7 @@ function Errors({ errors }: { errors: string[] }) {
   );
 }
 
-function Holders({ h }: { h: UsHolders | null | undefined }) {
+function Holders({ h, compact }: { h: UsHolders | null | undefined; compact: boolean }) {
   if (!h) return <p className="t-2">기관·내부자·공매도 현황을 받지 못했어요.</p>;
   const R = US_FLOW_RULES;
   const shortChange = h.sharesShort != null && h.sharesShortPrior != null && h.sharesShortPrior > 0 ? (h.sharesShort / h.sharesShortPrior - 1) * 100 : null;
@@ -211,6 +211,22 @@ function Holders({ h }: { h: UsHolders | null | undefined }) {
       {insts.length > 0 && (
         <div className="stack">
           <h4 className="stk-sub">상위 보유 기관</h4>
+          {compact ? (
+            <ul className="stk-flowlist">
+              {insts.map((t, i) => (
+                <li key={`${t.name}-${i}`}>
+                  <span className="stack" style={{ gap: 0, minWidth: 0 }}>
+                    <span className="t-medium">{t.name}</span>
+                    <span className="t-cap num">{t.date} 기준</span>
+                  </span>
+                  <span className="stack right" style={{ gap: 0 }}>
+                    <span className="num">{fmtNum(t.pctHeld, 2)}%</span>
+                    <span className={`t-cap num ${t.pctChange == null ? "" : toneOf(t.pctChange)}`}>{t.pctChange == null ? "-" : fmtPct(t.pctChange, 1)}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
           <div className="ui-table-wrap">
             <table className="ui-table on-surface">
               <thead>
@@ -233,11 +249,30 @@ function Holders({ h }: { h: UsHolders | null | undefined }) {
               </tbody>
             </table>
           </div>
+          )}
         </div>
       )}
       {recent.length > 0 && (
         <div className="stack">
           <h4 className="stk-sub">최근 내부자 거래</h4>
+          {compact ? (
+            <ul className="stk-flowlist">
+              {recent.map((t, i) => (
+                <li key={`${t.date}-${i}`}>
+                  <span className="stack" style={{ gap: 0, minWidth: 0 }}>
+                    <span className="t-medium">{t.name}</span>
+                    <span className="t-cap">
+                      <span className="num">{t.date}</span> · {t.text || "-"}
+                    </span>
+                  </span>
+                  <span className="stack right" style={{ gap: 0 }}>
+                    <span className="num">{fmtInt(t.shares)}주</span>
+                    <span className="t-cap num">{t.value == null ? "-" : fmtPrice(t.value, "US", { unit: true })}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
           <div className="ui-table-wrap">
             <table className="ui-table on-surface">
               <thead>
@@ -253,8 +288,8 @@ function Holders({ h }: { h: UsHolders | null | undefined }) {
                 {recent.map((t, i) => (
                   <tr key={`${t.date}-${i}`}>
                     <td className="nowrap">{t.date}</td>
-                    <td>{t.name}</td>
-                    <td>{t.text || "-"}</td>
+                    <td className="stk-td-name">{t.name}</td>
+                    <td className="stk-td-text">{t.text || "-"}</td>
                     <td className="r num">{fmtInt(t.shares)}</td>
                     <td className="r num">{t.value == null ? "-" : fmtPrice(t.value, "US", { unit: true })}</td>
                   </tr>
@@ -262,6 +297,7 @@ function Holders({ h }: { h: UsHolders | null | undefined }) {
               </tbody>
             </table>
           </div>
+          )}
         </div>
       )}
     </div>
@@ -323,7 +359,7 @@ export function DisclosureTab({ code, region, sample, compact }: { code: string;
         </Section>
         <Section title="기관·내부자·공매도" sub={sampleNote ? "샘플 자료" : undefined} as="h3">
           {x.us?.holders && <FlowScore score={x.flowScore} max={US_FLOW_RULES.maxScore} us />}
-          <Holders h={x.us?.holders} />
+          <Holders h={x.us?.holders} compact={compact} />
         </Section>
         {x.notes.length > 0 && <NoteList notes={x.notes} dense />}
         <Errors errors={x.errors} />

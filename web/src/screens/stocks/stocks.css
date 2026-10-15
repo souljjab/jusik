@@ -276,6 +276,10 @@
 .stk-flowlist { list-style: none; margin: 0; padding: 0; }
 .stk-flowlist li { display: flex; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) 0; border-top: 1px solid var(--color-border); }
 .stk-flowlist li:first-child { border-top: 0; }
+/* 표를 쓰는 너비(태블릿)에서도 이름·내용 칸이 한 글자씩 꺾이지 않게 — 좁으면 표 안에서 가로로 넘긴다 */
+.stk .ui-table td { word-break: keep-all; }
+.stk .ui-table td.stk-td-name { min-width: 9em; }
+.stk .ui-table td.stk-td-text { min-width: 14em; }
 .stk-flowchg { margin-left: var(--space-2); }
 
 /* ───────── 메모 탭 ───────── */
