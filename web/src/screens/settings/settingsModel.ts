@@ -202,3 +202,75 @@ export function ismNotes(v: Settings["ismManual"], now: Date): string[] {
 }
 
 export const sameIsm = (a: Settings["ismManual"], b: Settings["ismManual"]) => (a == null || b == null ? a == b : a.value === b.value && a.month === b.month);
+
+// ───────────────────────── 화면 설정(이 기기) ─────────────────────────
+
+export type ThemePref = "system" | "light" | "dark";
+export type ConventionPref = "KR" | "US";
+export type InvestStyle = "daytrade" | "swing" | "long";
+
+export const THEME_LABEL: Record<ThemePref, string> = { system: "기기 설정 따름", light: "라이트", dark: "다크" };
+export const CONVENTION_LABEL: Record<ConventionPref, string> = { KR: "한국식", US: "미국식" };
+export const CONVENTION_DESC: Record<ConventionPref, string> = { KR: "상승 빨강 · 하락 파랑", US: "상승 초록 · 하락 빨강" };
+
+export interface StyleOption {
+  id: InvestStyle;
+  label: string;
+  /** 보유 기간 */
+  period: string;
+  desc: string;
+  /** 이 성향이면 먼저 볼 곳(경로와 이름) */
+  start: { path: string; label: string }[];
+}
+
+/** 투자 성향(첫 실행 안내·설정 > 화면). 앱이 대신 고르지 않고, 먼저 볼 화면만 안내한다 */
+export const STYLE_OPTIONS: StyleOption[] = [
+  {
+    id: "daytrade", label: "단타", period: "하루~며칠",
+    desc: "거래대금이 많은 종목의 돌파 후보를 날마다 보고, 정해 둔 손절가·목표가로 짧게 사고팔아요.",
+    start: [{ path: "/discover", label: "발굴 · 추천 목록" }, { path: "/trade/plan", label: "매매 · 오늘의 계획" }],
+  },
+  {
+    id: "swing", label: "스윙", period: "몇 주~몇 달",
+    desc: "주봉으로 30주선 위 2단계 돌파나 캔들 신호를 기다렸다가 추세가 꺾일 때까지 들고 가요.",
+    start: [{ path: "/stocks", label: "종목 · 관심종목과 차트 근거" }, { path: "/discover/strategy", label: "발굴 · 전략과 백테스트" }],
+  },
+  {
+    id: "long", label: "장기", period: "몇 달 이상",
+    desc: "재무와 가치 지표를 보고 나눠 사며, 시장 국면에 맞춰 주식 비중을 조절해요.",
+    start: [{ path: "/discover/strategy", label: "발굴 · 적립식 시뮬레이션" }, { path: "/", label: "홈 · 시장 국면" }],
+  },
+];
+export const styleLabel = (s: InvestStyle | null | undefined) => STYLE_OPTIONS.find((o) => o.id === s)?.label ?? "고르지 않음";
+
+// ───────────────────────── 구역 요약(설정 목록의 둘째 줄) ─────────────────────────
+
+const pct1 = (n: number) => `${Number(n.toFixed(1)).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}%`;
+
+export function displaySummary(p: { theme: ThemePref; convention: ConventionPref }): string {
+  return `${THEME_LABEL[p.theme]} · ${CONVENTION_LABEL[p.convention]} 색`;
+}
+
+export function alertsSummary(dnd: { enabled: boolean; start: string; end: string }, browserOn: boolean): string {
+  return `${dnd.enabled ? `방해 금지 ${dnd.start}~${dnd.end}` : "방해 금지 꺼짐"} · 브라우저 알림 ${browserOn ? "켜짐" : "꺼짐"}`;
+}
+
+export function limitsSummary(s: Pick<Settings, "riskPct" | "maxWeightPct" | "dailyLossLimitPct">): string {
+  const daily = s.dailyLossLimitPct ?? GUARD_DEFAULTS.dailyLossLimitPct;
+  return `1회 손실 ${pct1(s.riskPct)} · 종목 비중 ${pct1(s.maxWeightPct)} · 하루 손실 ${daily > 0 ? pct1(daily) : "끔"}`;
+}
+
+export function paperSummary(s: Pick<Settings, "paperEnabled" | "monitorIntervalSec">): string {
+  return s.paperEnabled ? `자동 실행 켜짐 · ${s.monitorIntervalSec.toLocaleString("ko-KR")}초마다 점검` : "자동 실행 꺼짐";
+}
+
+/** 데이터 출처 이름(서버 provider). mock이면 샘플 */
+export function providerLabel(provider: string | null | undefined, sample: boolean | null | undefined): string {
+  if (sample || provider === "mock") return "샘플 데이터(임의로 만든 값)";
+  if (!provider) return "확인 중";
+  return provider.startsWith("web") ? "네이버 금융 · 야후 파이낸스" : provider;
+}
+
+export function dataSummary(provider: string | null | undefined, sample: boolean | null | undefined): string {
+  return `${providerLabel(provider, sample)} · 엑셀 내보내기`;
+}
