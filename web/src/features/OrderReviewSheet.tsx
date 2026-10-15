@@ -1,6 +1,6 @@
 import { AlertTriangle, Check, Minus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { currencyOfRegion, marketClock, regionOfCode, type Evidence, type JournalCheck, type JournalEntry } from "@jusik/shared";
+import { currencyOfRegion, marketClock, paperEquity, regionOfCode, type Currency, type Evidence, type JournalCheck, type JournalEntry, type ServerState } from "@jusik/shared";
 import { addJournal, checkJournal, type JournalInput } from "../api";
 import { useApp } from "../app/AppContext";
 import {
@@ -28,6 +28,18 @@ export interface OrderRequest {
   strategy?: string;
   reason?: string;
   evidence?: Evidence;
+  /** 처음 넣을 수량(오늘의 계획처럼 이미 정한 수량이 있을 때). 없으면 1회 손실 한도와 종목 비중 상한으로 계산한다 */
+  qty?: number;
+}
+
+/**
+ * 계좌 기준 금액: 모의매매를 켰으면 모의계좌 자산, 아니면 설정한 예수금.
+ * 주문 검토의 '계좌 대비'·'주문 후 비중'과 매매 화면이 같은 기준을 쓴다.
+ */
+export function accountBaseOf(st: Pick<ServerState, "settings" | "paper"> | null | undefined, cur: Currency): number {
+  if (!st) return 0;
+  const s = st.settings;
+  return s.paperEnabled ? paperEquity(st.paper[cur]) : cur === "KRW" ? s.depositKRW : s.depositUSD;
 }
 
 /** 직접 쓴 일지 기준으로 지금 보유 수량(매수 − 매도) */
@@ -56,7 +68,7 @@ export function OrderReviewSheet({ req, onClose }: { req: OrderRequest | null; o
   const region = req ? regionOfCode(req.code) : "KR";
   const cur = currencyOfRegion(region);
   const s = server?.settings;
-  const deposit = s ? (cur === "KRW" ? s.depositKRW : s.depositUSD) : 0;
+  const deposit = accountBaseOf(server, cur);
   const guard = server?.latestScan?.guards?.[cur] ?? null;
   const held = req ? heldQty(journal, req.code) : 0;
 
@@ -79,7 +91,8 @@ export function OrderReviewSheet({ req, onClose }: { req: OrderRequest | null; o
     setReason(req.reason ?? "");
     setPlanned(null);
     setCheck(null);
-    if (req.side === "SELL") return setQty(Math.max(0, held));
+    if (req.side === "SELL") return setQty(req.qty != null && req.qty > 0 ? Math.min(req.qty, Math.max(held, req.qty)) : Math.max(0, held));
+    if (req.qty != null && req.qty > 0) return setQty(Math.floor(req.qty));
     const risk = s && deposit ? (deposit * s.riskPct) / 100 : 0;
     const perShare = req.stop && p > req.stop ? p - req.stop : 0;
     const byRisk = perShare > 0 ? Math.floor(risk / perShare) : 0;

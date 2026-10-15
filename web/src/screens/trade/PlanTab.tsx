@@ -47,7 +47,7 @@ const isTyping = (t: EventTarget | null) => {
 
 function orderRequest(x: PlanEntry): OrderRequest {
   const c = x.item.candidate;
-  return { code: c.code, name: c.name, side: "BUY", price: c.entry, stop: c.stop, target: c.target, strategy: PAPER_STRATEGY, reason: x.ev.headline, evidence: x.ev };
+  return { code: c.code, name: c.name, side: "BUY", price: c.entry, stop: c.stop, target: c.target, strategy: PAPER_STRATEGY, reason: x.ev.headline, evidence: x.ev, qty: x.item.qty };
 }
 
 /** 금액(목록): 국내는 억·만 단위 + 원, 미국은 $ */

@@ -24,6 +24,11 @@
 .ui-btn.buy:hover:not(:disabled), .ui-btn.sell:hover:not(:disabled) { filter: brightness(0.94); }
 .ui-btn:disabled { background: var(--color-surface-2); color: var(--color-text-2); border-color: var(--color-border); }
 .ui-btn.link:disabled { background: none; border: 0; }
+/* 태블릿·핸드폰: 터치 대상 최소 크기(지도서 10장 44pt·48dp) */
+@media (max-width: 1199.98px) {
+  .ui-btn:not(.link) { min-height: var(--touch-min); }
+  .ui-btn.sm:not(.link) { min-height: 36px; }
+}
 .ui-btn .spin { animation: ui-spin 0.9s linear infinite; }
 @keyframes ui-spin { to { transform: rotate(360deg); } }
 .ui-iconbtn {

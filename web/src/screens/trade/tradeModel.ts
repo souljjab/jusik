@@ -1,3 +1,4 @@
+import { accountBaseOf } from "../../features/OrderReviewSheet";
 import {
   consecutiveLosses, currencyOfRegion, EXPOSURE_CAP_REASON, marketClock, paperEquity, paperTradesFromJournal, regionOfCode, summarizeJournal, weekdaysBetween,
   type Currency, type JournalEntry, type PaperAccount, type PaperPosition, type Plan, type Region, type ServerState, type Settings,
@@ -224,8 +225,7 @@ export function planCashBase(st: Pick<ServerState, "settings" | "paper">, cur: C
 
 /** '계좌의 x%'에 쓰는 기준 금액: 모의매매를 켜면 모의계좌 총자산, 끄면 예수금 */
 export function accountBase(st: Pick<ServerState, "settings" | "paper">, cur: Currency): number {
-  const s = st.settings;
-  return s.paperEnabled ? paperEquity(st.paper[cur]) : cur === "KRW" ? s.depositKRW : s.depositUSD;
+  return accountBaseOf(st, cur);
 }
 
 export const planKey = (cur: Currency, code: string) => `${cur}:${code}`;
