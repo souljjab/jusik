@@ -1,5 +1,5 @@
 import { BellOff, ChevronRight, RefreshCw, SlidersHorizontal } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { dayTradeEvidence, type AlertItem, type DayTradeCandidate } from "@jusik/shared";
 import { useActions } from "../../app/actions";
 import { useApp } from "../../app/AppContext";
@@ -125,7 +125,6 @@ export default function AlertsScreen() {
     setRefreshing(true);
     try {
       await refreshAlerts();
-      setFetchedAt(new Date().toISOString());
     } finally {
       setRefreshing(false);
       setLoaded(true);
@@ -139,8 +138,11 @@ export default function AlertsScreen() {
   useEffect(() => {
     markAlertsSeen();
   }, [markAlertsSeen]);
+  // 기준 시각은 알림을 실제로 받았을 때만 바꾼다(공용 목록은 받을 때마다 새 배열이 되고, 실패하면 그대로다)
+  const firstList = useRef(alerts);
   useEffect(() => {
-    if (alerts.length) setFetchedAt((t) => t ?? new Date().toISOString());
+    if (alerts === firstList.current && !alerts.length) return;
+    setFetchedAt(new Date().toISOString());
   }, [alerts]);
 
   const counts = useMemo(() => countByFilter(alerts), [alerts]);
@@ -169,7 +171,9 @@ export default function AlertsScreen() {
   }));
 
   let list;
-  if (!loaded && !alerts.length) list = offline ? null : <LoadingShape />;
+  // 서버와 끊겨 받은 알림이 없으면 빈 화면 대신 위의 안내만 보여 준다
+  if (offline && !alerts.length) list = null;
+  else if (!loaded && !alerts.length) list = <LoadingShape />;
   else if (!groups.length)
     list =
       filter === "all" ? (

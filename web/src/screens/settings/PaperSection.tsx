@@ -49,7 +49,7 @@ function AccountSummary({ server }: { server: ServerState }) {
             <div>
               <dt className="t-2">청산 · 이긴 거래</dt>
               <dd className="num">
-                {fmtInt(a.closed)}건 · {rate == null ? "-" : `${fmtInt(a.wins)}건(${rate.toFixed(0)}%)`}
+                {rate == null ? "아직 없어요" : `${fmtInt(a.closed)}건 · ${fmtInt(a.wins)}건(${rate.toFixed(0)}%)`}
               </dd>
             </div>
           </dl>

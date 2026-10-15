@@ -3,6 +3,8 @@
  * 넓은 화면은 왼쪽 구역 목록 + 구역 하나, 좁은 화면은 한 열 목록 → 구역 화면. 카드 대신 여백과 구분선.
  */
 .glb-set { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+/* 껍데기의 연결 끊김 띠 바로 아래에 올 때 붙지 않게 */
+.ui-notice + .glb-set { margin-top: var(--space-4); }
 .glb-set-head { display: flex; flex-direction: column; gap: var(--space-1); }
 
 /* 넓은 화면: 구역 목록 | 구역 */
@@ -52,9 +54,10 @@
 .glb-num-lblrow { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; }
 .glb-num-lblrow .lbl { font-size: var(--font-size-secondary); color: var(--color-text-2); font-weight: var(--font-weight-medium); }
 .glb-rule { white-space: nowrap; }
-.glb-num-box { position: relative; display: flex; align-items: center; max-width: 280px; }
+.glb-num { max-width: 340px; }
+.glb-num-box { position: relative; display: flex; align-items: center; }
 .glb-num-note { display: block; color: var(--color-text); font-size: var(--font-size-secondary); margin-bottom: 2px; white-space: normal; }
-@media (max-width: 599.98px) { .glb-num-box { max-width: none; } }
+@media (max-width: 599.98px) { .glb-num { max-width: none; } }
 .glb-num-box .ui-input { padding-right: calc(var(--space-3) + 3.5em); }
 .glb-num-unit { position: absolute; right: var(--space-3); font-size: var(--font-size-secondary); color: var(--color-text-2); pointer-events: none; }
 .glb-num .hint, .glb-num .err { line-height: 1.4; }
