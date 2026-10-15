@@ -8,7 +8,7 @@
 /* ───────── 컴퓨터: 세 영역 ───────── */
 .stk-large {
   display: grid;
-  grid-template-columns: var(--stk-list, 288px) auto minmax(0, 1fr) auto var(--stk-side, 400px);
+  grid-template-columns: var(--stk-list, 256px) auto minmax(0, 1fr) auto var(--stk-side, 372px);
   /* 상단 바·위 여백을 뺀 창 높이. 아래 여백(48)은 16만 남긴다 */
   height: calc(100dvh - var(--topbar-h) - var(--space-5) - var(--space-4));
   margin-bottom: calc(var(--space-4) - var(--space-7));
@@ -145,6 +145,8 @@
 .stk-tabpanel:focus { outline: none; }
 .stk-evpanel { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
 .stk-sigblock { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+/* 근거 칸 이름은 낱말 중간에서 끊지 않는다(좁은 패널에서 "단기 정배/열"처럼 깨지지 않게) */
+.stk .ui-ev-full .lbl { word-break: keep-all; overflow-wrap: anywhere; }
 .stk-sigblock-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
 .stk-evopen { align-self: flex-start; min-height: 32px; }
 @media (max-width: 1199.98px) { .stk-evopen { min-height: var(--touch-min); } }
@@ -277,15 +279,18 @@
 .stk-order { display: flex; flex-direction: column; gap: var(--space-2); }
 .stk-order-side { display: flex; width: 100%; }
 .stk-order-side button { flex: 1; }
-.stk-order-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(96px, 150px); gap: var(--space-2) var(--space-3); align-items: center; }
-.stk-order-grid .ui-input { min-height: 32px; padding-top: 2px; padding-bottom: 2px; }
-.stk-order-lbl { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-1) var(--space-2); }
-.stk-order-hint { grid-column: 1 / -1; margin-top: calc(-1 * var(--space-1)); font-size: var(--font-size-caption); }
+/* 가격·수량, 손절가·목표가를 두 칸씩(라벨은 위) — 오른쪽 패널에서 근거가 보일 높이를 남긴다 */
+.stk-order-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-2) var(--space-3); align-items: end; }
+.stk-order-f { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.stk-order-grid .ui-input { width: 100%; min-height: 34px; padding-top: 2px; padding-bottom: 2px; }
+.stk-order-qty { display: flex; align-items: center; justify-content: flex-end; min-height: 34px; padding: 0 var(--space-3); border-radius: var(--radius-chip); background: var(--color-surface-2); font-weight: var(--font-weight-medium); }
+.stk-order-lbl { display: flex; align-items: center; flex-wrap: wrap; gap: 2px var(--space-2); }
+.stk-order-hint { grid-column: 1 / -1; font-size: var(--font-size-caption); }
 .stk-req { font-size: var(--font-size-caption); color: var(--color-accent); border: 1px solid var(--color-accent-line); border-radius: var(--radius-chip); padding: 0 4px; font-weight: var(--font-weight-bold); }
 .stk-order-risk { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px var(--space-3); margin: 0; padding-top: var(--space-2); border-top: 1px solid var(--color-border); align-items: baseline; }
 .stk-order-risk dt { color: var(--color-text-2); font-size: var(--font-size-secondary); }
 .stk-order-risk dd { margin: 0; text-align: right; font-weight: var(--font-weight-bold); font-variant-numeric: tabular-nums; }
-.stk-order-risk dd:first-of-type { font-size: var(--font-size-section); }
+.stk-order-risk dd.stk-order-loss { font-size: var(--font-size-section); }
 .stk-order-foot { text-align: center; }
 .stk-order-foot .kbd { margin-right: var(--space-1); }
 
@@ -293,7 +298,6 @@
 .stk-de { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-5); border-top: 1px solid var(--color-border); padding-top: var(--space-4); }
 .stk-de > .stk-poscalc { border-left: 1px solid var(--color-border); padding-left: var(--space-5); }
 .stk-poscalc { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
-.stk-poscalc .stk-order-risk dd:first-of-type { font-size: inherit; }
 .stk-range { width: 100%; min-height: var(--touch-min); margin: 0; accent-color: var(--color-accent); cursor: pointer; }
 /* 떠 있는 주문 버튼(F). 그림자 대신 바탕색 테두리로 뒤 내용과 떼어 놓는다 */
 .stk-fab { position: fixed; z-index: 25; right: calc(var(--gutter) + env(safe-area-inset-right)); bottom: calc(var(--space-5) + env(safe-area-inset-bottom)); outline: 4px solid var(--color-bg); min-width: 120px; }

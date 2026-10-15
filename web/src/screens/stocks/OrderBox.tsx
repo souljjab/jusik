@@ -1,15 +1,16 @@
 import { useEffect, useId, useMemo, useState } from "react";
-import { regionOf, type Evidence, type Region, type Settings } from "@jusik/shared";
+import { currencyOfRegion, regionOf, type Evidence, type Region, type Settings } from "@jusik/shared";
 import type { StockData } from "../../api";
 import { useApp } from "../../app/AppContext";
-import { heldQty, type OrderRequest } from "../../features/OrderReviewSheet";
+import { accountBaseOf, heldQty, type OrderRequest } from "../../features/OrderReviewSheet";
 import { Button, fmtInt, fmtPct, fmtPnl, fmtPrice, fmtRatio, Segmented } from "../../ui";
 import { clampStopPct, fmtInputPrice, orderPreview, parseInputPrice, STOP_SLIDER, stopFromPct, type OrderPlan } from "./stocksModel";
 
 /*
  * 주문 미리 보기(UI 지도서 5.2 G·6.1 E·7.1 E). 위험을 버튼보다 먼저: 손절가('필수'), 손절 시 손실 금액, 계좌 대비 비율을 버튼 위에 둔다.
  * 버튼은 바로 체결하지 않고 주문 검토 시트(useActions().openOrderReview)만 연다. 이 앱은 증권사로 주문을 보내지 않는다.
- * 수량은 주문 검토 시트와 같은 식(1회 손실 한도 ÷ 손절폭, 종목 비중 상한 이내)으로 계산한다 — 시트가 같은 수량으로 열린다.
+ * 수량은 주문 검토 시트와 같은 식(1회 손실 한도 ÷ 손절폭, 종목 비중 상한 이내)과 같은 계좌 기준(accountBaseOf: 모의매매를 켰으면
+ * 모의계좌 자산, 아니면 예수금)으로 계산하고, 그 수량을 시트에 그대로 넘긴다 — 미리 보기와 시트의 숫자가 같다.
  */
 
 export interface OrderContext {
@@ -17,7 +18,10 @@ export interface OrderContext {
   name: string;
   region: Region;
   price: number;
+  /** 계좌 기준 금액(그 시장 통화). 주문 검토 시트·매매 화면과 같은 기준 */
   capital: number;
+  /** 계좌 기준이 모의계좌 자산인지(아니면 설정한 예수금) */
+  paperBase: boolean;
   settings: Settings | null;
   held: number;
   plan: OrderPlan | null;
@@ -33,7 +37,8 @@ export function useOrderContext(data: StockData, plan: { plan: OrderPlan; eviden
     name: data.info.name,
     region,
     price: data.quote.price,
-    capital: s ? (region === "US" ? s.depositUSD : s.depositKRW) : 0,
+    capital: accountBaseOf(server, currencyOfRegion(region)),
+    paperBase: !!s?.paperEnabled,
     settings: s,
     held: heldQty(journal, data.info.code),
     plan: plan?.plan ?? null,
@@ -41,8 +46,12 @@ export function useOrderContext(data: StockData, plan: { plan: OrderPlan; eviden
   };
 }
 
-/** 주문 검토 시트에 넘길 요청 */
-export function orderRequest(ctx: OrderContext, side: "BUY" | "SELL", v: { price?: number; stop?: number; target?: number | null } = {}): OrderRequest {
+/** 미리 보기 계산(주문 검토 시트와 같은 식) */
+export const previewOf = (ctx: OrderContext, side: "BUY" | "SELL", price: number, stop: number) =>
+  orderPreview({ side, price, stop, capital: ctx.capital, riskPct: ctx.settings?.riskPct ?? 1, maxWeightPct: ctx.settings?.maxWeightPct ?? 100, held: ctx.held });
+
+/** 주문 검토 시트에 넘길 요청. qty를 주면 시트가 그 수량으로 열린다(미리 보기와 같은 수량) */
+export function orderRequest(ctx: OrderContext, side: "BUY" | "SELL", v: { price?: number; stop?: number; target?: number | null; qty?: number } = {}): OrderRequest {
   const ev = ctx.evidence;
   const stop = v.stop ?? ctx.plan?.stop;
   const target = v.target === undefined ? ctx.plan?.target : v.target;
@@ -53,17 +62,23 @@ export function orderRequest(ctx: OrderContext, side: "BUY" | "SELL", v: { price
     price: v.price ?? ctx.price,
     ...(side === "BUY" && stop && stop > 0 ? { stop } : {}),
     ...(side === "BUY" && target && target > 0 ? { target } : {}),
+    ...(v.qty != null && v.qty > 0 ? { qty: v.qty } : {}),
     ...(ev ? { strategy: ev.strategyName, reason: `${ev.headline}, 근거 ${ev.met}/${ev.total} 충족`, evidence: ev } : {}),
   };
 }
 
 const MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 const PLAN_LABEL = { weinstein: "와인스타인 참고 손절가", candle: "캔들마스터 신호 손절가", daytrade: "단타 후보 손절가" } as const;
+/** 계좌 기준 문구 */
+const baseWord = (ctx: OrderContext) => (ctx.paperBase ? "모의계좌 자산" : "예수금");
 
 /** 슬라이더 비율 → 손절가 */
 export const stopFromPctCtx = (ctx: OrderContext, pct: number) => stopFromPct(ctx.price, pct, ctx.region);
 
-/** 컴퓨터 오른쪽 패널 아래 주문 상자(G). reviewRef에 검토 열기를 걸어 Ctrl(⌘)+Enter가 이 상자의 값으로 시트를 연다 */
+/**
+ * 컴퓨터 오른쪽 패널 아래 주문 상자(G). 가격·수량, 손절가(필수)·목표가를 두 칸씩, 그 아래 손절 시 손실과 계좌 대비를 버튼 바로 위에.
+ * reviewRef에 검토 열기를 걸어 Ctrl(⌘)+Enter가 이 상자의 값으로 시트를 연다(시트만 열고 기록하지 않는다).
+ */
 export function OrderBox({ ctx, onReview, reviewRef }: { ctx: OrderContext; onReview: (r: OrderRequest) => void; reviewRef?: { current: (() => void) | null } }) {
   const id = useId();
   const [side, setSide] = useState<"BUY" | "SELL">("BUY");
@@ -86,13 +101,10 @@ export function OrderBox({ ctx, onReview, reviewRef }: { ctx: OrderContext; onRe
 
   const p = parseInputPrice(price), st = parseInputPrice(stop), tg = parseInputPrice(target);
   const fmtIn = (v: string) => fmtInputPrice(v, ctx.region);
-  const pv = useMemo(
-    () => orderPreview({ side, price: p, stop: st, capital: ctx.capital, riskPct: ctx.settings?.riskPct ?? 1, maxWeightPct: ctx.settings?.maxWeightPct ?? 100, held: ctx.held }),
-    [side, p, st, ctx.capital, ctx.settings, ctx.held],
-  );
+  const pv = useMemo(() => previewOf(ctx, side, p, st), [ctx, side, p, st]);
   const buy = side === "BUY";
   const pct = (x: number) => (p > 0 && x > 0 ? fmtPct((x / p - 1) * 100, 1) : "");
-  const review = () => onReview(orderRequest(ctx, side, { price: p || undefined, stop: st || undefined, target: tg || null }));
+  const review = () => onReview(orderRequest(ctx, side, { price: p || undefined, stop: st || undefined, target: tg || null, qty: pv.qty }));
   useEffect(() => {
     if (!reviewRef) return;
     reviewRef.current = review;
@@ -100,6 +112,7 @@ export function OrderBox({ ctx, onReview, reviewRef }: { ctx: OrderContext; onRe
       reviewRef.current = null;
     };
   });
+  const stopBad = st > 0 && !pv.stopOk;
 
   return (
     <form
@@ -119,39 +132,48 @@ export function OrderBox({ ctx, onReview, reviewRef }: { ctx: OrderContext; onRe
         options={[{ value: "BUY", label: "매수" }, { value: "SELL", label: "매도" }]}
       />
       <div className="stk-order-grid">
-        <label htmlFor={`${id}-price`} className="t-2">
-          가격
-        </label>
-        <input id={`${id}-price`} className="ui-input num" inputMode="decimal" value={price} onChange={(e) => (setPrice(fmtIn(e.target.value)), setPriceDirty(true))} />
-
-        <span className="t-2">수량</span>
-        <span className="num t-medium right" aria-live="polite">
-          {fmtInt(pv.qty)}주{!buy && <span className="t-cap"> (보유 {fmtInt(ctx.held)}주)</span>}
-        </span>
+        <div className="stk-order-f">
+          <label htmlFor={`${id}-price`} className="t-2">
+            가격
+          </label>
+          <input id={`${id}-price`} className="ui-input num" inputMode="decimal" value={price} onChange={(e) => (setPrice(fmtIn(e.target.value)), setPriceDirty(true))} />
+        </div>
+        <div className="stk-order-f">
+          <span className="t-2" id={`${id}-qty-l`}>
+            수량{!buy && <span className="t-cap"> · 보유 {fmtInt(ctx.held)}주</span>}
+          </span>
+          <span className="stk-order-qty num" aria-labelledby={`${id}-qty-l`} aria-live="polite">
+            {fmtInt(pv.qty)}주
+          </span>
+        </div>
 
         {buy && (
           <>
-            <label htmlFor={`${id}-stop`} className="t-2 stk-order-lbl">
-              손절가 <span className="stk-req">필수</span>
-              <span className="t-cap num">{pct(st)}</span>
-            </label>
-            <input
-              id={`${id}-stop`}
-              className="ui-input num"
-              inputMode="decimal"
-              aria-required="true"
-              aria-invalid={st > 0 && !pv.stopOk}
-              aria-describedby={`${id}-stop-hint`}
-              value={stop}
-              onChange={(e) => setStop(fmtIn(e.target.value))}
-            />
-            <span id={`${id}-stop-hint`} className={`stk-order-hint ${st > 0 && !pv.stopOk ? "warn-text" : "t-cap"}`}>
-              {!st ? "매수 전에 손실 한도를 정해요" : !pv.stopOk ? "손절가는 가격보다 낮아야 해요" : ctx.plan ? `${PLAN_LABEL[ctx.plan.source]}로 채웠어요` : ""}
+            <div className="stk-order-f">
+              <label htmlFor={`${id}-stop`} className="t-2 stk-order-lbl">
+                손절가 <span className="stk-req">필수</span>
+                <span className="t-cap num">{pct(st)}</span>
+              </label>
+              <input
+                id={`${id}-stop`}
+                className="ui-input num"
+                inputMode="decimal"
+                aria-required="true"
+                aria-invalid={stopBad}
+                aria-describedby={`${id}-stop-hint`}
+                value={stop}
+                onChange={(e) => setStop(fmtIn(e.target.value))}
+              />
+            </div>
+            <div className="stk-order-f">
+              <label htmlFor={`${id}-target`} className="t-2 stk-order-lbl">
+                목표가 <span className="t-cap num">{pct(tg)}</span>
+              </label>
+              <input id={`${id}-target`} className="ui-input num" inputMode="decimal" value={target} onChange={(e) => setTarget(fmtIn(e.target.value))} />
+            </div>
+            <span id={`${id}-stop-hint`} className={`stk-order-hint ${!st || stopBad ? "warn-text" : "t-cap"}`}>
+              {!st ? "손절가를 넣어야 검토할 수 있어요. 매수 전에 손실 한도를 정해요" : stopBad ? "손절가는 가격보다 낮아야 해요" : ctx.plan ? `${PLAN_LABEL[ctx.plan.source]}로 채웠어요` : ""}
             </span>
-            <label htmlFor={`${id}-target`} className="t-2 stk-order-lbl">
-              목표가 <span className="t-cap num">{pct(tg)}</span>
-            </label>
-            <input id={`${id}-target`} className="ui-input num" inputMode="decimal" value={target} onChange={(e) => setTarget(fmtIn(e.target.value))} />
           </>
         )}
       </div>
@@ -159,9 +181,11 @@ export function OrderBox({ ctx, onReview, reviewRef }: { ctx: OrderContext; onRe
       {buy ? (
         <dl className="stk-order-risk">
           <dt>손절 시 손실</dt>
-          <dd className="num">{pv.stopOk && pv.qty > 0 ? fmtPnl(-pv.loss, ctx.region) : "-"}</dd>
-          <dt>계좌 대비</dt>
-          <dd className="num">{pv.lossPct == null || !pv.stopOk ? "-" : fmtRatio(pv.lossPct, 1)}</dd>
+          <dd className="num stk-order-loss">{pv.stopOk && pv.qty > 0 ? fmtPnl(-pv.loss, ctx.region) : "-"}</dd>
+          <dt>
+            계좌 대비 <span className="t-cap">{baseWord(ctx)} 기준</span>
+          </dt>
+          <dd className="num">{pv.lossPct == null || !pv.stopOk || !pv.qty ? "-" : fmtRatio(pv.lossPct, 1)}</dd>
           <dt>주문 후 종목 비중</dt>
           <dd className="num">
             {pv.weightAfter == null ? "-" : fmtRatio(pv.weightAfter, 1)}
@@ -172,11 +196,12 @@ export function OrderBox({ ctx, onReview, reviewRef }: { ctx: OrderContext; onRe
         <p className="t-cap">직접 기록한 보유 {fmtInt(ctx.held)}주 기준이에요. 모의계좌 보유는 서버가 규칙대로 자동 청산해요.</p>
       )}
 
-      <Button type="submit" variant={buy ? "buy" : "sell"} size="lg" block>
+      <Button type="submit" variant={buy ? "buy" : "sell"} size="lg" block aria-keyshortcuts={MAC ? "Meta+Enter" : "Control+Enter"}>
         {buy ? "매수 주문 검토" : "매도 주문 검토"}
       </Button>
       <p className="t-cap stk-order-foot">
-        <span className="kbd">{MAC ? "⌘ Enter" : "Ctrl Enter"}</span> 검토 시트에서 한 번 더 확인해요. 증권사로 주문을 보내지 않아요.
+        <span className="kbd">{MAC ? "⌘ Enter" : "Ctrl Enter"}</span>
+        검토 시트에서 한 번 더 확인해요. 증권사로 주문을 보내지 않아요.
       </p>
     </form>
   );
@@ -191,11 +216,18 @@ export const roundPx = (n: number, region: Region) => (region === "US" ? Math.ro
 /** 계획 손절가 → 슬라이더 비율(−15~−1%) */
 export const stopPctOf = (ctx: OrderContext) => clampStopPct(ctx.plan && ctx.price > 0 && ctx.plan.stop > 0 ? (ctx.plan.stop / ctx.price - 1) * 100 : -8);
 
+/** 태블릿 '주문하기': 슬라이더 손절가와 그 수량으로 검토 시트를 연다 */
+export function tabletRequest(ctx: OrderContext, stopPct: number): OrderRequest {
+  const stop = stopFromPctCtx(ctx, stopPct);
+  const pv = previewOf(ctx, "BUY", ctx.price, stop);
+  return orderRequest(ctx, "BUY", { stop, qty: pv.stopOk ? pv.qty : undefined });
+}
+
 /** 태블릿 포지션 계산(E): 손절가 슬라이더를 움직이면 수량과 예상 손실이 바로 다시 계산된다 */
 export function PositionCalc({ ctx, stopPct, onStopPct }: { ctx: OrderContext; stopPct: number; onStopPct: (n: number) => void }) {
   const id = useId();
   const stop = stopFromPct(ctx.price, stopPct, ctx.region);
-  const pv = orderPreview({ side: "BUY", price: ctx.price, stop, capital: ctx.capital, riskPct: ctx.settings?.riskPct ?? 1, maxWeightPct: ctx.settings?.maxWeightPct ?? 100, held: ctx.held });
+  const pv = previewOf(ctx, "BUY", ctx.price, stop);
   const realPct = pv.stopPct ?? stopPct;
   return (
     <section className="stk-poscalc" aria-labelledby={`${id}-h`}>
@@ -237,7 +269,7 @@ export function PositionCalc({ ctx, stopPct, onStopPct }: { ctx: OrderContext; s
         </dd>
       </dl>
       <p className="t-cap">
-        1회 손실 한도 {ctx.settings?.riskPct ?? "-"}%와 종목 비중 상한 {ctx.settings?.maxWeightPct ?? "-"}% 안에서 계산했어요.
+        {baseWord(ctx)} 기준 1회 손실 한도 {ctx.settings?.riskPct ?? "-"}%와 종목 비중 상한 {ctx.settings?.maxWeightPct ?? "-"}% 안에서 계산했어요.
         {ctx.plan ? ` 처음 값은 ${PLAN_LABEL[ctx.plan.source]}예요.` : ""}
       </p>
     </section>
@@ -247,7 +279,7 @@ export function PositionCalc({ ctx, stopPct, onStopPct }: { ctx: OrderContext; s
 /** 핸드폰·태블릿 세로 아래 고정 주문 줄(지도서 7.1 E·6.2 B): 위험 한 줄 + 매도(왼쪽)·매수(오른쪽) */
 export function MobileOrderBar({ ctx, onReview }: { ctx: OrderContext; onReview: (r: OrderRequest) => void }) {
   const stop = ctx.plan?.stop ?? 0;
-  const pv = orderPreview({ side: "BUY", price: ctx.price, stop, capital: ctx.capital, riskPct: ctx.settings?.riskPct ?? 1, maxWeightPct: ctx.settings?.maxWeightPct ?? 100, held: ctx.held });
+  const pv = previewOf(ctx, "BUY", ctx.price, stop);
   return (
     <div className="stk-mbar" role="region" aria-label="주문">
       <p className="t-cap stk-mbar-risk">
@@ -265,7 +297,7 @@ export function MobileOrderBar({ ctx, onReview }: { ctx: OrderContext; onReview:
         <Button variant="sell" size="lg" block onClick={() => onReview(orderRequest(ctx, "SELL"))}>
           매도
         </Button>
-        <Button variant="buy" size="lg" block onClick={() => onReview(orderRequest(ctx, "BUY"))}>
+        <Button variant="buy" size="lg" block onClick={() => onReview(orderRequest(ctx, "BUY", { qty: pv.stopOk ? pv.qty : undefined }))}>
           매수
         </Button>
       </div>

@@ -13,7 +13,7 @@ import { DisclosureTab } from "./DisclosureTab";
 import { EvidencePanel, SignalBlock } from "./EvidencePanel";
 import { FinTab } from "./FinTab";
 import { MemoTab } from "./MemoTab";
-import { MobileOrderBar, OrderBox, orderRequest, PositionCalc, stopFromPctCtx, stopPctOf, useOrderContext } from "./OrderBox";
+import { MobileOrderBar, OrderBox, orderRequest, PositionCalc, previewOf, stopPctOf, tabletRequest, useOrderContext } from "./OrderBox";
 import { BackLink, StockHeader } from "./StockHeader";
 import {
   defaultPeriod, DETAIL_TABS, parseStockRoute, stepCode, stockPath, TAB_LABEL, TAB_LABEL_SHORT,
@@ -32,7 +32,8 @@ import "./stocks.css";
  * 단축키(지도서 5.4): 1·2·3 일·주·월봉, ↑↓ 관심종목 위아래, Ctrl(⌘) Enter 주문 검토 시트 열기(바로 기록하지 않는다).
  */
 
-const PANE = { list: { key: "stocks.list", def: 288, min: 220, max: 420 }, side: { key: "stocks.side", def: 400, min: 340, max: 600 } } as const;
+/** 세 영역의 폭(지도서 5.2: 경계선을 끌어 바꾸고 prefs.panes에 남긴다). 기본값은 가운데 차트가 가장 넓게 */
+const PANE = { list: { key: "stocks.list", def: 256, min: 220, max: 420 }, side: { key: "stocks.side", def: 372, min: 340, max: 600 } } as const;
 
 function isTyping(t: EventTarget | null): boolean {
   const el = t as HTMLElement | null;
@@ -166,11 +167,15 @@ function Detail({ code, tab, minute, bp, reviewRef, sideW, onSideW }: {
   useEffect(() => setStopPct(stopPctOf(ctx)), [planKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const review = (r: OrderRequest) => openOrderReview(r);
-  const tabletReview = () => review(orderRequest(ctx, "BUY", { stop: stopFromPctCtx(ctx, stopPct) }));
+  const tabletReview = () => review(tabletRequest(ctx, stopPct));
+  const planReview = () => {
+    const pv = previewOf(ctx, "BUY", ctx.price, ctx.plan?.stop ?? 0);
+    review(orderRequest(ctx, "BUY", { qty: pv.stopOk ? pv.qty : undefined }));
+  };
   // Ctrl(⌘)+Enter: 검토 시트만 연다. 컴퓨터는 주문 상자 값(상자가 직접 등록), 태블릿은 슬라이더 손절가, 그 밖은 계획 값
   useEffect(() => {
     if (!data || large) return;
-    reviewRef.current = bp === "expanded" ? tabletReview : () => review(orderRequest(ctx, "BUY"));
+    reviewRef.current = bp === "expanded" ? tabletReview : planReview;
     return () => {
       reviewRef.current = null;
     };
@@ -321,7 +326,9 @@ export default function StocksScreen() {
   // Ctrl(⌘)+Enter: 주문 검토 시트만 연다(지도서 5.4)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey) || sheetOpen()) return;
+      // 메모처럼 여러 줄 입력칸에서는 Ctrl(⌘)+Enter를 가로채지 않는다
+      if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || sheetOpen()) return;
+      if ((e.target as HTMLElement | null)?.tagName === "TEXTAREA") return;
       if (!reviewRef.current) return;
       e.preventDefault();
       reviewRef.current();
