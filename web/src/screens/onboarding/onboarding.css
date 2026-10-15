@@ -1,0 +1,30 @@
+/* 첫 실행 안내(부록 A). 시트 안의 짧은 단계. 장식 없이 글자 굵기와 여백으로 위계를 만든다 */
+.glb-ob { display: flex; flex-direction: column; min-width: 0; }
+.glb-ob-title { display: inline-flex; flex-direction: column; gap: 2px; }
+.glb-ob-count { font-weight: var(--font-weight-regular); }
+.glb-ob-step { display: flex; flex-direction: column; gap: var(--space-4); padding-bottom: var(--space-2); }
+.glb-ob-lead { font-size: var(--font-size-section); line-height: var(--line-height-section); font-weight: var(--font-weight-bold); }
+.glb-ob-points { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-4); }
+.glb-ob-points > li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: var(--space-3); align-items: start; }
+.glb-ob-points > li > svg { color: var(--color-accent); margin-top: 1px; }
+.glb-ob-points > li > div { display: flex; flex-direction: column; gap: 2px; }
+.glb-ob-points > li.glb-ob-example {
+  display: flex; flex-direction: column; gap: var(--space-2); margin-left: calc(22px + var(--space-3));
+  padding: var(--space-3); border-radius: var(--radius-panel); background: var(--color-surface-2);
+}
+.glb-ob-bullets { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: var(--space-2); }
+
+.glb-ob-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+.glb-ob-dots { display: flex; gap: 6px; }
+.glb-ob-dots span { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--color-accent); }
+.glb-ob-dots span.on, .glb-ob-dots span.done { background: var(--color-accent); }
+.glb-ob-dots span.done { opacity: 0.45; }
+.glb-ob-btns { display: flex; gap: var(--space-2); margin-left: auto; }
+
+@media (max-width: 599.98px) {
+  .glb-ob-points > li.glb-ob-example { margin-left: 0; }
+  .glb-ob-foot { flex-direction: column; align-items: stretch; }
+  .glb-ob-dots { justify-content: center; }
+  .glb-ob-btns { margin-left: 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+  .glb-ob-btns .ui-btn { width: 100%; }
+}
