@@ -159,7 +159,7 @@ function StockName({ code, name }: { code: string; name: string }) {
 function Movers({ title, rows, region }: { title: string; rows: MarketRowLike[]; region: Region }) {
   return (
     <div className="rec-dsec">
-      <h5 className="rec-h5">{title}</h5>
+      <h4 className="rec-h5">{title}</h4>
       {rows.length === 0 ? (
         <p className="t-cap">해당 종목이 없어요.</p>
       ) : (
@@ -188,9 +188,9 @@ function ReviewItem({ r }: { r: DailyReview }) {
   return (
     <article className="rec-daily" aria-labelledby={`${dataId}-h`}>
       <div className="rec-daily-head">
-        <h4 id={`${dataId}-h`} className="t-section">
+        <h3 id={`${dataId}-h`} className="t-section">
           <span className="num">{fmtDate(r.date)}</span> {REGION_LABEL[r.region]}
-        </h4>
+        </h3>
         <span className="row wrap" style={{ gap: 8 }}>
           {r.builtAt && <span className="t-cap">{fmtWhen(r.builtAt)} 작성</span>}
           <RuleTag rule={r.rule} />
@@ -206,7 +206,7 @@ function ReviewItem({ r }: { r: DailyReview }) {
       {open && (
         <div id={dataId} className="stack-4">
           <div className="rec-dsec rec-dsec-index">
-              <h5 className="rec-h5">지수 흐름</h5>
+              <h4 className="rec-h5">지수 흐름</h4>
               {r.indexMoves.length === 0 ? (
                 <p className="t-cap">지수 자료가 없어요.</p>
               ) : (
@@ -249,7 +249,7 @@ function ReviewItem({ r }: { r: DailyReview }) {
           <div className="rec-dcols">
             {r.sectorMoves && (
               <div className="rec-dsec">
-                <h5 className="rec-h5">섹터 흐름</h5>
+                <h4 className="rec-h5">섹터 흐름</h4>
                 <span className="t-cap">강세</span>
                 <ul className="rec-mini">
                   {r.sectorMoves.top.map((x) => (
@@ -272,9 +272,9 @@ function ReviewItem({ r }: { r: DailyReview }) {
             )}
 
             <div className="rec-dsec">
-              <h5 className="rec-h5">
+              <h4 className="rec-h5">
                 신고가 <span className="t-cap num">{fmtInt(r.newHighs.length)}개</span>
-              </h5>
+              </h4>
               {r.newHighs.length === 0 ? (
                 <p className="t-cap">신고가·고점 돌파 종목이 없어요.</p>
               ) : (
@@ -290,7 +290,7 @@ function ReviewItem({ r }: { r: DailyReview }) {
             </div>
 
             <div className="rec-dsec">
-              <h5 className="rec-h5">단타 후보 상위</h5>
+              <h4 className="rec-h5">단타 후보 상위</h4>
               {r.candidatesTop.length === 0 ? (
                 <p className="t-cap">이날 단타 후보가 없었어요.</p>
               ) : (
@@ -306,7 +306,7 @@ function ReviewItem({ r }: { r: DailyReview }) {
             </div>
 
             <div className="rec-dsec">
-              <h5 className="rec-h5">모의매매 요약</h5>
+              <h4 className="rec-h5">모의매매 요약</h4>
               {p.buys + p.sells === 0 ? (
                 <p className="t-cap">이날 모의매매 기록이 없어요.</p>
               ) : (
@@ -357,7 +357,7 @@ function ReviewItem({ r }: { r: DailyReview }) {
   );
 }
 
-/** 내 메모(복기 코멘트). Ctrl·Cmd+Enter로도 저장된다 */
+/** 내 메모(복기 코멘트). Ctrl·Cmd+Enter는 앱 전체에서 주문 검토 단축키라 여기서는 쓰지 않는다 */
 function Memo({ r }: { r: DailyReview }) {
   const toast = useToast();
   const [saved, setSaved] = useState(r.userComment ?? "");
@@ -406,12 +406,6 @@ function Memo({ r }: { r: DailyReview }) {
           setText(e.target.value);
           setErr("");
         }}
-        onKeyDown={(e) => {
-          if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && dirty && !busy) {
-            e.preventDefault();
-            void save();
-          }
-        }}
         placeholder="오늘 시장을 내 말로 정리해요. 예: 반도체 강세는 수출 실적 기대 때문. 내일은 2차전지 반등 여부를 볼 것."
       />
       {err && <Notice tone="warn">{err}</Notice>}
@@ -419,7 +413,7 @@ function Memo({ r }: { r: DailyReview }) {
         <Button variant="secondary" size="sm" className="rec-touch-btn" disabled={!dirty} busy={busy} onClick={save}>
           메모 저장
         </Button>
-        {dirty && !busy && <span className="t-cap">저장하지 않은 변경이 있어요. Ctrl+Enter로도 저장돼요.</span>}
+        {dirty && !busy && <span className="t-cap">저장하지 않은 변경이 있어요.</span>}
       </div>
     </div>
   );

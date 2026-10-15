@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { expectancy, regionOfCode, summarizeJournal, type Currency, type JournalEntry } from "@jusik/shared";
 import { useApp } from "../../app/AppContext";
 import { navigate } from "../../app/router";
-import { Button, EmptyState, fmtDate, fmtInt, fmtPrice, IconButton, kstDate, Section, Segmented, Skeleton, SkeletonRows, Sparkline, Stat, Stats, useBreakpoint } from "../../ui";
+import { Button, EmptyState, Notice, fmtDate, fmtInt, fmtPrice, IconButton, kstDate, Section, Segmented, Skeleton, SkeletonRows, Sparkline, Stat, Stats, useBreakpoint } from "../../ui";
 import { DailyReviews } from "./DailyReviews";
 import { Pnl, Ret, Side, TagList } from "./parts";
 import {
@@ -30,7 +30,7 @@ function rangeLabel(p: Period, r: Range): string {
 }
 
 export function ReviewTab({ loaded }: { loaded: boolean }) {
-  const { journal, now } = useApp();
+  const { journal, now, offline } = useApp();
   const bp = useBreakpoint();
   const [period, setPeriod] = useState<Period>("week");
   const [offset, setOffset] = useState(0);
@@ -108,7 +108,7 @@ export function ReviewTab({ loaded }: { loaded: boolean }) {
   );
 
   const trades = (
-    <Section title="거래별 결과" sub={rows.length ? `${fmtInt(rows.length)}건` : undefined} as="h3">
+    <Section title="거래별 결과" sub={rows.length ? `${fmtInt(rows.length)}건` : undefined}>
       {busy ? (
         <SkeletonRows rows={4} h={36} />
       ) : rows.length === 0 ? (
@@ -126,7 +126,7 @@ export function ReviewTab({ loaded }: { loaded: boolean }) {
   );
 
   const emotions = (
-    <Section title="감정별 결과" as="h3">
+    <Section title="감정별 결과">
       {busy ? (
         <SkeletonRows rows={3} h={24} />
       ) : emo.length === 0 ? (
@@ -171,7 +171,7 @@ export function ReviewTab({ loaded }: { loaded: boolean }) {
   );
 
   const violations = (
-    <Section title="규칙 위반" sub={viol.length ? `${fmtInt(viol.length)}건` : undefined} as="h3">
+    <Section title="규칙 위반" sub={viol.length ? `${fmtInt(viol.length)}건` : undefined}>
       {busy ? (
         <SkeletonRows rows={2} h={24} />
       ) : viol.length === 0 ? (
@@ -203,7 +203,11 @@ export function ReviewTab({ loaded }: { loaded: boolean }) {
         {head}
         {stats}
       </section>
-      {!busy && journal.length === 0 ? (
+      {offline && journal.length === 0 ? (
+        <Notice tone="warn" title="기록을 불러오지 못했어요">
+          서버와 연결되지 않았어요. 연결되면 자동으로 다시 받아요.
+        </Notice>
+      ) : !busy && journal.length === 0 ? (
         <EmptyState icon={<NotebookPen size={24} strokeWidth={1.5} aria-hidden="true" />} title="아직 기록이 없어요" action={<Button variant="primary" onClick={() => navigate("/records", { replace: true })}>일지 쓰기</Button>}>
           매매일지를 쓰거나 모의매매를 켜면 기간별로 돌아볼 수 있어요.
         </EmptyState>
@@ -287,7 +291,7 @@ function OverallCur({ cur, entries }: { cur: Currency; entries: JournalEntry[] }
   const region = cur === "USD" ? "US" : "KR";
   return (
     <div className="rec-overall-cur stack-3">
-      <h4 className="rec-lbl">{cur === "KRW" ? "원화(국내)" : "달러(미국)"}</h4>
+      <h3 className="rec-lbl">{cur === "KRW" ? "원화(국내)" : "달러(미국)"}</h3>
       <dl className="rec-kv rec-kv-4">
         <div>
           <dt>청산 거래</dt>

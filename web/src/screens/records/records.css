@@ -8,6 +8,7 @@
 .rec-intro { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); }
 .rec-tabs { margin-bottom: var(--space-5); }
 .rec-panel { min-width: 0; }
+.rec .ui-section > .ui-seg { align-self: flex-start; }
 .rec.is-compact .rec-tabs { margin: calc(var(--space-2) * -1) 0 var(--space-4); }
 .rec.is-compact .rec-tabs button { flex: 1 1 auto; }
 .rec-tablbl { display: inline-flex; align-items: center; gap: var(--space-1); }
@@ -222,6 +223,7 @@ th.rec-cellname { font-weight: var(--font-weight-regular); color: var(--color-te
 .rec-eval-table td, .rec-eval-table th { white-space: nowrap; }
 .rec-eval-table td, .rec-eval-table thead th { padding: var(--space-2) var(--space-3); }
 .rec-eval-table th[scope="row"] { padding: var(--space-2) var(--space-3) var(--space-2) 0; }
+.rec-eval-table tr.sel th { background: var(--color-accent-soft); }
 .rec-eval-table thead th:first-child { padding-left: 0; }
 .rec-eval-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: var(--space-5) var(--space-6); }
 .rec-replay-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-4) var(--space-5); }

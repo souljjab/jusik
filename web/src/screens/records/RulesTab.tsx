@@ -103,9 +103,9 @@ function EvaluationPanel({ ev, currentMin, onApply, idBase }: { ev: Evaluation; 
       </Notice>
 
       <div className="stack">
-        <h4 className="rec-lbl" id={`${idBase}-th`}>
+        <h3 className="rec-lbl" id={`${idBase}-th`}>
           최소 점수 기준별 성과 <span className="t-cap">앞 절반에서 고른 기준이 뒤 절반에서도 통하는지 봐요. 지금 {currentMin}점</span>
-        </h4>
+        </h3>
         <div className="ui-table-wrap">
           <table className="ui-table rec-eval-table" aria-labelledby={`${idBase}-th`}>
             <thead>
@@ -145,9 +145,9 @@ function EvaluationPanel({ ev, currentMin, onApply, idBase }: { ev: Evaluation; 
       <div className="rec-eval-groups">
         {ev.groups.map((g) => (
           <div key={g.title} className="stack">
-            <h4 className="rec-lbl" id={`${idBase}-g-${g.title}`}>
+            <h3 className="rec-lbl" id={`${idBase}-g-${g.title}`}>
               {g.title}별
-            </h4>
+            </h3>
             <div className="ui-table-wrap">
               <table className="ui-table rec-eval-table" aria-labelledby={`${idBase}-g-${g.title}`}>
                 <thead>

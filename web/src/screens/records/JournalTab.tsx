@@ -1,11 +1,10 @@
-import { ChevronDown, Download, NotebookPen, PenLine, RefreshCw, Trash2 } from "lucide-react";
+import { ChevronDown, Download, NotebookPen, PenLine, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { regionOfCode, type JournalEntry } from "@jusik/shared";
 import { deleteJournal, patchJournal } from "../../api";
 import { useApp } from "../../app/AppContext";
-import { navigate } from "../../app/router";
 import {
-  Button, EmptyState, Field, fmtDate, fmtInt, fmtPrice, fmtRatio, kstDate, Notice, Segmented, Sheet, Skeleton, SkeletonRows, Stat, Stats, Toggle, useBreakpoint, useToast,
+  Button, EmptyState, Field, fmtDate, fmtInt, fmtNum, fmtPct, fmtPrice, fmtRatio, kstDate, Notice, Segmented, Sheet, Skeleton, SkeletonRows, Stat, Stats, Toggle, useBreakpoint, useToast,
 } from "../../ui";
 import { emptyForm, JournalFields, SaveResult, useJournalForm, useSaveJournal, type Saved } from "./JournalForm";
 import { EmotionPicker, Pnl, Ret, Side, sourceText, StrategyField, Verdict, downloadText } from "./parts";
@@ -25,14 +24,13 @@ import {
 type SourceFilter = "all" | "manual" | "auto";
 
 export function JournalTab({ loaded }: { loaded: boolean }) {
-  const { journal, offline, now, refreshJournal } = useApp();
+  const { journal, now, offline } = useApp();
   const bp = useBreakpoint();
   const wide = bp === "large" || bp === "expanded";
   const [filter, setFilter] = useState<SourceFilter>("all");
   const [open, setOpen] = useState<string | null>(null);
   const [sheet, setSheet] = useState(false);
   const [confirmDel, setConfirmDel] = useState<JournalEntry | null>(null);
-  const [retrying, setRetrying] = useState(false);
 
   const results = useMemo(() => sellResults(journal), [journal]);
   const week = useMemo(() => periodRange("week", kstDate(now)), [now]);
@@ -106,33 +104,11 @@ export function JournalTab({ loaded }: { loaded: boolean }) {
           )}
         </div>
       </div>
-      {offline && (
-        <Notice
-          tone="warn"
-          title="서버와 연결이 끊겼어요"
-          action={
-            <Button
-              variant="secondary"
-              size="sm"
-              busy={retrying}
-              icon={<RefreshCw size={16} strokeWidth={1.5} aria-hidden="true" />}
-              onClick={async () => {
-                setRetrying(true);
-                try {
-                  await refreshJournal();
-                } finally {
-                  setRetrying(false);
-                }
-              }}
-            >
-              다시 불러오기
-            </Button>
-          }
-        >
-          보이는 기록은 마지막으로 받은 내용이에요. 연결되면 자동으로 다시 받아요.
+      {offline && !journal.length ? (
+        <Notice tone="warn" title="기록을 불러오지 못했어요">
+          서버와 연결되지 않았어요. 연결되면 자동으로 다시 받아요.
         </Notice>
-      )}
-      {!loaded && !journal.length ? (
+      ) : !loaded && !journal.length ? (
         <SkeletonRows rows={6} h={40} />
       ) : groups.length === 0 ? (
         journal.length === 0 ? (
@@ -140,11 +116,9 @@ export function JournalTab({ loaded }: { loaded: boolean }) {
             icon={<NotebookPen size={24} strokeWidth={1.5} aria-hidden="true" />}
             title="아직 기록이 없어요"
             action={
-              wide ? undefined : (
-                <Button variant="primary" onClick={() => setSheet(true)}>
-                  일지 쓰기
-                </Button>
-              )
+              <Button variant="primary" onClick={() => (wide ? document.getElementById("rec-new-code")?.focus() : setSheet(true))}>
+                일지 쓰기
+              </Button>
             }
           >
             {wide ? "오른쪽 '새 일지'에 증권사에서 낸 매매를 적어 보세요. " : "증권사에서 낸 매매를 적어 보세요. "}
@@ -229,7 +203,7 @@ function EntryRow({ e, result, expanded, onToggle, onDelete }: { e: JournalEntry
   const emos = [...emo.chips, ...(emo.text ? [emo.text] : [])];
   const detailId = `rec-detail-${e.id}`;
   return (
-    <li className={`rec-entry ${expanded ? "is-open" : ""} ${v && !v.ok ? "is-warn" : ""}`}>
+    <li className={`rec-entry ${expanded ? "is-open" : ""}`}>
       <button type="button" className="rec-entry-btn" aria-expanded={expanded} aria-controls={expanded ? detailId : undefined} onClick={onToggle}>
         <span className="rec-e-side">
           <Side side={e.side} />
@@ -394,6 +368,14 @@ function EntryDetail({ e, result, onDelete }: { e: JournalEntry; result: SellRes
         <div className="stack" style={{ gap: 2 }}>
           <span className="rec-lbl">{sell ? "매도 이유" : "진입 근거"}</span>
           <p className="rec-prose">{e.reason}</p>
+        </div>
+      )}
+      {e.meta && (
+        <div className="stack" style={{ gap: 2 }}>
+          <span className="rec-lbl">진입 당시 신호(모의매매 규칙)</span>
+          <p className="t-2 num">
+            점수 {fmtInt(e.meta.score)}점 · 거래량 {fmtNum(e.meta.volumeRatio, 1)}배 · 당일 {fmtPct(e.meta.changePct)} · 손절폭 {fmtRatio(e.meta.stopPct)}
+          </p>
         </div>
       )}
 
@@ -611,13 +593,3 @@ function NewJournalSheet({ open, onClose }: { open: boolean; onClose: () => void
     </Sheet>
   );
 }
-
-/** 기록이 하나도 없을 때 다른 탭에서 쓰는 이동 버튼 */
-export function GoWrite() {
-  return (
-    <Button variant="primary" onClick={() => navigate("/records", { replace: true })}>
-      일지 쓰기
-    </Button>
-  );
-}
-
