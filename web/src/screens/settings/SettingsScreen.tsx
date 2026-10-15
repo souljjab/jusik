@@ -152,6 +152,13 @@ export default function SettingsScreen() {
   const summaries = useSummaries();
   const headRef = useRef<HTMLHeadingElement>(null);
 
+  // 설정을 떠나면 '목록에서 들어옴' 표시를 지운다(다음에 링크로 바로 들어오면 뒤로가 목록으로 가게)
+  useEffect(
+    () => () => {
+      cameFromList = false;
+    },
+    [],
+  );
   // 모르는 구역 주소는 설정 첫 화면으로
   useEffect(() => {
     if (slug && !sec) navigate("/settings", { replace: true });
