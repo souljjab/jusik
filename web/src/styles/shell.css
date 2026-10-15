@@ -10,6 +10,8 @@
 .shell-main { grid-area: main; min-width: 0; padding: var(--space-5) var(--gutter) var(--space-7); }
 .shell-main.full { padding: 0; }
 .shell-main:focus { outline: none; }
+/* 연결 끊김 띠와 화면 내용 사이 간격 */
+.shell-main > .ui-notice.bar { margin: calc(-1 * var(--space-5)) calc(-1 * var(--gutter)) var(--space-4); }
 
 /* ───────── 사이드바·레일 ───────── */
 .nav-side {

@@ -4,7 +4,6 @@
  */
 .glb-set { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
 /* 껍데기의 연결 끊김 띠 바로 아래에 올 때 붙지 않게 */
-.ui-notice + .glb-set { margin-top: var(--space-4); }
 .glb-set-head { display: flex; flex-direction: column; gap: var(--space-1); }
 
 /* 넓은 화면: 구역 목록 | 구역 */

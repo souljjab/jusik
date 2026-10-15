@@ -1,13 +1,12 @@
-import { CheckCircle2, Download, MoreHorizontal, RefreshCw } from "lucide-react";
+import { CheckCircle2, ChevronRight, MoreHorizontal } from "lucide-react";
 import { useMemo, useState, type KeyboardEvent } from "react";
 import { DEFAULT_PAPER_TRACKING, type Currency, type Region, type ServerState } from "@jusik/shared";
-import { excelUrl, resetPaper, syncExport } from "../../api";
 import { useActions } from "../../app/actions";
 import { useApp } from "../../app/AppContext";
 import { Link, navigate } from "../../app/router";
 import {
-  atLeast, Button, Change, EmptyState, fmtDate, fmtInt, fmtMoneyByCurrency, fmtPct, fmtPrice, fmtRatio, fmtWhen, IconButton, MarketStatus, Notice, NoteList, RuleTag, Section,
-  Sheet, srQuote, useBreakpoint, useToast, type Breakpoint,
+  atLeast, Button, Change, EmptyState, fmtDate, fmtInt, fmtMoneyByCurrency, fmtPct, fmtPrice, fmtRatio, IconButton, MarketStatus, Notice, NoteList, RuleTag, Section,
+  Sheet, srQuote, useBreakpoint, type Breakpoint,
 } from "../../ui";
 import { AccountTitle, asOfText, Pnl, Progress, REGION_NAME, StopDistance, useQuotes, type QuoteInfo } from "./parts";
 import { accountView, CUR_NAME, currenciesShown, holdingPnl, manualHoldings, regionOfCur, todayOf, type AccountView, type ManualHolding, type PositionView } from "./tradeModel";
@@ -500,128 +499,24 @@ function PaperTracking({ server, currencies, side }: { server: ServerState; curr
   );
 }
 
-function PaperReset({ server }: { server: ServerState }) {
-  const { refreshServer } = useApp();
-  const toast = useToast();
-  const bp = useBreakpoint();
-  const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const s = server.settings;
-  const amounts = `${fmtMoneyByCurrency(s.depositKRW, "KRW")} · ${fmtMoneyByCurrency(s.depositUSD, "USD")}`;
-  const run = async () => {
-    setBusy(true);
-    try {
-      await resetPaper();
-      await refreshServer();
-      toast("모의계좌를 예수금으로 초기화했어요", "ok");
-      setOpen(false);
-    } catch (e) {
-      toast(`초기화하지 못했어요. ${e instanceof Error ? e.message : ""} 서버 연결을 확인해 주세요.`, "warn");
-    } finally {
-      setBusy(false);
-    }
-  };
+/** 모의계좌 초기화·기록 내보내기는 설정에서 한곳으로 관리한다(같은 동작을 두 곳에 두지 않는다) */
+function AccountLinks() {
   return (
-    <Section title="모의계좌 관리" as="h2">
-      <p className="t-2">
-        모의계좌를 예수금(<span className="num">{amounts}</span>)으로 되돌려요. 매매일지는 그대로 남아요.
-      </p>
-      <div>
-        <Button variant="secondary" size={atLeast(bp, "large") ? "sm" : "md"} className={atLeast(bp, "large") ? "" : "trd-touch-btn"} onClick={() => setOpen(true)}>
-          모의계좌 초기화
-        </Button>
-      </div>
-      <Sheet
-        open={open}
-        onClose={() => setOpen(false)}
-        title="모의계좌를 초기화할까요?"
-        side={bp === "compact" ? "bottom" : "center"}
-        footer={
-          <div className="row end wrap">
-            <Button variant="ghost" onClick={() => setOpen(false)}>
-              취소
-            </Button>
-            <Button variant="primary" busy={busy} onClick={run}>
-              모의계좌 초기화
-            </Button>
-          </div>
-        }
-      >
-        <div className="stack-3">
-          <Notice tone="warn">보유 중인 모의 종목이 기록 없이 사라지고, 되돌릴 수 없어요.</Notice>
-          <p>
-            원화·달러 모의계좌를 예수금(<span className="num">{amounts}</span>)으로 다시 시작해요. 매매일지와 복기 기록은 그대로 남아요.
-          </p>
-        </div>
-      </Sheet>
-    </Section>
-  );
-}
-
-/** 기록 내보내기: 1차 로컬 엑셀, 2차 구글 스프레드시트(서버 설정). 모의매매·매매일지·스캔 기록이 함께 나간다 */
-function ExportSection({ server }: { server: ServerState }) {
-  const { refreshServer, now } = useApp();
-  const toast = useToast();
-  const bp = useBreakpoint();
-  const [busy, setBusy] = useState(false);
-  const ex = server.status.export;
-  const when = (iso: string | null) => (iso ? fmtWhen(iso, now) : "");
-  const run = async () => {
-    setBusy(true);
-    try {
-      await syncExport();
-      await refreshServer();
-      toast("기록을 내보냈어요", "ok");
-    } catch (e) {
-      toast(`내보내지 못했어요. ${e instanceof Error ? e.message : ""} 서버 연결을 확인해 주세요.`, "warn");
-    } finally {
-      setBusy(false);
-    }
-  };
-  const size = atLeast(bp, "large") ? "sm" : "md";
-  return (
-    <Section title="기록 내보내기" as="h2">
-      <p className="t-2">모의매매·매매일지·스캔 기록을 엑셀 파일로 저장해요. 기록이 바뀌면 서버가 자동으로 다시 저장해요.</p>
-      <dl className="trd-export">
-        <div>
-          <dt>로컬 엑셀</dt>
-          <dd>
-            {ex.excel.ok === false ? (
-              <span className="warn-text">저장하지 못했어요{ex.excel.error ? `: ${ex.excel.error}` : ""}</span>
-            ) : ex.excel.at ? (
-              <span className="num">{when(ex.excel.at)} 저장</span>
-            ) : (
-              "아직 저장 전"
-            )}
-            <span className="t-cap trd-path">{ex.excel.path}</span>
-          </dd>
-        </div>
-        <div>
-          <dt>구글 스프레드시트</dt>
-          <dd>
-            {!ex.sheets.configured ? (
-              <span className="t-2">연결하지 않았어요. 서버 설정(server/.env.example)을 참고하세요</span>
-            ) : ex.sheets.ok === false ? (
-              <span className="warn-text">동기화하지 못했어요{ex.sheets.error ? `: ${ex.sheets.error}` : ""}</span>
-            ) : ex.sheets.at ? (
-              <span className="num">
-                {when(ex.sheets.at)} 동기화{ex.sheets.rows != null ? ` · ${fmtInt(ex.sheets.rows)}행` : ""}
-              </span>
-            ) : (
-              "아직 동기화 전"
-            )}
-          </dd>
-        </div>
-      </dl>
-      <div className="row wrap">
-        <a className={`ui-btn secondary ${size === "sm" ? "sm" : ""} trd-a-btn`} href={excelUrl} download>
-          <Download size={16} strokeWidth={1.5} aria-hidden="true" />
-          엑셀 내려받기
-        </a>
-        <Button variant="ghost" size={size} busy={busy} icon={<RefreshCw size={16} strokeWidth={1.5} aria-hidden="true" />} onClick={run}>
-          지금 내보내기
-        </Button>
-      </div>
+    <Section title="계좌·기록 관리" as="h2">
+      <ul className="ui-rows">
+        <li>
+          <Link to="/settings/paper" className="ui-rowbtn">
+            <span className="grow">모의계좌 초기화·자동 실행</span>
+            <ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" />
+          </Link>
+        </li>
+        <li>
+          <Link to="/settings/data" className="ui-rowbtn">
+            <span className="grow">기록 내보내기(엑셀·구글 시트)</span>
+            <ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" />
+          </Link>
+        </li>
+      </ul>
     </Section>
   );
 }
@@ -639,8 +534,7 @@ export function HoldingsTab({ server }: { server: ServerState }) {
   const side = (
     <>
       <PaperTracking server={server} currencies={currencies} side={large} />
-      <PaperReset server={server} />
-      <ExportSection server={server} />
+      <AccountLinks />
     </>
   );
   return (
@@ -649,7 +543,7 @@ export function HoldingsTab({ server }: { server: ServerState }) {
         <Section title="모의계좌(자동)" as="h2" sub={paperOff ? "자동 실행 꺼짐" : undefined}>
           <p className="t-2 trd-lead">서버가 규칙대로 모의로 사고판 종목이에요. 손절가·목표가·보유 기한에 닿으면 자동으로 청산해요. 실제 증권 계좌와는 연결되어 있지 않아요.</p>
           {paperOff && !allEmpty && (
-            <Notice tone="info" action={<Link to="/settings" className="trd-link">설정 열기</Link>}>
+            <Notice tone="info" action={<Link to="/settings/paper" className="trd-link">설정 열기</Link>}>
               모의매매 자동 실행이 꺼져 있어요. 지금 보유는 그대로 관리하고, 새로 들어가지는 않아요. 설정에서 켤 수 있어요.
             </Notice>
           )}
@@ -664,7 +558,7 @@ export function HoldingsTab({ server }: { server: ServerState }) {
               title="보유 중인 모의 종목이 없어요"
               action={
                 paperOff ? (
-                  <Button variant="secondary" className="trd-touch-btn" onClick={() => navigate("/settings")}>
+                  <Button variant="secondary" className="trd-touch-btn" onClick={() => navigate("/settings/paper")}>
                     설정에서 모의매매 켜기
                   </Button>
                 ) : (

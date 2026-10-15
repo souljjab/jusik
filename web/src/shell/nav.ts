@@ -43,5 +43,11 @@ export const SCREENS: { label: string; path: string; keywords: string }[] = [
   { label: "기록 · 복기", path: "/records/review", keywords: "복기 주간 월간 일일" },
   { label: "기록 · 규칙 점검", path: "/records/rules", keywords: "규칙 점검 준수 재현" },
   { label: "알림 센터", path: "/alerts", keywords: "알림 방해 금지" },
-  { label: "설정", path: "/settings", keywords: "설정 테마 색 한도 예수금 내보내기 엑셀" },
+  { label: "설정", path: "/settings", keywords: "설정" },
+  { label: "설정 · 화면(테마·색 관례)", path: "/settings/display", keywords: "테마 다크 라이트 색 관례 미국식 한국식 투자 성향" },
+  { label: "설정 · 알림과 방해 금지", path: "/settings/alerts", keywords: "알림 방해 금지 브라우저" },
+  { label: "설정 · 매매 한도", path: "/settings/limits", keywords: "한도 예수금 손실 비중 국면 상한 연속 손실" },
+  { label: "설정 · 모의계좌", path: "/settings/paper", keywords: "모의계좌 초기화 자동 실행 점검 주기" },
+  { label: "설정 · 데이터·내보내기", path: "/settings/data", keywords: "데이터 엑셀 구글 시트 내보내기 ISM 스케줄러" },
+  { label: "설정 · 정보", path: "/settings/about", keywords: "정보 고지 첫 실행 안내 단축키" },
 ];

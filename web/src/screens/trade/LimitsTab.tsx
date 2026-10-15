@@ -163,7 +163,7 @@ function Rules({ server }: { server: ServerState }) {
       title="지금 적용 중인 규칙"
       as="h2"
       actions={
-        <Link to="/settings" className="trd-more">
+        <Link to="/settings/limits" className="trd-more">
           설정에서 바꾸기
           <ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" />
         </Link>

@@ -12,7 +12,6 @@ import "./styles/tokens.css";
 import "./styles/base.css";
 import "./styles/components.css";
 import "./styles/shell.css";
-import "./styles/legacy.css";
 
 // 첫 그림 전에 테마·색 관례를 반영해 깜빡임을 막는다
 applyPrefs();

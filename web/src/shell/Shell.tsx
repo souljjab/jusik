@@ -126,7 +126,7 @@ function TopBar({ area }: { area: Area }) {
         <IconButton label="알림" badge={unreadAlerts} onClick={() => navigate("/alerts")} aria-current={area === "alerts" ? "page" : undefined}>
           <Bell size={20} strokeWidth={1.5} aria-hidden="true" />
         </IconButton>
-        <IconButton label="설정" className="compact-only" onClick={() => navigate("/settings")}>
+        <IconButton label="설정" className="compact-only" onClick={() => navigate("/settings")} aria-current={area === "settings" ? "page" : undefined}>
           <Settings size={20} strokeWidth={1.5} aria-hidden="true" />
         </IconButton>
       </div>
