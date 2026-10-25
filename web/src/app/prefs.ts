@@ -13,6 +13,11 @@ export interface Prefs {
   dnd: { enabled: boolean; start: string; end: string; allowRisk: boolean };
   /** 새 알림을 브라우저 알림으로도 띄울지(브라우저 권한이 필요) */
   notify: boolean;
+  /**
+   * 장중 신호 요약(지도서 7.4 '장중 신호는 묶어서 정해진 시각에 요약으로 받는 선택지'). 켜면 신호 알림을 하나씩 띄우지 않고
+   * times(한국 시간 "HH:MM")마다 '신호 N건: …' 한 번으로 묶어 띄운다(방해 금지 시간이면 다음 시각으로 미룬다). 리스크·공시·국면 알림은 그대로 바로.
+   */
+  digest: { enabled: boolean; times: string[] };
   /** 사이드바 접기(컴퓨터) */
   sidebarCollapsed: boolean;
   /** 첫 실행 안내(투자 성향·고지)를 마쳤는지 */
@@ -30,6 +35,7 @@ export const DEFAULT_PREFS: Prefs = {
   convention: "KR",
   dnd: { enabled: true, start: "22:00", end: "07:00", allowRisk: false },
   notify: false,
+  digest: { enabled: false, times: ["12:00", "15:40"] },
   sidebarCollapsed: false,
   onboarded: false,
   style: null,
@@ -39,6 +45,19 @@ export const DEFAULT_PREFS: Prefs = {
 
 const KEY = "jusik.prefs.v1";
 
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+/** 저장된 요약 설정 다듬기: 시각은 "HH:MM"만, 겹치면 하나로, 이른 순서 */
+export function normDigest(d: unknown): Prefs["digest"] {
+  const o = d && typeof d === "object" ? (d as Partial<Prefs["digest"]>) : {};
+  const times = Array.isArray(o.times) ? [...new Set(o.times.filter((t): t is string => typeof t === "string" && HHMM.test(t)))].sort() : DEFAULT_PREFS.digest.times;
+  return { enabled: o.enabled === true, times };
+}
+
+/**
+ * 브라우저 테마 색(meta theme-color)의 대체 값. 토큰(--color-bg)을 읽지 못할 때만 쓴다 — tokens.css의 --color-bg와 같게 둔다.
+ */
+export const THEME_COLOR_FALLBACK = { light: "#F3F5F8", dark: "#0E1A2B" } as const;
+
 function load(): Prefs {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? "null") as Partial<Prefs> | null;
@@ -47,6 +66,7 @@ function load(): Prefs {
       ...DEFAULT_PREFS,
       ...raw,
       dnd: { ...DEFAULT_PREFS.dnd, ...(raw.dnd ?? {}) },
+      digest: normDigest(raw.digest),
       panes: raw.panes && typeof raw.panes === "object" ? raw.panes : {},
     };
   } catch {
@@ -90,7 +110,9 @@ export function applyPrefs(p: Prefs = state) {
   if (p.convention === "US") root.setAttribute("data-convention", "US");
   else root.removeAttribute("data-convention");
   const dark = p.theme === "dark" || (p.theme === "system" && typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches);
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#0E1A2B" : "#F3F5F8");
+  // 브라우저 테마 색은 바탕 토큰(--color-bg)을 읽어 맞춘다(토큰을 바꾸면 함께 바뀌게)
+  const bg = getComputedStyle(root).getPropertyValue("--color-bg").trim();
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", bg || THEME_COLOR_FALLBACK[dark ? "dark" : "light"]);
 }
 
 /** 지금(한국 시간)이 방해 금지 시간인가. start > end면 자정을 넘는 구간(22:00~07:00) */

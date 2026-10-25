@@ -77,7 +77,7 @@ export function EvidenceList({ cells }: { cells: EvidenceCell[] }) {
         const Icon = MARK[c.state];
         return (
           <li key={c.id}>
-            <Icon className={`mark ${c.state}`} size={16} strokeWidth={2} aria-label={STATE_WORD[c.state]} />
+            <Icon className={`mark ${c.state}`} size={16} strokeWidth={1.5} role="img" aria-label={STATE_WORD[c.state]} />
             <div className="stack" style={{ gap: 2 }}>
               <span className="name">{c.label}</span>
               <span className="t-2">{c.detail}</span>

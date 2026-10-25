@@ -27,7 +27,7 @@ export function NoteList({ notes, dense = false }: { notes: Note[]; dense?: bool
         const cls = n.tone === "good" ? "met" : n.tone === "info" ? "na" : "unmet";
         return (
           <li key={i} style={dense ? { paddingTop: 4, paddingBottom: 4 } : undefined}>
-            <Icon className={`mark ${cls}`} size={16} strokeWidth={2} aria-label={WORD[n.tone]} />
+            <Icon className={`mark ${cls}`} size={16} strokeWidth={1.5} role="img" aria-label={WORD[n.tone]} />
             <div className="stack" style={{ gap: 0 }}>
               <span className={n.tone === "bad" ? "t-medium" : ""}>{n.text}</span>
               <RuleTag rule={n.rule} />

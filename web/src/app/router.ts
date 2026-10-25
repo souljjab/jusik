@@ -25,13 +25,33 @@ function read(): string {
   return h.startsWith("/") ? h : `/${h}`;
 }
 
+/** 경로 조각 풀기. 잘못된 % 표기(손으로 친 링크 등)는 예외로 앱 전체를 비우지 않고 원래 글자를 그대로 쓴다 */
+function decodeSegment(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
+/** "/stocks/005930?tab=fin" → Route */
+export function parseRoute(raw: string): Route {
+  const [p = "/", q = ""] = raw.split("?");
+  const segments = p.split("/").filter(Boolean).map(decodeSegment);
+  let query: URLSearchParams;
+  try {
+    query = new URLSearchParams(q);
+  } catch {
+    query = new URLSearchParams();
+  }
+  return { path: `/${segments.map(encodeURIComponent).join("/")}`, segments, query };
+}
+
 let cache: { raw: string; route: Route } | null = null;
 function snapshot(): Route {
   const raw = read();
   if (cache?.raw === raw) return cache.route;
-  const [p = "/", q = ""] = raw.split("?");
-  const segments = p.split("/").filter(Boolean).map((s) => decodeURIComponent(s));
-  const route = { path: `/${segments.map(encodeURIComponent).join("/")}`, segments, query: new URLSearchParams(q) };
+  const route = parseRoute(raw);
   cache = { raw, route };
   return route;
 }

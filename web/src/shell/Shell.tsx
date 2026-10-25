@@ -1,14 +1,14 @@
 import { Bell, PanelLeftClose, PanelLeftOpen, Search, Settings, TrendingUp } from "lucide-react";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useApp } from "../app/AppContext";
 import { useActions } from "../app/actions";
 import { setPrefs, usePrefs } from "../app/prefs";
 import { areaOf, href, navigate, useRoute, type Area } from "../app/router";
 import { marketSession } from "@jusik/shared";
-import type { IndexQuote } from "../api";
+import { knownName, stockNames, type IndexQuote } from "../api";
 import { Change, IconButton, MarketStatus, Notice, fmtAsOf, fmtDate, fmtIndex, overlayOpen, useBreakpoint } from "../ui";
 import { CommandPalette } from "./CommandPalette";
-import { AREAS, AREA_TITLE, SETTINGS_AREA } from "./nav";
+import { AREAS, AREA_TITLE, SETTINGS_AREA, screenTitle } from "./nav";
 import { ShortcutsHelp } from "./ShortcutsHelp";
 
 const INDEX_NAME = { KOSPI: "코스피", KOSDAQ: "코스닥", US: "S&P 500" } as const;
@@ -58,7 +58,7 @@ function Rail({ area }: { area: Area }) {
       {AREAS.map((a) => (
         <a key={a.id} className="rail-item" href={href(a.path)} aria-current={area === a.id ? "page" : undefined}>
           <span className="pill">
-            <a.icon size={22} strokeWidth={area === a.id ? 2 : 1.5} aria-hidden="true" />
+            <a.icon size={22} strokeWidth={1.5} aria-hidden="true" />
           </span>
           {a.label}
         </a>
@@ -74,13 +74,17 @@ function Rail({ area }: { area: Area }) {
   );
 }
 
-/** 하단 탭(핸드폰): 홈·발굴·관심·매매·기록. 선택한 탭만 굵은 아이콘과 강조색 */
+/** 하단 탭(핸드폰): 홈·발굴·관심·매매·기록. 선택한 탭만 채운 아이콘과 강조색(지도서 7.1 C·3.4: 채운 아이콘은 선택 상태에만) */
 function BottomTabs({ area }: { area: Area }) {
   return (
     <nav className="tabbar" aria-label="주 메뉴">
       {AREAS.map((a) => (
         <a key={a.id} className="tab-item" href={href(a.path)} aria-current={area === a.id ? "page" : undefined}>
-          <a.icon size={22} strokeWidth={area === a.id ? 2.25 : 1.5} aria-hidden="true" />
+          {area === a.id ? (
+            <a.icon size={22} strokeWidth={2} fill="currentColor" fillOpacity={0.2} aria-hidden="true" />
+          ) : (
+            <a.icon size={22} strokeWidth={1.5} aria-hidden="true" />
+          )}
           {a.tabLabel}
         </a>
       ))}
@@ -175,6 +179,24 @@ export function Shell({ children }: { children: ReactNode }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [openPalette, openShortcuts]);
+
+  // 창 제목: 화면마다 다르게(종목 화면은 종목 이름). 이름을 아직 모르면 검색으로 찾아 본다
+  const code = route.segments[0] === "stocks" ? route.segments[1] : undefined;
+  const [stockName, setStockName] = useState<string | undefined>();
+  useEffect(() => {
+    if (!code) return setStockName(undefined);
+    const k = knownName(code);
+    setStockName(k);
+    if (k) return;
+    let alive = true;
+    void stockNames([code]).then((r) => alive && setStockName(r[code]));
+    return () => {
+      alive = false;
+    };
+  }, [code]);
+  useEffect(() => {
+    document.title = screenTitle(route, stockName);
+  }, [route, stockName]);
 
   // 화면이 바뀌면 맨 위로(핸드폰에서 이전 화면 스크롤이 남지 않게)
   useEffect(() => {

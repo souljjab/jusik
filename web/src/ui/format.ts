@@ -154,6 +154,16 @@ export function srQuote(name: string, price: number, changePct: number | null | 
   return `${name}, ${p}, ${Math.abs(changePct).toFixed(2)}% ${dir}`;
 }
 
+/** 화면 낭독용 등락 문장: "1,740원 6.40% 상승", "0.85달러 0.42% 하락", "보합" */
+export function srChange(change: number | null | undefined, pct: number | null | undefined, region: Region = "KR", showAbs = true): string {
+  const basis = pct ?? change ?? 0;
+  const tone = toneOf(basis);
+  const dir = tone === "up" ? "상승" : tone === "down" ? "하락" : "보합";
+  const abs = showAbs && change != null && Number.isFinite(change) ? `${fmtChangeAbs(change, region)}${region === "US" ? "달러" : "원"} ` : "";
+  const p = pct != null && Number.isFinite(pct) ? `${Math.abs(pct).toFixed(2)}% ` : "";
+  return `${abs}${p}${dir}`;
+}
+
 /** 시장 이름(화면에는 영문 코드 대신 이 이름을 쓴다) */
 export const MARKET_LABEL: Record<Market, string> = { KOSPI: "코스피", KOSDAQ: "코스닥", US: "미국" };
 
