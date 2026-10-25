@@ -7,16 +7,22 @@
   border: 1px solid transparent; font-weight: var(--font-weight-medium); white-space: nowrap;
   transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
 }
-.ui-btn.lg { min-height: 48px; padding: 0 var(--space-5); font-size: var(--font-size-section); font-weight: var(--font-weight-bold); }
-.ui-btn.sm { min-height: 28px; padding: 0 var(--space-3); font-size: var(--font-size-secondary); }
+.ui-btn.lg { font-size: var(--font-size-section); font-weight: var(--font-weight-bold); }
+.ui-btn.lg:not(.link) { min-height: 48px; padding: 0 var(--space-5); }
+.ui-btn.sm { font-size: var(--font-size-secondary); }
+.ui-btn.sm:not(.link) { min-height: 28px; padding: 0 var(--space-3); }
 .ui-btn.block { width: 100%; }
-.ui-btn.primary { background: var(--color-accent); color: var(--color-on-accent); }
-.ui-btn.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 88%, var(--color-text)); }
+/* 기본 동작은 잉크색(지도서 그림 11). 강조 보라는 선택·근거 스트립·국면 게이지·링크·포커스에만 쓴다 */
+.ui-btn.primary { background: var(--color-text); color: var(--color-bg); }
+.ui-btn.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--color-text) 85%, var(--color-bg)); }
 .ui-btn.secondary { background: var(--color-surface); border-color: var(--color-border); color: var(--color-text); }
 .ui-btn.secondary:hover:not(:disabled) { background: var(--color-surface-2); }
 .ui-btn.ghost { background: transparent; color: var(--color-text); }
 .ui-btn.ghost:hover:not(:disabled) { background: var(--color-surface-2); }
-.ui-btn.link { background: none; border: 0; padding: 0; min-height: 0; color: var(--color-accent); font-weight: var(--font-weight-medium); }
+/*
+ * 링크 모양 버튼. :where로 특이도를 .ui-btn과 같게(0,1,0) 낮춰, 화면 CSS의 .stk-evopen { min-height } 같은 덮어쓰기가 먹게 한다.
+ */
+.ui-btn:where(.link) { background: none; border: 0; padding: 0; min-height: 0; color: var(--color-accent); font-weight: var(--font-weight-medium); }
 .ui-btn.link:hover:not(:disabled) { text-decoration: underline; }
 /* 매수는 상승색, 매도는 하락색(한국 관례). 글자가 들어가므로 대비를 맞춘 진한 값 */
 .ui-btn.buy { background: var(--color-up-text); color: var(--color-on-up); }
@@ -24,10 +30,14 @@
 .ui-btn.buy:hover:not(:disabled), .ui-btn.sell:hover:not(:disabled) { filter: brightness(0.94); }
 .ui-btn:disabled { background: var(--color-surface-2); color: var(--color-text-2); border-color: var(--color-border); }
 .ui-btn.link:disabled { background: none; border: 0; }
-/* 태블릿·핸드폰: 터치 대상 최소 크기(지도서 10장 44pt·48dp) */
+/*
+ * 태블릿·핸드폰: 터치 대상 최소 크기(지도서 10장 44pt·48dp). 작은 버튼(sm)도 터치에서는 같은 높이.
+ * 링크 버튼('근거 보기' 등)은 줄 높이를 바꾸지 않고 누르는 영역만 위아래로 넓힌다(행을 여는 클릭보다 먼저 받도록).
+ */
 @media (max-width: 1199.98px) {
-  .ui-btn:not(.link) { min-height: var(--touch-min); }
-  .ui-btn.sm:not(.link) { min-height: 36px; }
+  .ui-btn:not(.link), .ui-btn.sm:not(.link) { min-height: var(--touch-min); }
+  .ui-btn.link { position: relative; }
+  .ui-btn.link::after { content: ""; position: absolute; left: -4px; right: -4px; top: calc(50% - var(--touch-min) / 2); bottom: calc(50% - var(--touch-min) / 2); }
 }
 .ui-btn .spin { animation: ui-spin 0.9s linear infinite; }
 @keyframes ui-spin { to { transform: rotate(360deg); } }
@@ -37,9 +47,10 @@
 }
 .ui-iconbtn:hover { background: var(--color-surface-2); color: var(--color-text); }
 .ui-iconbtn.sm { width: 32px; height: 32px; }
+@media (max-width: 1199.98px) { .ui-iconbtn.sm { width: var(--touch-min); height: var(--touch-min); } }
 .ui-badge {
   position: absolute; top: 6px; right: 6px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: var(--radius-pill);
-  background: var(--color-accent); color: var(--color-on-accent); font-size: 10px; line-height: 16px; font-weight: var(--font-weight-bold); text-align: center;
+  background: var(--color-accent); color: var(--color-on-accent); font-size: 0.625rem; line-height: 16px; font-weight: var(--font-weight-bold); text-align: center;
 }
 
 /* ───────── 시세 표시 ───────── */
@@ -48,7 +59,9 @@
 .ui-price.md { font-size: var(--font-size-section); }
 .ui-price.sm { font-size: var(--font-size-table); font-weight: var(--font-weight-medium); }
 .ui-price.flash { background: var(--color-flash); transition: none; }
-.ui-change { display: inline-flex; gap: var(--space-2); align-items: baseline; font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: var(--font-weight-medium); }
+/* 동작 줄이기: 시세 물들임을 아예 끈다(지도서 10장) */
+@media (prefers-reduced-motion: reduce) { .ui-price.flash { background: none; } }
+.ui-change { position: relative; display: inline-flex; gap: var(--space-2); align-items: baseline; font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: var(--font-weight-medium); }
 .ui-change.stack { flex-direction: column; gap: 0; align-items: flex-end; }
 .ui-quote-state { font-size: var(--font-size-caption); color: var(--color-warn-text); border: 1px solid currentColor; border-radius: var(--radius-chip); padding: 0 var(--space-1); }
 
@@ -124,14 +137,17 @@
 /* ───────── 세그먼트·탭·칩·토글 ───────── */
 .ui-seg { display: inline-flex; padding: 2px; gap: 2px; border-radius: var(--radius-panel); background: var(--color-surface-2); }
 .ui-seg button { min-height: 32px; padding: 0 var(--space-3); border: 0; border-radius: 6px; background: transparent; color: var(--color-text-2); font-weight: var(--font-weight-medium); white-space: nowrap; transition: background-color var(--motion-fast) var(--motion-ease); }
-.ui-seg button[aria-checked="true"] { background: var(--color-surface); color: var(--color-text); box-shadow: inset 0 0 0 1px var(--color-border); }
+/* 고른 칸: 면 색 차이만으로는 대비가 1.1:1이라 강조색 테두리(3:1 이상)와 굵은 글자로도 구분한다(색에만 기대지 않게) */
+.ui-seg button[aria-checked="true"] { background: var(--color-surface); color: var(--color-text); font-weight: var(--font-weight-bold); box-shadow: inset 0 0 0 1px var(--color-accent); }
 .ui-seg.sm button { min-height: 28px; padding: 0 var(--space-2); font-size: var(--font-size-secondary); }
-@media (max-width: 1199.98px) { .ui-seg button { min-height: var(--touch-min); } .ui-seg.sm button { min-height: 36px; } }
+@media (max-width: 1199.98px) { .ui-seg button, .ui-seg.sm button { min-height: var(--touch-min); min-width: var(--touch-min); } }
 
 .ui-tabs { display: flex; gap: var(--space-1); border-bottom: 1px solid var(--color-border); overflow-x: auto; scrollbar-width: none; }
 .ui-tabs::-webkit-scrollbar { display: none; }
 .ui-tabs button { position: relative; min-height: 40px; padding: 0 var(--space-3); background: none; border: 0; color: var(--color-text-2); font-weight: var(--font-weight-medium); white-space: nowrap; }
 .ui-tabs button[aria-selected="true"] { color: var(--color-text); font-weight: var(--font-weight-bold); }
+/* 탭 줄은 가로 스크롤 상자라 바깥 포커스 링이 잘린다: 안쪽에 그린다 */
+.ui-tabs button:focus-visible { outline-offset: -2px; }
 .ui-tabs button[aria-selected="true"]::after { content: ""; position: absolute; left: var(--space-2); right: var(--space-2); bottom: -1px; height: 2px; background: var(--color-accent); border-radius: 2px; }
 @media (max-width: 1199.98px) { .ui-tabs button { min-height: var(--touch-min); } }
 
@@ -165,6 +181,7 @@
 @media (max-width: 1199.98px) { .ui-input, .ui-select { min-height: var(--touch-min); } }
 .ui-stepper { display: grid; grid-template-columns: var(--touch-min) 1fr var(--touch-min); align-items: center; border: 1px solid var(--color-border); border-radius: var(--radius-chip); background: var(--color-surface); }
 .ui-stepper button { height: 100%; min-height: 36px; border: 0; background: none; color: var(--color-text); display: grid; place-items: center; }
+@media (max-width: 1199.98px) { .ui-stepper button, .ui-stepper input { min-height: var(--touch-min); } }
 .ui-stepper input { border: 0; background: none; text-align: center; min-width: 0; padding: var(--space-2) 0; font-weight: var(--font-weight-bold); }
 .ui-stepper input:focus-visible { outline: none; }
 .ui-stepper:focus-within { outline: 2px solid var(--color-accent); outline-offset: 0; }
@@ -179,7 +196,14 @@
 .ui-panel.flat { background: var(--color-surface-2); border-color: transparent; }
 
 /* 큰 숫자 + 설명(통계) */
-.ui-stats { display: grid; grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); gap: var(--space-4); }
+/*
+ * 통계 묶음: 최대 --n칸. 칸이 --stat-min보다 좁아지면 칸 수를 줄여 다음 줄로 넘긴다(큰 숫자가 옆 칸을 덮지 않게).
+ */
+.ui-stats {
+  --stat-min: 8.5rem;
+  display: grid; gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, max(var(--stat-min), calc((100% - (var(--n, 3) - 1) * var(--space-4)) / var(--n, 3)))), 1fr));
+}
 .ui-stat { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .ui-stat .v { font-size: var(--font-size-title); font-weight: var(--font-weight-bold); font-variant-numeric: tabular-nums; line-height: 1.2; white-space: nowrap; }
 .ui-stat .k { font-size: var(--font-size-secondary); color: var(--color-text-2); }
@@ -202,6 +226,12 @@
 @keyframes ui-pulse { 50% { opacity: 0.55; } }
 .ui-skel-rows { display: flex; flex-direction: column; gap: var(--space-3); }
 .ui-progress { font-size: var(--font-size-caption); color: var(--color-text-2); }
+/* 1초가 넘으면 스켈레톤 위에 나타나는 진행 표시(가는 막대 + 문장) */
+.ui-progress-line { display: flex; flex-direction: column; gap: var(--space-1); }
+.ui-progress-bar { position: relative; height: 2px; border-radius: var(--radius-pill); background: var(--color-surface-2); overflow: hidden; }
+.ui-progress-bar::after { content: ""; position: absolute; top: 0; bottom: 0; left: -40%; width: 40%; background: var(--color-text-2); animation: ui-progress 1.2s var(--motion-ease) infinite; }
+@keyframes ui-progress { to { left: 100%; } }
+@media (prefers-reduced-motion: reduce) { .ui-progress-bar::after { animation: none; left: 0; width: 100%; opacity: 0.4; } }
 
 /* ───────── 시트(아래·오른쪽에서 열리는 떠 있는 층) ───────── */
 .ui-scrim { position: fixed; inset: 0; z-index: 60; background: var(--color-scrim); animation: ui-fade var(--motion-sheet) var(--motion-ease); }
@@ -224,14 +254,22 @@
 @keyframes ui-left { from { transform: translateX(100%); } }
 
 /* ───────── 토스트 ───────── */
-.ui-toasts { position: fixed; z-index: 80; left: 50%; transform: translateX(-50%); bottom: calc(var(--space-5) + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: var(--space-2); align-items: center; pointer-events: none; width: min(480px, calc(100vw - 32px)); }
-@media (max-width: 599.98px) { .ui-toasts { bottom: calc(var(--bottomtabs-h) + var(--space-3) + env(safe-area-inset-bottom)); } }
+/* 화면 아래에 붙은 막대(--actionbar-h)가 있으면 그 위에 띄운다(주문·저장 버튼을 덮지 않게) */
+.ui-toasts { position: fixed; z-index: 80; left: 50%; transform: translateX(-50%); bottom: calc(var(--space-5) + var(--actionbar-h) + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: var(--space-2); align-items: center; pointer-events: none; width: min(480px, calc(100vw - 32px)); }
+@media (max-width: 599.98px) { .ui-toasts { bottom: calc(var(--bottomtabs-h) + var(--actionbar-h) + var(--space-3) + env(safe-area-inset-bottom)); } }
 .ui-toast { pointer-events: auto; display: flex; gap: var(--space-2); align-items: center; padding: var(--space-3) var(--space-4); border-radius: var(--radius-panel); background: var(--color-text); color: var(--color-bg); box-shadow: var(--elevation-menu); font-size: var(--font-size-secondary); animation: ui-fade var(--motion-fast) var(--motion-ease); }
 .ui-toast.warn .ico { color: var(--color-warn); }
 
 /* ───────── 표·목록 행 ───────── */
+/*
+ * 표 감싸개: 넓은 표는 이 안에서만 가로로 스크롤한다. 가로 스크롤 상자는 세로로도 상자가 되어 머리행이 페이지에 붙지 못하므로,
+ * 긴 표는 .tall을 붙여 높이를 정한 상자 안에서 머리행을 고정한다(고정 머리행). 머리행은 자기 스크롤 상자의 맨 위에 붙는다.
+ */
 .ui-table-wrap { overflow-x: auto; }
+.ui-table-wrap.tall { max-height: var(--sticky-max-h); overflow: auto; overscroll-behavior: contain; }
 .ui-table { width: 100%; font-size: var(--font-size-table); line-height: var(--line-height-table); }
+/* 표 칸에서는 이름·코드를 글자 단위로 쪼개지 않는다(좁으면 표가 감싸개 안에서 가로로 스크롤) */
+.ui-table td, .ui-table th { overflow-wrap: normal; word-break: keep-all; }
 .ui-table th { position: sticky; top: 0; z-index: 1; background: var(--color-bg); color: var(--color-text-2); font-weight: var(--font-weight-medium); font-size: var(--font-size-secondary); text-align: left; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--color-border); white-space: nowrap; }
 .ui-table.on-surface th { background: var(--color-surface); }
 .ui-table td { padding: var(--space-3); border-bottom: 1px solid var(--color-border); vertical-align: middle; }
@@ -239,7 +277,18 @@
 .ui-table tr.click { cursor: pointer; }
 .ui-table tr.click:hover td { background: var(--color-surface-2); }
 .ui-table tr.sel td { background: var(--color-accent-soft); }
+/* 행 포커스: 감싸개(가로 스크롤 상자)에 잘리지 않게 칸 안쪽에 테두리를 그린다 */
+.ui-table tr.click:focus-visible { outline: none; }
+.ui-table tr.click:focus-visible td { box-shadow: inset 0 2px 0 var(--color-accent), inset 0 -2px 0 var(--color-accent); }
+.ui-table tr.click:focus-visible td:first-child { box-shadow: inset 2px 0 0 var(--color-accent), inset 0 2px 0 var(--color-accent), inset 0 -2px 0 var(--color-accent); }
+.ui-table tr.click:focus-visible td:last-child { box-shadow: inset -2px 0 0 var(--color-accent), inset 0 2px 0 var(--color-accent), inset 0 -2px 0 var(--color-accent); }
 .ui-sort { background: none; border: 0; padding: 0; color: inherit; font: inherit; display: inline-flex; align-items: center; gap: 2px; }
+.ui-sort:focus-visible { outline-offset: -2px; }
+/* 터치: 정렬 머리 단추도 44·48 높이(머리 칸의 위아래 여백을 그만큼 줄인다) */
+@media (max-width: 1199.98px) {
+  .ui-sort { min-height: var(--touch-min); }
+  .ui-table th:has(> .ui-sort) { padding-top: 0; padding-bottom: 0; }
+}
 .ui-sort[aria-sort] { color: var(--color-text); }
 .ui-rows { list-style: none; margin: 0; padding: 0; }
 .ui-rowitem { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) 0; border-bottom: 1px solid var(--color-border); min-height: var(--touch-min); }

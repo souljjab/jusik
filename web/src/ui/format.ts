@@ -1,4 +1,4 @@
-import { regionOfCode, shortDateKo, type Currency, type Market, type Region } from "@jusik/shared";
+import { shortDateKo, type Currency, type Market, type Region } from "@jusik/shared";
 
 /*
  * 숫자 표기(UI 지도서 3.2 표).
@@ -24,7 +24,6 @@ export function fmtPrice(n: number | null | undefined, region: Region = "KR", op
   if (region === "US") return `${opts.unit ? "$" : ""}${NF2.format(n)}`;
   return `${NF0.format(Math.round(n))}${opts.unit ? "원" : ""}`;
 }
-export const fmtPriceByCode = (n: number | null | undefined, code: string, opts: { unit?: boolean } = {}) => fmtPrice(n, regionOfCode(code), opts);
 
 /** 등락률: 항상 부호, 소수 둘째 자리 */
 export function fmtPct(n: number | null | undefined, digits = 2): string {
@@ -91,6 +90,8 @@ export const fmtMoneyByCurrency = (n: number | null | undefined, c: Currency) =>
 
 /** 정수(수량 등) */
 export const fmtInt = (n: number | null | undefined) => (n == null || !Number.isFinite(n) ? "-" : NF0.format(Math.round(n)));
+/** 지수(코스피·코스닥·S&P 500): 소수 둘째 자리 고정(2,731.52 · 812.40 · 5,800.00) — 자릿수가 세로로 맞게 */
+export const fmtIndex = (n: number | null | undefined) => (n == null || !Number.isFinite(n) ? "-" : NF2.format(n));
 /** 일반 숫자(배수·지표) */
 export const fmtNum = (n: number | null | undefined, digits = 1) =>
   n == null || !Number.isFinite(n) ? "-" : n.toLocaleString("ko-KR", { minimumFractionDigits: 0, maximumFractionDigits: digits });
@@ -118,7 +119,11 @@ export function fmtWhen(iso: string | null | undefined, now: Date = new Date()):
   return day === kstDate(now) ? fmtTime(iso) : `${fmtDate(day)} ${fmtTime(iso)}`;
 }
 
-/** 화면 낭독용 숫자 읽기: 84,300 → "8만 4천3백" */
+/**
+ * 화면 낭독용 숫자 읽기: 84,300 → "8만 4천3백", 120,959 → "12만 9백5십9", 1,234,567 → "123만 4천5백6십7".
+ * 만·억·조 묶음은 숫자 그대로(12만, 123만), 마지막 만 미만 묶음만 천·백·십으로 풀어 쓰고 1은 뺀다(1,100 → "천백").
+ * 낭독기가 '일십이만'처럼 읽지 않게 한다.
+ */
 export function readKo(n: number): string {
   const a = Math.round(Math.abs(n));
   if (a === 0) return "0";
@@ -127,16 +132,16 @@ export function readKo(n: number): string {
     let out = "", r = x;
     for (const [v, w] of u) {
       const q = Math.floor(r / v);
-      if (q) out += `${q}${w}`;
+      if (q) out += `${q === 1 ? "" : q}${w}`;
       r %= v;
     }
     return out + (r ? String(r) : "");
   };
   const parts: string[] = [];
   const jo = Math.floor(a / 1e12), eok = Math.floor((a % 1e12) / 1e8), man = Math.floor((a % 1e8) / 1e4), rest = a % 1e4;
-  if (jo) parts.push(`${small(jo)}조`);
-  if (eok) parts.push(`${small(eok)}억`);
-  if (man) parts.push(`${small(man)}만`);
+  if (jo) parts.push(`${jo}조`);
+  if (eok) parts.push(`${eok}억`);
+  if (man) parts.push(`${man}만`);
   if (rest) parts.push(small(rest));
   return `${n < 0 ? "마이너스 " : ""}${parts.join(" ")}`;
 }

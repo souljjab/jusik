@@ -20,12 +20,13 @@
   /*
    * 글자용 색: 지도서 색표 값은 흰 바탕에서 작은 글자 대비 4.5:1에 조금 못 미쳐(상승 4.4·경고 3.9·충족 4.3),
    * 작은 글자와 글자가 들어가는 버튼 바탕에는 같은 색 계열에서 조금 진한 값을 쓴다(지도서 3장 '측정해 조정한다').
-   * 막대·칸 채움 같은 면에는 원래 값을 쓴다.
+   * 기준은 흰 바탕이 아니라 가장 진한 옅은 바탕(선택 행 accent-soft·경고 warn-soft를 surface-2 위에 겹친 색)에서도
+   * 4.5:1(상승 4.61·하락 4.58·경고 4.63·정상 4.64, 흰 바탕에서는 약 6:1). 막대·칸 채움 같은 면에는 원래 값을 쓴다.
    */
-  --color-up-text: #C9292F;
-  --color-down-text: #2563D9;
-  --color-warn-text: #A35800;
-  --color-ok-text: #0B7A5E;
+  --color-up-text: #BD272C;
+  --color-down-text: #235DCC;
+  --color-warn-text: #965100;
+  --color-ok-text: #0A7056;
   /* 파생(투명도만 바꾼 값) */
   --color-accent-soft: rgb(91 71 214 / 0.10);
   --color-accent-line: rgb(91 71 214 / 0.35);
@@ -45,14 +46,18 @@
   --font-weight-bold: 700;
   --font-feature-tnum: "tnum" 1;
 
-  /* 글자 크기: 컴퓨터(1200 이상) 기준. 아래 미디어 쿼리에서 태블릿·핸드폰 값으로 바꾼다 */
-  --font-size-price-lg: 28px;
-  --font-size-title: 20px;
-  --font-size-section: 16px;
-  --font-size-body: 14px;
-  --font-size-table: 13px;
-  --font-size-secondary: 12px;
-  --font-size-caption: 11px;
+  /*
+   * 글자 크기: 컴퓨터(1200 이상) 기준. 아래 미디어 쿼리에서 태블릿·핸드폰 값으로 바꾼다.
+   * rem(브라우저 기본 16px 기준)으로 써서 사용자가 브라우저·기기 글자 크기를 키우면 함께 커진다(지도서 10장, 200%까지).
+   * 28px = 1.75rem, 20 = 1.25, 16 = 1, 14 = 0.875, 13 = 0.8125, 12 = 0.75, 11 = 0.6875
+   */
+  --font-size-price-lg: 1.75rem;
+  --font-size-title: 1.25rem;
+  --font-size-section: 1rem;
+  --font-size-body: 0.875rem;
+  --font-size-table: 0.8125rem;
+  --font-size-secondary: 0.75rem;
+  --font-size-caption: 0.6875rem;
   --line-height-price: 1.2;
   --line-height-title: 1.3;
   --line-height-section: 1.4;
@@ -86,7 +91,14 @@
   --sidebar-w: 216px;
   --sidebar-w-collapsed: 64px;
   --rail-w: 80px;
+  /* 상단 바 높이(shell.css가 이 높이로 고정한다. 붙어 있는 옆 패널·스크롤 여백이 이 값을 쓴다) */
   --topbar-h: 56px;
+  /* 화면 아래에 붙은 막대(핸드폰 하단 탭 + 화면의 주문·저장 막대) 높이 합. 화면이 막대를 띄우면 html:has(...)로 --actionbar-h를 정한다 */
+  --actionbar-h: 0px;
+  /* 화면 위에 붙는(sticky) 옆 패널·표 머리의 top 값: 상단 바 바로 아래 */
+  --sticky-top: calc(var(--topbar-h) + var(--space-4));
+  /* 붙어 있는 옆 패널의 최대 높이: 화면 끝까지 내려도 머리가 상단 바 밑으로 들어가지 않게(본문 아래 여백 --space-7 포함) */
+  --sticky-max-h: calc(100dvh - var(--sticky-top) - var(--space-7));
   --bottomtabs-h: 64px;
   --touch-min: 44px;
   --content-max: 1280px;
@@ -107,8 +119,9 @@
     --color-accent: #A596FF;
     --color-warn: #F2A33A;
     --color-ok: #38C79B;
-    --color-up-text: #FF5C61;
-    --color-down-text: #5AA0FF;
+    /* 다크: 옅은 바탕(선택 행·경고 칸을 surface·surface-2 위에 겹친 색)에서도 4.5:1이 되게 조금 밝힌 글자색 */
+    --color-up-text: #FF8084;
+    --color-down-text: #69A9FF;
     --color-warn-text: #F2A33A;
     --color-ok-text: #38C79B;
     --color-accent-soft: rgb(165 150 255 / 0.14);
@@ -138,8 +151,8 @@
   --color-accent: #A596FF;
   --color-warn: #F2A33A;
   --color-ok: #38C79B;
-  --color-up-text: #FF5C61;
-  --color-down-text: #5AA0FF;
+  --color-up-text: #FF8084;
+  --color-down-text: #69A9FF;
   --color-warn-text: #F2A33A;
   --color-ok-text: #38C79B;
   --color-accent-soft: rgb(165 150 255 / 0.14);
@@ -160,8 +173,8 @@
 :root[data-convention="US"] {
   --color-up: #0E8A5C;
   --color-down: #D6363C;
-  --color-up-text: #0A7A50;
-  --color-down-text: #C42E33;
+  --color-up-text: #09734B;
+  --color-down-text: #B82B30;
   --color-up-soft: rgb(14 138 92 / 0.10);
   --color-down-soft: rgb(214 54 60 / 0.10);
 }
@@ -170,7 +183,7 @@
     --color-up: #3CCB8C;
     --color-down: #FF5C61;
     --color-up-text: #3CCB8C;
-    --color-down-text: #FF5C61;
+    --color-down-text: #FF8084;
     --color-up-soft: rgb(60 203 140 / 0.14);
     --color-down-soft: rgb(255 92 97 / 0.14);
   }
@@ -179,7 +192,7 @@
   --color-up: #3CCB8C;
   --color-down: #FF5C61;
   --color-up-text: #3CCB8C;
-  --color-down-text: #FF5C61;
+  --color-down-text: #FF8084;
   --color-up-soft: rgb(60 203 140 / 0.14);
   --color-down-soft: rgb(255 92 97 / 0.14);
 }
@@ -187,22 +200,22 @@
 /* 태블릿(600~1199): 본문은 그대로, 큰 숫자·제목은 한 단계 크게 */
 @media (max-width: 1199.98px) {
   :root {
-    --font-size-price-lg: 34px;
-    --font-size-title: 24px;
-    --font-size-section: 18px;
-    --font-size-body: 15px;
-    --font-size-table: 14px;
-    --font-size-secondary: 13px;
-    --font-size-caption: 12px;
+    --font-size-price-lg: 2.125rem; /* 34px */
+    --font-size-title: 1.5rem; /* 24px */
+    --font-size-section: 1.125rem; /* 18px */
+    --font-size-body: 0.9375rem; /* 15px */
+    --font-size-table: 0.875rem; /* 14px */
+    --font-size-secondary: 0.8125rem; /* 13px */
+    --font-size-caption: 0.75rem; /* 12px */
     --gutter: 24px;
   }
 }
 /* 핸드폰(600 미만) */
 @media (max-width: 599.98px) {
   :root {
-    --font-size-price-lg: 30px;
-    --font-size-title: 22px;
-    --font-size-section: 17px;
+    --font-size-price-lg: 1.875rem; /* 30px */
+    --font-size-title: 1.375rem; /* 22px */
+    --font-size-section: 1.0625rem; /* 17px */
     --gutter: 16px;
     --touch-min: 48px;
   }

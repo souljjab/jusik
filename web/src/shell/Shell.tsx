@@ -4,7 +4,9 @@ import { useApp } from "../app/AppContext";
 import { useActions } from "../app/actions";
 import { setPrefs, usePrefs } from "../app/prefs";
 import { areaOf, href, navigate, useRoute, type Area } from "../app/router";
-import { Change, IconButton, MarketStatus, Notice, fmtAsOf, fmtNum, overlayOpen, useBreakpoint } from "../ui";
+import { marketSession } from "@jusik/shared";
+import type { IndexQuote } from "../api";
+import { Change, IconButton, MarketStatus, Notice, fmtAsOf, fmtDate, fmtIndex, overlayOpen, useBreakpoint } from "../ui";
 import { CommandPalette } from "./CommandPalette";
 import { AREAS, AREA_TITLE, SETTINGS_AREA } from "./nav";
 import { ShortcutsHelp } from "./ShortcutsHelp";
@@ -26,7 +28,7 @@ function Sidebar({ area }: { area: Area }) {
     <nav className={`shell-nav nav-side ${collapsed ? "collapsed" : ""}`} aria-label="주 메뉴">
       <div className="brand">
         <span className="mark" aria-hidden="true">
-          <TrendingUp size={16} />
+          <TrendingUp size={16} strokeWidth={1.5} />
         </span>
         <span className="txt">주식 분석 어시스턴트</span>
       </div>
@@ -86,31 +88,45 @@ function BottomTabs({ area }: { area: Area }) {
   );
 }
 
+/** 지수 하나: 이름, 값(소수 둘째 자리 고정), 등락. 마지막 일봉이 오늘이 아니면 그 날짜를 붙인다(오래된 값을 오늘 값으로 착각하지 않게) */
+function IndexItem({ x, now }: { x: IndexQuote; now: Date }) {
+  const today = marketSession(x.market === "US" ? "US" : "KR", now).date;
+  const day = x.date.slice(0, 10);
+  return (
+    <span className="ix">
+      <span className="nm">{INDEX_NAME[x.market]}</span>
+      <span className="v num">{fmtIndex(x.close)}</span>
+      <Change pct={x.changePct} showAbs={false} />
+      {day !== today && <span className="dt">{fmtDate(day)}</span>}
+    </span>
+  );
+}
+
 /** 상단 바: 명령 검색, 시장 상태와 기준 시각, 지수, 알림. 핸드폰은 화면 제목과 검색·알림·설정 아이콘 */
 function TopBar({ area }: { area: Area }) {
-  const { health, indices, indicesAt, serverAt, now, unreadAlerts } = useApp();
+  const { health, indices, now, unreadAlerts } = useApp();
   const { openPalette } = useActions();
   const mac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
+  // 기준 시각은 상단 바가 보여 주는 지수 데이터의 시각(서버가 알려 주면 그 시각, 아니면 받은 시각이라고 밝힌다)
+  const kr = indices.find((x) => x.market === "KOSPI") ?? indices.find((x) => x.market === "KOSDAQ");
+  const us = indices.find((x) => x.market === "US");
   return (
     <header className="shell-top topbar">
       <span className="title compact-only">{AREA_TITLE[area]}</span>
       <button type="button" className="cmd-trigger wide-only" onClick={openPalette} aria-keyshortcuts={mac ? "Meta+K" : "Control+K"}>
-        <Search size={16} aria-hidden="true" />
+        <Search size={16} strokeWidth={1.5} aria-hidden="true" />
         <span className="txt">종목, 전략, 화면 검색</span>
+        <span className="txt-s">검색</span>
         <span className="kbd">{mac ? "⌘ K" : "Ctrl K"}</span>
       </button>
       <div className="status">
-        <MarketStatus region="KR" now={now} asOf={serverAt} compact />
-        <MarketStatus region="US" now={now} asOf={serverAt} compact />
+        <MarketStatus region="KR" now={now} asOf={kr?.asOf} receivedAt={kr?.receivedAt} compact />
+        <MarketStatus region="US" now={now} asOf={us?.asOf} receivedAt={us?.receivedAt} compact />
       </div>
       {indices.length > 0 && (
-        <div className="indices" aria-label={`주요 지수${indicesAt ? `, ${fmtAsOf(indicesAt)}` : ""}`}>
+        <div className="indices" role="group" aria-label="주요 지수">
           {indices.map((x) => (
-            <span key={x.market} className={`ix ${x.market === "US" ? "extra" : ""}`}>
-              <span className="nm">{INDEX_NAME[x.market]}</span>
-              <span className="v">{fmtNum(x.close, 2)}</span>
-              <Change pct={x.changePct} showAbs={false} />
-            </span>
+            <IndexItem key={x.market} x={x} now={now} />
           ))}
         </div>
       )}

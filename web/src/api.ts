@@ -206,15 +206,20 @@ export interface IndexQuote {
   close: number;
   change: number;
   changePct: number;
+  /** 마지막 일봉 날짜(YYYY-MM-DD) */
   date: string;
+  /** 서버가 이 지수 값을 받은 시각(ISO). 서버가 알려 주지 않으면 null */
+  asOf: string | null;
+  /** 이 화면이 받은 시각(ISO) */
+  receivedAt: string;
 }
 /** 시장 지수의 마지막 종가와 전일 대비(일봉 마지막 두 개) */
 export function getIndexQuote(market: Market): Promise<IndexQuote | null> {
-  return getJson<{ candles: Candle[] }>(`/api/index/${market}/candles?count=5`)
-    .then(({ candles }) => {
+  return getJson<{ candles: Candle[]; asOf?: string }>(`/api/index/${market}/candles?count=5`)
+    .then(({ candles, asOf }) => {
       const a = candles.at(-1), b = candles.at(-2);
       if (!a || !b) return null;
-      return { market, close: a.close, change: a.close - b.close, changePct: (a.close / b.close - 1) * 100, date: a.date };
+      return { market, close: a.close, change: a.close - b.close, changePct: (a.close / b.close - 1) * 100, date: a.date, asOf: asOf ?? null, receivedAt: new Date().toISOString() };
     })
     .catch(() => null);
 }

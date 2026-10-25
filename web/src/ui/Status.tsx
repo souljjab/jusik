@@ -1,7 +1,7 @@
 import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import type { ReactNode } from "react";
 import { marketSession, POSTURE_LABEL, type Posture, type Region } from "@jusik/shared";
-import { fmtAsOf } from "./format";
+import { fmtWhen } from "./format";
 
 const POSTURE_CELLS: Record<Posture, number> = { DEFENSE: 1, NEUTRAL: 2, ATTACK: 3 };
 const ORDER: Posture[] = ["DEFENSE", "NEUTRAL", "ATTACK"];
@@ -34,20 +34,38 @@ export function RegimeGauge({ posture, size = "md", labels = true }: { posture: 
 }
 
 /**
- * 시장 상태(장 시작 전·장중·장 마감·시간외·휴장) + 데이터 기준 시각. 지연 시세면 몇 분 지연인지 쓴다.
+ * 시장 상태(장 시작 전·장중·장 마감·시간외·휴장) + 데이터 기준 시각(지도서 9.1). 지연 시세면 몇 분 지연인지 쓴다.
+ * 장중에는 데이터의 기준 시각(asOf, 오늘이 아니면 날짜까지 '10.15(목) 19:53 기준'), 그 밖에는 기준 문구
+ * ('전일 종가 기준', '15:30 종가', '다음 거래일 10.12(월)', '시간외 단일가')를 늘 보이게 쓴다(툴팁은 터치·키보드로 열 수 없다).
+ * asOf를 모르고 받은 시각(receivedAt)만 알면 '15:12 받음'처럼 받은 시각이라고 밝힌다.
  * 휴장은 주말만 안다(공휴일 달력 없음).
  */
-export function MarketStatus({ region, now, asOf, delayMin, showRegion = true, compact = false }: {
+export function MarketStatus({ region, now, asOf, receivedAt, delayMin, showRegion = true, compact = false }: {
   region: Region;
   now: Date;
+  /** 표시한 데이터의 기준 시각(스캔 시각·시세 시각 등) */
   asOf?: string | number | Date | null;
+  /** 데이터 자체의 시각을 모를 때 받은 시각 */
+  receivedAt?: string | number | Date | null;
   delayMin?: number | null;
   showRegion?: boolean;
-  /** 상단 바처럼 좁은 곳: 장중 기준 시각만 쓰고 나머지 보조 문구는 툴팁으로 */
+  /** 상단 바처럼 좁은 곳: 휴장 문구를 '다음 10.12(월)'로 줄인다 */
   compact?: boolean;
 }) {
   const s = marketSession(region, now);
-  const time = s.state === "open" ? (delayMin ? `${delayMin}분 지연` : asOf ? fmtAsOf(asOf) : "") : compact ? "" : s.sub;
+  const when = (t: string | number | Date) => fmtWhen(new Date(t).toISOString(), now);
+  const time =
+    s.state === "open"
+      ? delayMin
+        ? `${delayMin}분 지연`
+        : asOf != null && Number.isFinite(new Date(asOf).getTime())
+          ? `${when(asOf)} 기준`
+          : receivedAt != null && Number.isFinite(new Date(receivedAt).getTime())
+            ? `${when(receivedAt)} 받음`
+            : ""
+      : compact && s.state === "holiday"
+        ? s.sub.replace("다음 거래일", "다음")
+        : s.sub;
   const tip = [s.state !== "open" ? s.sub : "", s.state === "holiday" ? "주말만 휴장으로 표시해요(공휴일은 반영하지 않아요)" : ""].filter(Boolean).join(" · ");
   return (
     <span className={`ui-mstatus ${s.state}`} title={tip || undefined}>
@@ -100,7 +118,7 @@ export function RiskMeter({ label, value, limit, format, limitLabel, overText = 
         <span>{limitLabel ?? (limit != null ? `한도 ${format(limit)}` : "한도 없음")}</span>
         {st !== "normal" && (
           <span className="state row" style={{ gap: 4 }}>
-            <AlertTriangle size={12} aria-hidden="true" />
+            <AlertTriangle size={12} strokeWidth={1.5} aria-hidden="true" />
             {st === "over" ? overText : nearText}
           </span>
         )}
@@ -114,7 +132,7 @@ export function Notice({ tone = "info", title, children, action, className = "" 
   const Icon = tone === "warn" ? AlertTriangle : tone === "ok" ? CheckCircle2 : Info;
   return (
     <div className={`ui-notice ${tone} ${className}`} role={tone === "warn" ? "alert" : "status"}>
-      <Icon className="ico" size={16} aria-hidden="true" />
+      <Icon className="ico" size={16} strokeWidth={1.5} aria-hidden="true" />
       <div className="grow stack" style={{ gap: 2 }}>
         {title && <span className="ttl">{title}</span>}
         {children && <div>{children}</div>}
