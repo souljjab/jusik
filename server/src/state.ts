@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import {
-  DEFAULT_POSTURE_CAPS, DEFAULT_SETTINGS as SHARED_DEFAULT_SETTINGS, GUARD_DEFAULTS, newPaperAccount,
+  DEFAULT_POSTURE_CAPS, DEFAULT_SETTINGS as SHARED_DEFAULT_SETTINGS, josa, newPaperAccount,
   type AlertItem, type Currency, type DailyReview, type HistoryRow, type JournalEntry, type Market, type MarketRowLike, type PaperAccount, type ReplayRun, type ScanResult, type Settings,
 } from "@jusik/shared";
 
@@ -99,6 +99,18 @@ function fresh(): AppState {
   };
 }
 
+/**
+ * 이전 버전이 남긴 알림 고치기: 국면 알림의 '(으)로' 자리표시를 낱말에 맞는 조사로, 경로를 근거 화면으로
+ * (홈 알림·브라우저 알림이 문장을 그대로 보여 준다)
+ */
+export function migrateAlert(a: AlertItem): AlertItem {
+  if (a.category !== "regime") return a;
+  const text = a.text.replace(/(\S+)\(으\)로/g, (_, w: string) => josa(w, "으로/로"));
+  const market = /^regime:([A-Z]+):/.exec(a.key)?.[1];
+  const route = a.route === "/" ? `/?view=regime${market ? `&market=${market}` : ""}` : a.route;
+  return text === a.text && route === a.route ? a : { ...a, text, route };
+}
+
 /** JSON 파일 하나에 상태를 저장한다. 쓰는 도중 꺼져도 깨지지 않게 임시 파일에 쓴 뒤 교체한다. */
 export class Store {
   state: AppState;
@@ -119,7 +131,7 @@ export class Store {
           lastUniverse: raw.lastUniverse && typeof raw.lastUniverse === "object" ? raw.lastUniverse : {},
           dayStart: raw.dayStart && typeof raw.dayStart === "object" ? raw.dayStart : {},
           breadthLog: raw.breadthLog && typeof raw.breadthLog === "object" ? raw.breadthLog : {},
-          alerts: Array.isArray(raw.alerts) ? raw.alerts : [],
+          alerts: Array.isArray(raw.alerts) ? raw.alerts.map(migrateAlert) : [],
         };
       } catch (e) {
         // 파일이 깨졌으면 덮어쓰지 않고 백업해 둔다

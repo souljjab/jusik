@@ -3,7 +3,7 @@ import { regionOf, signalStats, type Evidence, type Note, type SignalStats } fro
 import { loadStock } from "../api";
 import { navigate } from "../app/router";
 import { defaultParams, runSelected } from "../screens/discover/strategyRun";
-import { Button, EvidenceList, EvidenceStripFull, Sheet, Skeleton, Stat, Stats } from "../ui";
+import { Button, EvidenceList, EvidenceStripFull, NoteList, Sheet, Skeleton, Stat, Stats } from "../ui";
 
 /** 근거 전략 → 과거 성과를 낼 백테스트 전략 */
 const STRATEGY_OF: Record<Evidence["strategy"], string> = { daytrade: "daytrade-breakout", weinstein: "weinstein", "candle-master": "candle-master" };
@@ -116,16 +116,8 @@ export function EvidenceSheet({ req, onClose }: { req: EvidenceRequest | null; o
           </div>
           <EvidenceStripFull evidence={req.evidence} />
           <EvidenceList cells={req.evidence.cells} />
-          {req.notes && req.notes.length > 0 && (
-            <ul className="ui-ev-list">
-              {req.notes.map((n, i) => (
-                <li key={i} style={{ gridTemplateColumns: "1fr" }}>
-                  <span className={n.tone === "bad" || n.tone === "warn" ? "warn-text" : ""}>{n.text}</span>
-                  {n.rule && <span className="t-cap">{n.rule}</span>}
-                </li>
-              ))}
-            </ul>
-          )}
+          {/* 함께 보여 줄 근거 문장: 경고는 아이콘과 함께(NoteList) */}
+          {req.notes && req.notes.length > 0 && <NoteList notes={req.notes} dense />}
           {req.code && <SignalStatsView code={req.code} strategy={req.evidence.strategy} />}
         </div>
       )}

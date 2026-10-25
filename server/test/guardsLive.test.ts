@@ -8,7 +8,7 @@ import { minuteFor } from "../src/intradayCheck";
 import { MockMinuteSource } from "../src/minute";
 import { monitorPositions, runScan, syncPaperWithDeposit } from "../src/scanner";
 import { Scheduler } from "../src/scheduler";
-import { sanitizeSettings, Store } from "../src/state";
+import { migrateAlert, sanitizeSettings, Store } from "../src/state";
 import { buildTables } from "../src/tables";
 import { MON_1030_KST, StubProvider, tmp } from "./helpers";
 
@@ -227,5 +227,15 @@ describe("minute view after the close (R013)", () => {
     const r = await minuteFor({ provider, minute }, "000001", at);
     expect(r.sessionDate).toBe("2024-03-18");
     expect(r.assessment!.minutesSinceOpen).toBe(390); // 09:00~15:30
+  });
+});
+
+describe("stored alerts from earlier versions (R050·R116·R131)", () => {
+  it("fixes the '(으)로' placeholder and the route of regime alerts when loading", () => {
+    const old = { id: "1", at: "2024-03-18T00:00:00Z", category: "regime" as const, key: "regime:KOSDAQ:2024-03-18:NEUTRAL", route: "/", text: "코스닥 국면이 방어에서 중립(으)로 바뀌었어요. 주식 비중 상한 50%" };
+    expect(migrateAlert(old)).toMatchObject({ text: "코스닥 국면이 방어에서 중립으로 바뀌었어요. 주식 비중 상한 50%", route: "/?view=regime&market=KOSDAQ" });
+    expect(migrateAlert({ ...old, text: "코스피 국면이 공격에서 방어(으)로 바뀌었어요." }).text).toBe("코스피 국면이 공격에서 방어로 바뀌었어요.");
+    const signal = { ...old, category: "signal" as const };
+    expect(migrateAlert(signal)).toBe(signal);
   });
 });
