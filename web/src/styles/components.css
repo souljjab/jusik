@@ -207,12 +207,12 @@
 .ui-scrim { position: fixed; inset: 0; z-index: 60; background: var(--color-scrim); animation: ui-fade var(--motion-sheet) var(--motion-ease); }
 .ui-sheet {
   position: fixed; z-index: 61; background: var(--color-surface); color: var(--color-text); box-shadow: var(--elevation-sheet);
-  display: flex; flex-direction: column; max-height: 92dvh;
+  display: flex; flex-direction: column; max-height: 92dvh; text-align: start;
 }
-.ui-sheet.bottom { left: 0; right: 0; bottom: 0; border-radius: var(--radius-sheet) var(--radius-sheet) 0 0; animation: ui-up var(--motion-sheet) var(--motion-ease); padding-bottom: env(safe-area-inset-bottom); }
-.ui-sheet.right { top: 0; right: 0; bottom: 0; width: min(440px, 100vw); max-height: none; border-radius: var(--radius-sheet) 0 0 var(--radius-sheet); animation: ui-left var(--motion-sheet) var(--motion-ease); box-shadow: var(--elevation-menu); }
-.ui-sheet.center { left: 50%; top: 10vh; transform: translateX(-50%); width: min(560px, calc(100vw - 32px)); max-height: 80vh; border-radius: var(--radius-sheet); box-shadow: var(--elevation-menu); animation: ui-fade var(--motion-sheet) var(--motion-ease); }
-@media (min-width: 600px) { .ui-sheet.bottom { left: 50%; right: auto; width: min(560px, 100vw); transform: translateX(-50%); animation: ui-up-c var(--motion-sheet) var(--motion-ease); } }
+.ui-sheet--bottom { left: 0; right: 0; bottom: 0; border-radius: var(--radius-sheet) var(--radius-sheet) 0 0; animation: ui-up var(--motion-sheet) var(--motion-ease); padding-bottom: env(safe-area-inset-bottom); }
+.ui-sheet--right { top: 0; right: 0; bottom: 0; width: min(440px, 100vw); max-height: none; border-radius: var(--radius-sheet) 0 0 var(--radius-sheet); animation: ui-left var(--motion-sheet) var(--motion-ease); box-shadow: var(--elevation-menu); }
+.ui-sheet--center { left: 50%; top: 10vh; transform: translateX(-50%); width: min(560px, calc(100vw - 32px)); max-height: 80vh; border-radius: var(--radius-sheet); box-shadow: var(--elevation-menu); animation: ui-fade var(--motion-sheet) var(--motion-ease); }
+@media (min-width: 600px) { .ui-sheet--bottom { left: 50%; right: auto; width: min(560px, 100vw); transform: translateX(-50%); animation: ui-up-c var(--motion-sheet) var(--motion-ease); } }
 .ui-sheet-grip { width: 36px; height: 4px; border-radius: 2px; background: var(--color-border); margin: var(--space-2) auto 0; flex: none; }
 .ui-sheet-head { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4) var(--space-2); }
 .ui-sheet-head h2 { flex: 1; min-width: 0; }

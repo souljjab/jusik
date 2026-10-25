@@ -4,7 +4,7 @@ import { useApp } from "../app/AppContext";
 import { useActions } from "../app/actions";
 import { setPrefs, usePrefs } from "../app/prefs";
 import { areaOf, href, navigate, useRoute, type Area } from "../app/router";
-import { Change, IconButton, MarketStatus, Notice, fmtAsOf, fmtNum, useBreakpoint } from "../ui";
+import { Change, IconButton, MarketStatus, Notice, fmtAsOf, fmtNum, overlayOpen, useBreakpoint } from "../ui";
 import { CommandPalette } from "./CommandPalette";
 import { AREAS, AREA_TITLE, SETTINGS_AREA } from "./nav";
 import { ShortcutsHelp } from "./ShortcutsHelp";
@@ -147,10 +147,11 @@ export function Shell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // 시트·명령 검색이 열려 있으면 그 위에 또 층을 열지 않는다(지도서 7.3). Esc로 먼저 닫는다
       if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) {
         e.preventDefault();
-        openPalette();
-      } else if (e.key === "?" && !isTyping(e.target) && !e.ctrlKey && !e.metaKey) {
+        if (!overlayOpen()) openPalette();
+      } else if (e.key === "?" && !isTyping(e.target) && !e.ctrlKey && !e.metaKey && !overlayOpen()) {
         e.preventDefault();
         openShortcuts();
       }

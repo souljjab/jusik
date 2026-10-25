@@ -3,12 +3,20 @@ import {
   type AlertItem, type Analysis, type BreadthResponse, type Candle, type DailyReview, type MinuteResponse, type Evaluation, type Fundamentals, type JournalCheck, type JournalEntry, type MacroResponse, type Market, type Posture,
   type Quote, type Region, type ReplayRun, type ServerState, type Settings, type StockExtras, type StockInfo,
 } from "@jusik/shared";
+import { errorText } from "./ui/format";
 
 /** 배포(APK 등)에서는 VITE_API_BASE 로 서버 주소를 지정한다. 개발 중에는 vite 프록시를 쓴다. */
 const BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
 
 async function getJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, init);
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, init);
+  } catch (e) {
+    // 브라우저의 영어 메시지('Failed to fetch')가 화면 문장에 섞이지 않게 무엇이 일어났고 어떻게 고치는지로 바꾼다
+    if (e instanceof DOMException && e.name === "AbortError") throw e;
+    throw new Error(errorText(e));
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error((body as { error?: string }).error ?? `요청 실패 (${res.status})`);
   return body as T;
@@ -20,7 +28,35 @@ export interface Health {
 }
 
 export const fetchHealth = () => getJson<Health>("/api/health");
-export const searchStocks = (q: string) => getJson<{ results: StockInfo[] }>(`/api/search?q=${encodeURIComponent(q)}`).then((r) => r.results);
+export const searchStocks = (q: string) => getJson<{ results: StockInfo[] }>(`/api/search?q=${encodeURIComponent(q)}`).then((r) => rememberNames(r.results));
+
+// ---- 종목 이름(코드 → 이름) ----
+// 검색·개요·분석을 받을 때마다 채워 두고, 명령 검색의 관심종목·창 제목처럼 코드만 아는 곳에서 이름을 보여 준다.
+const NAME_MAX = 500;
+const names = new Map<string, string>();
+/** 받은 종목 이름을 기억한다(오래된 것부터 지워 NAME_MAX개까지만) */
+export function rememberNames<T extends { code: string; name?: string | null }>(list: T[]): T[] {
+  for (const s of list) {
+    if (!s.name || s.name === s.code) continue;
+    names.delete(s.code);
+    names.set(s.code, s.name);
+  }
+  while (names.size > NAME_MAX) names.delete(names.keys().next().value!);
+  return list;
+}
+/** 이미 아는 종목 이름(없으면 undefined) */
+export const knownName = (code: string): string | undefined => names.get(code);
+/** 코드들의 이름. 모르는 코드는 검색으로 찾아 본다(찾지 못하면 빠진다) */
+export async function stockNames(codes: string[]): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  await Promise.all(
+    codes.map(async (c) => {
+      const hit = names.get(c) ?? (await searchStocks(c).then((r) => r.find((s) => s.code === c)?.name).catch(() => undefined));
+      if (hit && hit !== c) out[c] = hit;
+    }),
+  );
+  return out;
+}
 
 export const CANDLE_COUNT = 750;
 
@@ -37,7 +73,16 @@ export interface StockData {
 }
 
 const TTL = 60_000;
+/** 종목 분석 캐시에 남겨 둘 최대 종목 수(오래 쓰면 메모리가 계속 늘지 않게) */
+const STOCK_CACHE_MAX = 30;
 const cache = new Map<string, { at: number; p: Promise<StockData> }>();
+
+/** 만료된 항목을 지우고, 넘치면 가장 오래 쓰지 않은 것부터 지운다(Map은 넣은 순서를 지킨다) */
+function prune<K, V extends { at: number }>(m: Map<K, V>, ttl: number, max: number) {
+  const now = Date.now();
+  for (const [k, v] of m) if (now - v.at >= ttl) m.delete(k);
+  while (m.size > max) m.delete(m.keys().next().value!);
+}
 const indexCache = new Map<Market, { at: number; p: Promise<Candle[] | null> }>();
 
 function loadIndex(market: Market): Promise<Candle[] | null> {
@@ -47,7 +92,10 @@ function loadIndex(market: Market): Promise<Candle[] | null> {
   const p = getJson<{ candles: Candle[] }>(`/api/index/${market}/candles?count=${CANDLE_COUNT}`)
     .then((r) => r.candles)
     .catch(() => null);
-  indexCache.set(market, { at: Date.now(), p });
+  const entry = { at: Date.now(), p };
+  indexCache.set(market, entry);
+  // 실패(null)는 기억하지 않는다 — 다음 요청에서 다시 받는다
+  void p.then((r) => r == null && indexCache.get(market) === entry && indexCache.delete(market));
   return p;
 }
 
@@ -56,7 +104,12 @@ let macroCache: { at: number; p: Promise<MacroResponse | null> } | null = null;
 export function getMacro(): Promise<MacroResponse | null> {
   if (macroCache && Date.now() - macroCache.at < 10 * TTL) return macroCache.p;
   const p = getJson<MacroResponse>("/api/macro").catch(() => null);
-  macroCache = { at: Date.now(), p };
+  const entry = { at: Date.now(), p };
+  macroCache = entry;
+  // 한 번 실패한 결과를 10분 동안 붙잡지 않는다(연결이 돌아오면 다음 요청에서 다시 받는다)
+  void p.then((r) => {
+    if (r == null && macroCache === entry) macroCache = null;
+  });
   return p;
 }
 
@@ -65,7 +118,11 @@ let capsCache: { at: number; p: Promise<Record<Posture, number> | undefined> } |
 function loadCaps(): Promise<Record<Posture, number> | undefined> {
   if (capsCache && Date.now() - capsCache.at < TTL) return capsCache.p;
   const p = getJson<ServerState>("/api/state").then((s) => s.settings.postureCaps).catch(() => undefined);
-  capsCache = { at: Date.now(), p };
+  const entry = { at: Date.now(), p };
+  capsCache = entry;
+  void p.then((r) => {
+    if (r == null && capsCache === entry) capsCache = null;
+  });
   return p;
 }
 
@@ -76,8 +133,8 @@ export function getBreadth(market: Market, fresh = false): Promise<BreadthRespon
   if (!fresh && hit && Date.now() - hit.at < TTL) return hit.p;
   const p = getJson<BreadthResponse>(`/api/breadth/${market}`).catch(() => null);
   breadthCache.set(market, { at: Date.now(), p });
-  // 계산 중 응답은 오래 두지 않는다
-  p.then((r) => r?.pending && breadthCache.delete(market));
+  // 계산 중 응답과 실패(null)는 오래 두지 않는다
+  void p.then((r) => (!r || r.pending) && breadthCache.get(market)?.p === p && breadthCache.delete(market));
   return p;
 }
 
@@ -86,11 +143,17 @@ export const getMinute = (code: string) => getJson<MinuteResponse>(`/api/stocks/
 
 export function loadStock(code: string): Promise<StockData> {
   const hit = cache.get(code);
-  if (hit && Date.now() - hit.at < TTL) return hit.p;
+  if (hit && Date.now() - hit.at < TTL) {
+    // 최근에 쓴 것으로 옮긴다
+    cache.delete(code);
+    cache.set(code, hit);
+    return hit.p;
+  }
   const p = Promise.all([
     getJson<{ info: StockInfo; quote: Quote; fundamentals: Fundamentals }>(`/api/stocks/${code}/overview`),
     getJson<{ candles: Candle[] }>(`/api/stocks/${code}/candles?count=${CANDLE_COUNT}`),
   ]).then(async ([o, c]) => {
+    rememberNames([o.info]);
     const [indexCandles, macro, postureCaps, breadth] = await Promise.all([loadIndex(o.info.market), getMacro(), loadCaps(), getBreadth(o.info.market)]);
     return {
       ...o,
@@ -103,7 +166,9 @@ export function loadStock(code: string): Promise<StockData> {
       breadth,
     };
   });
+  cache.delete(code);
   cache.set(code, { at: Date.now(), p });
+  prune(cache, TTL, STOCK_CACHE_MAX);
   p.catch(() => cache.delete(code));
   return p;
 }
@@ -156,7 +221,8 @@ export function getIndexQuote(market: Market): Promise<IndexQuote | null> {
 /** 일봉(작은 추세선·차트용) */
 export const getCandles = (code: string, count: number) => getJson<{ candles: Candle[] }>(`/api/stocks/${code}/candles?count=${count}`).then((r) => r.candles);
 /** 종목 개요(이름·현재가·재무) */
-export const getOverview = (code: string) => getJson<{ info: StockInfo; quote: Quote; fundamentals: Fundamentals }>(`/api/stocks/${code}/overview`);
+export const getOverview = (code: string) =>
+  getJson<{ info: StockInfo; quote: Quote; fundamentals: Fundamentals }>(`/api/stocks/${code}/overview`).then((r) => (rememberNames([r.info]), r));
 export const deleteJournal = (id: string) => getJson<unknown>(`/api/journal/${id}`, send("DELETE"));
 
 // ---- 종목 보조 데이터(국내: 수급·공시·업종) ----
