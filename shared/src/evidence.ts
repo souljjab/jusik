@@ -183,7 +183,7 @@ export interface SignalStats {
 }
 
 /** 전략 백테스트(runStrategy) 거래에서 신호 횟수·승률·손익비를 낸다 */
-export function signalStats(bt: Pick<StrategyBacktest, "trades"> | null): SignalStats {
+export function signalStats(bt: { trades: Pick<StrategyBacktest["trades"][number], "returnPct">[] } | null): SignalStats {
   const r = (bt?.trades ?? []).map((t) => t.returnPct).filter((x) => Number.isFinite(x));
   if (!r.length) return { count: 0, winRatePct: null, payoff: null, avgReturnPct: null };
   const wins = r.filter((x) => x > 0), losses = r.filter((x) => x <= 0);

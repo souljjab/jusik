@@ -1,18 +1,37 @@
 import { useEffect, useState } from "react";
-import { getStrategy, runStrategy, signalStats, type Evidence, type Note, type SignalStats } from "@jusik/shared";
-import { CANDLE_COUNT, getCandles } from "../api";
+import { regionOf, signalStats, type Evidence, type Note, type SignalStats } from "@jusik/shared";
+import { loadStock } from "../api";
 import { navigate } from "../app/router";
+import { defaultParams, runSelected } from "../screens/discover/strategyRun";
 import { Button, EvidenceList, EvidenceStripFull, Sheet, Skeleton, Stat, Stats } from "../ui";
 
 /** 근거 전략 → 과거 성과를 낼 백테스트 전략 */
 const STRATEGY_OF: Record<Evidence["strategy"], string> = { daytrade: "daytrade-breakout", weinstein: "weinstein", "candle-master": "candle-master" };
 
 type StatsResult = { stats: SignalStats | null; period: string | null };
+/** 종목·전략별 결과. 오래 쓰면 계속 늘지 않게 최근 것만 남긴다 */
 const statsCache = new Map<string, Promise<StatsResult>>();
+const STATS_CACHE_MAX = 30;
+
+function cachedStats(key: string, load: () => Promise<StatsResult>): Promise<StatsResult> {
+  const hit = statsCache.get(key);
+  if (hit) {
+    // 최근에 쓴 것을 뒤로(가장 오래 안 쓴 것부터 지운다)
+    statsCache.delete(key);
+    statsCache.set(key, hit);
+    return hit;
+  }
+  const p = load();
+  p.catch(() => statsCache.delete(key));
+  statsCache.set(key, p);
+  while (statsCache.size > STATS_CACHE_MAX) statsCache.delete(statsCache.keys().next().value!);
+  return p;
+}
 
 /**
  * 같은 신호의 과거 성과(UI 지도서 5.2 F): 이 종목 일봉으로 같은 전략을 돌린 신호 횟수·승률·손익비.
- * 종목 하나의 과거라 표본이 작을 수 있다(화면에 기간과 함께 쓴다).
+ * 발굴 > 전략과 백테스트(runSelected)와 같은 입력으로 돌린다: 종목의 시장(단타 기준값), 시장 지수(국면·상대강도),
+ * 그 지역의 수수료·세금. 종목 하나의 과거라 표본이 작을 수 있다(화면에 기간과 함께 쓴다).
  */
 export function useSignalStats(code: string | null | undefined, strategy: Evidence["strategy"]): StatsResult & { loading: boolean } {
   const [st, setSt] = useState<StatsResult & { loading: boolean }>({ stats: null, period: null, loading: !!code });
@@ -20,18 +39,15 @@ export function useSignalStats(code: string | null | undefined, strategy: Eviden
     if (!code) return setSt({ stats: null, period: null, loading: false });
     let alive = true;
     setSt((s) => ({ ...s, loading: true }));
-    const key = `${code}|${strategy}`;
-    let p = statsCache.get(key);
-    if (!p) {
-      p = getCandles(code, CANDLE_COUNT).then((candles): StatsResult => {
-        const s = getStrategy(STRATEGY_OF[strategy]);
-        if (!s || candles.length < 2) return { stats: null, period: null };
-        const ym = (d: string) => d.slice(0, 7).replace("-", ".");
-        return { stats: signalStats(runStrategy(s, candles)), period: `${ym(candles[0]!.date)}~${ym(candles.at(-1)!.date)}` };
-      });
-      p.catch(() => statsCache.delete(key));
-      statsCache.set(key, p);
-    }
+    const p = cachedStats(`${code}|${strategy}`, () =>
+      loadStock(code).then((d): StatsResult => {
+        if (d.candles.length < 2) return { stats: null, period: null };
+        const region = regionOf(d.info.market);
+        const bt = runSelected(STRATEGY_OF[strategy], d.candles, d.indexCandles, d.info, region, defaultParams(region));
+        const ym = (x: string) => x.slice(0, 7).replace("-", ".");
+        return { stats: bt ? signalStats(bt) : null, period: `${ym(d.candles[0]!.date)}~${ym(d.candles.at(-1)!.date)}` };
+      }),
+    );
     p.then((r) => alive && setSt({ ...r, loading: false })).catch(() => alive && setSt({ stats: null, period: null, loading: false }));
     return () => {
       alive = false;

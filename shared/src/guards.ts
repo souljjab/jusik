@@ -29,8 +29,8 @@ export const GUARD_DEFAULTS: GuardParams = {
   maxStopPct: 20, // M4-01 캔들마스터
 };
 
-/** 근거 노트에 붙이는 규칙 ID·출처(부록 A, ID가 없으면 절 번호) */
-const RULE = {
+/** 근거 노트에 붙이는 규칙 ID·출처(부록 A, ID가 없으면 절 번호). 화면이 어떤 점검의 노트인지 가를 때도 쓴다 */
+export const GUARD_RULE = {
   dailyLoss: "M4-04 슈웨거",
   perTrade: "M4-04 슈웨거",
   streak: "5.5 박용선·슈웨거",
@@ -42,6 +42,7 @@ const RULE = {
   stopWidth: "M4-01 캔들마스터",
   plan: "5.5 헬로마녀·박용선",
 } as const;
+const RULE = GUARD_RULE;
 
 /** 신규 진입을 멈춘 까닭: 일일 손실 한도(다음 거래일에 풀림), 연속 손실 휴식(마지막 손실일과 그다음 거래일까지) */
 export type GuardReason = "dailyLoss" | "streak";
