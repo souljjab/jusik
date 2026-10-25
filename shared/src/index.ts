@@ -33,3 +33,5 @@ export * from "./intraday";
 export * from "./usFlows";
 export * from "./evidence";
 export * from "./settingsDefaults";
+export * from "./josa";
+export * from "./journalStrategies";

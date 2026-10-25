@@ -19,9 +19,19 @@ export interface ChartColors {
   warn: string;
   /** 차트 바탕 */
   bg: string;
+  /**
+   * 차트 전용 계열 색(이동평균선·보조 지표·비교선 등). 상태 색(상승·하락·경고)·강조색과 겹치지 않는 중립 계열.
+   * 강조색(accent)은 고른 신호 표식에만 쓴다
+   */
+  line1: string;
+  line2: string;
+  line3: string;
 }
 
-const FALLBACK: ChartColors = { text: "#556274", grid: "#D9DFE7", up: "#E0383E", down: "#2B6DE8", ma5: "#9A7B00", ma20: "#5B47D6", ma60: "#1F8A9E", accent: "#5B47D6", muted: "#556274", warn: "#C26A00", bg: "#FFFFFF" };
+const FALLBACK: ChartColors = {
+  text: "#556274", grid: "#D9DFE7", up: "#E0383E", down: "#2B6DE8", ma5: "#9A7B00", ma20: "#3F6B7A", ma60: "#1F8A9E", accent: "#5B47D6", muted: "#556274", warn: "#C26A00", bg: "#FFFFFF",
+  line1: "#3F6B7A", line2: "#9A7B00", line3: "#7A6A58",
+};
 
 function read(dark: boolean): ChartColors {
   if (typeof document === "undefined") return FALLBACK;
@@ -34,12 +44,16 @@ function read(dark: boolean): ChartColors {
     down: v("--color-down", FALLBACK.down),
     // 이동평균선: 상태 색(상승·하락·경고)과 겹치지 않게 고른 차트 전용 색
     ma5: dark ? "#D9B84A" : "#9A7B00",
-    ma20: v("--color-accent", FALLBACK.ma20),
+    // 20일선은 강조색 대신 차트 계열 색(강조색은 선택·근거에만)
+    ma20: dark ? "#8FB3C0" : "#3F6B7A",
     ma60: dark ? "#4CC3D6" : "#1F8A9E",
     accent: v("--color-accent", FALLBACK.accent),
     muted: v("--color-text-2", FALLBACK.muted),
     warn: v("--color-warn", FALLBACK.warn),
     bg: v("--color-surface", FALLBACK.bg),
+    line1: dark ? "#8FB3C0" : "#3F6B7A",
+    line2: dark ? "#D9B84A" : "#9A7B00",
+    line3: dark ? "#C2B29E" : "#7A6A58",
   };
 }
 

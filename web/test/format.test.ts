@@ -38,3 +38,14 @@ describe("number formats (UI 지도서 3.2)", () => {
     expect(srQuote("한빛반도체", 84300, 3.18)).toBe("한빛반도체, 8만 4천3백 원, 3.18% 상승");
   });
 });
+
+describe("errorText and market labels", () => {
+  it("turns browser network errors into an actionable Korean sentence and keeps server messages", async () => {
+    const { errorText, MARKET_LABEL } = await import("../src/ui/format");
+    expect(errorText(new TypeError("Failed to fetch"))).toContain("서버에 연결하지 못했어요");
+    expect(errorText(new Error("가격은 0보다 커야 해요."))).toBe("가격은 0보다 커야 해요.");
+    expect(errorText(new Error("요청 실패 (502)"))).toContain("서버에서 오류가 났어요");
+    expect(errorText(new Error("Unexpected token <"))).toContain("처리하지 못했어요");
+    expect(MARKET_LABEL.KOSDAQ).toBe("코스닥");
+  });
+});

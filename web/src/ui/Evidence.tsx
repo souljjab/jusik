@@ -13,12 +13,14 @@ export function evidenceSummary(ev: Pick<Evidence, "cells" | "met" | "total">): 
  * 근거 스트립(UI 지도서 1.2 시그니처). 규칙 하나당 한 칸: 채움 = 충족, 빈칸 = 미충족, 점선 = 데이터 없음.
  * 칸 크기는 핸드폰에서도 줄이지 않고 개수(4/6)를 함께 쓴다. onOpen이 있으면 '근거 보기'를 붙인다.
  */
-export function EvidenceStrip({ evidence, size = "sm", onOpen, showCount = true, className = "" }: {
+export function EvidenceStrip({ evidence, size = "sm", onOpen, showCount = true, className = "", subject }: {
   evidence: Pick<Evidence, "cells" | "met" | "total">;
   size?: "sm" | "md";
   onOpen?: () => void;
   showCount?: boolean;
   className?: string;
+  /** 무엇의 근거인지(종목명 등). 화면 낭독에서 '근거 보기: 한빛반도체'처럼 버튼마다 이름이 달라진다 */
+  subject?: string;
 }) {
   const label = evidenceSummary(evidence);
   return (
@@ -34,7 +36,7 @@ export function EvidenceStrip({ evidence, size = "sm", onOpen, showCount = true,
         </span>
       )}
       {onOpen && (
-        <button type="button" className="ui-btn link ui-ev-open" onClick={(e) => (e.stopPropagation(), onOpen())}>
+        <button type="button" className="ui-btn link ui-ev-open" aria-label={subject ? `근거 보기: ${subject}` : undefined} onClick={(e) => (e.stopPropagation(), onOpen())}>
           근거 보기
         </button>
       )}

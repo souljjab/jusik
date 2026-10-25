@@ -1,4 +1,4 @@
-import { regionOfCode, shortDateKo, type Currency, type Region } from "@jusik/shared";
+import { regionOfCode, shortDateKo, type Currency, type Market, type Region } from "@jusik/shared";
 
 /*
  * 숫자 표기(UI 지도서 3.2 표).
@@ -147,4 +147,19 @@ export function srQuote(name: string, price: number, changePct: number | null | 
   if (changePct == null || !Number.isFinite(changePct)) return `${name}, ${p}`;
   const dir = changePct > 0 ? "상승" : changePct < 0 ? "하락" : "보합";
   return `${name}, ${p}, ${Math.abs(changePct).toFixed(2)}% ${dir}`;
+}
+
+/** 시장 이름(화면에는 영문 코드 대신 이 이름을 쓴다) */
+export const MARKET_LABEL: Record<Market, string> = { KOSPI: "코스피", KOSDAQ: "코스닥", US: "미국" };
+
+/**
+ * 오류를 화면 문장으로: 네트워크 실패(브라우저의 영어 메시지)는 무엇이 일어났고 어떻게 고치는지로 바꾸고,
+ * 서버가 보낸 한국어 메시지는 그대로 쓴다. 화면에는 e.message를 그대로 넣지 말고 이 함수를 쓴다.
+ */
+export function errorText(e: unknown): string {
+  const msg = e instanceof Error ? e.message : typeof e === "string" ? e : "";
+  if (!msg || e instanceof TypeError || /failed to fetch|networkerror|load failed|network request failed|fetch failed/i.test(msg))
+    return "서버에 연결하지 못했어요. 앱 서버가 켜져 있는지 확인해 주세요.";
+  if (/^요청 실패 \(5\d\d\)/.test(msg)) return "서버에서 오류가 났어요. 잠시 뒤 다시 해 주세요.";
+  return /[가-힣]/.test(msg) ? msg : "처리하지 못했어요. 잠시 뒤 다시 해 주세요.";
 }

@@ -118,6 +118,11 @@ export interface ServerState {
   paperTracking: Record<Region, PaperTrackingStatus>;
   /** 통화별 오늘 손익(모의계좌, 하루 시작 자산 대비). 오늘 장 기록이 없으면 빠진다 */
   todayPnl?: Partial<Record<Currency, { date: string; pnl: number; pct: number }>>;
+  /**
+   * 통화별 리스크 가드(일일 손실 한도·연속 손실)를 요청 시점에 다시 계산한 값. 화면은 latestScan.guards 대신 이것을 쓴다
+   * (스캔 뒤 설정이 바뀌거나 날이 바뀌어도 맞게). 이전 서버에는 없을 수 있다
+   */
+  guards?: Partial<Record<Currency, GuardResult>>;
 }
 
 /** GET /api/macro 응답 */
