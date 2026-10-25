@@ -1,6 +1,6 @@
 import {
-  currencyOfRegion, dayTradeEvidence, marketClock, POSTURE_LABEL, regionOf, regionOfCode,
-  type AlertItem, type Disclosure, type Market, type Region, type ScanResult,
+  currencyOfRegion, dayTradeEvidence, josa, marketClock, POSTURE_LABEL, regionOf, regionOfCode,
+  type AlertItem, type Disclosure, type GuardResult, type Market, type Region, type ScanResult,
 } from "@jusik/shared";
 import { ALERT_LIMIT, type Store } from "./state";
 
@@ -30,12 +30,24 @@ export function pushAlert(store: Store, a: Omit<AlertItem, "id">): boolean {
 const dateOf = (region: Region, at: Date) => marketClock(region, at).date;
 
 /**
+ * 리스크 가드가 신규 매수를 멈췄으면 알림을 남긴다. 같은 지역·날짜·까닭(일일 손실·연속 손실)은 한 번만.
+ * 막히지 않았으면 아무것도 남기지 않는다(그날 알림 자리를 쓰지 않는다). 누르면 비중·한도 화면으로 간다.
+ */
+export function guardAlert(store: Store, region: Region, g: GuardResult | null | undefined, at: string, date: string): boolean {
+  if (!g?.blocked) return false;
+  const kind = g.reasons?.length ? [...g.reasons].sort().join("+") : "limit";
+  const why = g.notes.find((x) => x.tone === "bad")?.text ?? "리스크 한도에 닿았어요";
+  return pushAlert(store, { at, category: "risk", key: `guard:${region}:${date}:${kind}`, route: "/trade/limits", text: `${region === "KR" ? "국내" : "미국"} 신규 매수를 멈췄어요. ${why}` });
+}
+
+/**
  * 스캔 결과로 신호·국면·리스크(가드) 알림을 만든다.
  * prev는 직전 스캔(국면이 바뀌었는지 비교). 만든 알림 수를 돌려준다.
  */
 export function scanAlerts(store: Store, prev: ScanResult | null, scan: ScanResult, at: Date): number {
   let n = 0;
-  for (const c of scan.candidates.slice(0, SIGNAL_ALERTS_PER_SCAN)) {
+  // 알림 목록은 최신 것부터 보여 주는데 한 스캔의 알림은 시각이 같다 → 점수 낮은 것부터 넣어 가장 높은 후보가 맨 위에 오게
+  for (const c of scan.candidates.slice(0, SIGNAL_ALERTS_PER_SCAN).reverse()) {
     const ev = dayTradeEvidence(c);
     const date = dateOf(regionOf(c.market), at);
     if (
@@ -53,19 +65,13 @@ export function scanAlerts(store: Store, prev: ScanResult | null, scan: ScanResu
     const date = dateOf(regionOf(m), at);
     if (
       pushAlert(store, {
-        at: scan.at, category: "regime", key: `regime:${m}:${date}:${now.posture}`, route: "/",
-        text: `${MARKET_LABEL[m]} 국면이 ${POSTURE_LABEL[before.posture]}에서 ${POSTURE_LABEL[now.posture]}(으)로 바뀌었어요. 주식 비중 상한 ${now.exposureCapPct}%`,
+        at: scan.at, category: "regime", key: `regime:${m}:${date}:${now.posture}`, route: `/?view=regime&market=${m}`,
+        text: `${MARKET_LABEL[m]} 국면이 ${POSTURE_LABEL[before.posture]}에서 ${josa(POSTURE_LABEL[now.posture], "으로/로")} 바뀌었어요. 주식 비중 상한 ${now.exposureCapPct}%`,
       })
     )
       n++;
   }
-  for (const region of ["KR", "US"] as Region[]) {
-    const g = scan.guards?.[currencyOfRegion(region)];
-    if (!g?.blocked) continue;
-    const date = dateOf(region, at);
-    const why = g.notes.find((x) => x.tone === "bad")?.text ?? "리스크 한도에 닿았어요";
-    if (pushAlert(store, { at: scan.at, category: "risk", key: `guard:${region}:${date}`, route: "/trade", text: `${region === "KR" ? "국내" : "미국"} 신규 매수를 멈췄어요. ${why}` })) n++;
-  }
+  for (const region of ["KR", "US"] as Region[]) if (guardAlert(store, region, scan.guards?.[currencyOfRegion(region)], scan.at, dateOf(region, at))) n++;
   return n;
 }
 

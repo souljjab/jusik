@@ -13,6 +13,8 @@ export class Scheduler {
   private lastMonitorMs = 0;
   private lastError: string | null = null;
   private lastScanAt: string | null = null;
+  /** 마지막 스캔 시도가 끝난 시각(성공·실패 모두). 화면이 '스캔 중'을 언제 끝낼지 안다 */
+  private lastAttemptAt: string | null = null;
   /** 이미 시도한 일일 복기(지역:날짜). 실패해도 같은 날 다시 시도하지 않는다(수동으로는 다시 만들 수 있다) */
   private reviewTried = new Set<string>();
 
@@ -32,13 +34,17 @@ export class Scheduler {
   status(): SchedulerStatus {
     const s = this.deps.store.state.settings;
     const now = this.now();
+    const marketOpen = { KR: marketClock("KR", now).isOpen, US: marketClock("US", now).isOpen };
+    // 다음 자동 스캔은 자동 스캔이 켜져 있고 켠 시장 중 하나라도 장이 열렸을 때만 있다(tick과 같은 조건)
+    const willScan = this.timer != null && (["KOSPI", "KOSDAQ", "US"] as Market[]).some((m) => s.markets[m] && marketOpen[regionOf(m)]);
     return {
       running: this.timer != null,
       scanning: this.busy,
       lastScanAt: this.lastScanAt ?? this.deps.store.state.latestScan?.at ?? null,
-      nextScanAt: this.lastScanMs ? new Date(this.lastScanMs + s.scanIntervalMin * 60_000).toISOString() : null,
+      nextScanAt: willScan && this.lastScanMs ? new Date(Math.max(this.lastScanMs + s.scanIntervalMin * 60_000, now.getTime())).toISOString() : null,
       lastError: this.lastError,
-      marketOpen: { KR: marketClock("KR", now).isOpen, US: marketClock("US", now).isOpen },
+      lastAttemptAt: this.lastAttemptAt,
+      marketOpen,
     };
   }
 
@@ -49,7 +55,7 @@ export class Scheduler {
       await runScan(this.deps);
       this.lastScanMs = this.now().getTime();
       this.lastScanAt = new Date(this.lastScanMs).toISOString();
-    });
+    }, true);
     return true;
   }
 
@@ -89,7 +95,7 @@ export class Scheduler {
         await runScan(this.deps);
         this.lastScanMs = this.now().getTime();
         this.lastScanAt = new Date(this.lastScanMs).toISOString();
-      });
+      }, true);
       this.lastMonitorMs = this.lastScanMs;
       return;
     }
@@ -117,7 +123,7 @@ export class Scheduler {
     }
   }
 
-  private async runExclusive(fn: () => Promise<void>) {
+  private async runExclusive(fn: () => Promise<void>, scan = false) {
     this.busy = true;
     try {
       await fn();
@@ -126,6 +132,7 @@ export class Scheduler {
       this.lastError = e instanceof Error ? e.message : String(e);
       console.error(`[jusik] 스캔/점검 실패: ${this.lastError}`);
     } finally {
+      if (scan) this.lastAttemptAt = this.now().toISOString();
       this.busy = false;
       this.onChange();
     }

@@ -2,8 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import {
-  averagingDownCheck, isValidCode, macroNotes, marketClock, netOf, paperEquity, paperTrackingStatus, preTradeChecklist, regionOf, regionOfCode,
-  type AlertsResponse, type BreadthResponse, type JournalCheck, type JournalEntry, type MacroResponse, type Market, type MinuteResponse, type Note, type Region, type ServerState, type StockExtras,
+  averagingDownCheck, currencyOfRegion, isValidCode, macroNotes, marketClock, netOf, paperEquity, paperTrackingStatus, preTradeChecklist, regionOf, regionOfCode,
+  type AlertsResponse, type BreadthResponse, type Candle, type JournalCheck, type JournalEntry, type MacroResponse, type Market, type MinuteResponse, type Note, type Region, type ServerState, type StockExtras,
 } from "@jusik/shared";
 import { TtlCache } from "./cache";
 import type { Exporter } from "./exporter";
@@ -13,7 +13,7 @@ import { minuteFor } from "./intradayCheck";
 import type { MinuteSource } from "./minute";
 import type { MarketDataProvider } from "./provider";
 import { evaluatePaper, runReplay } from "./evaluate";
-import { BREADTH_WAIT_MS, logBreadthToday, syncPaperWithDeposit, withTimeout } from "./scanner";
+import { BREADTH_WAIT_MS, dayPnlOf, guardsFor, logBreadthToday, syncPaperWithDeposit, withTimeout } from "./scanner";
 import type { Scheduler } from "./scheduler";
 import { sanitizeSettings, type Store } from "./state";
 
@@ -80,11 +80,14 @@ export function buildApp({ provider, store, exporter, scheduler, macro, extras, 
     return { candles: await slowCache.get(`c:${code}:${count}`, () => provider.getCandles(code, count)) };
   });
 
+  // 지수 일봉. fetchedAt은 이 일봉을 데이터 사이트에서 받은 시각(캐시된 값이면 그때). 상단 바처럼 몇 개만 보는 요청은 1분만 캐시한다
   app.get<{ Params: { market: string }; Querystring: { count?: string } }>("/api/index/:market/candles", async (req, reply) => {
     const market = req.params.market.toUpperCase() as Market;
     if (!MARKETS.includes(market)) return reply.code(400).send({ error: "시장은 KOSPI, KOSDAQ, US 중 하나여야 해요." });
     const count = Math.min(Math.max(Number(req.query.count) || 500, 60), 1500);
-    return { candles: await slowCache.get(`i:${market}:${count}`, () => provider.getIndexCandles(market, count)) };
+    const c = count <= 60 ? cache : slowCache;
+    const r = await c.get<{ candles: Candle[]; fetchedAt: string }>(`i:${market}:${count}`, async () => ({ candles: await provider.getIndexCandles(market, count), fetchedAt: now().toISOString() }));
+    return r;
   });
 
   // 국내 종목 수급·공시·업종(미국 종목은 supported=false)
@@ -150,19 +153,26 @@ export function buildApp({ provider, store, exporter, scheduler, macro, extras, 
       counts: { journal: store.state.journal.length, history: store.state.history.length, reviews: store.state.reviews.length },
       paperTracking: { KR: tracking("KR"), US: tracking("US") },
       todayPnl: todayPnlOf(t),
+      guards: guardsOf(t),
     };
   });
 
-  /** 통화별 오늘 손익(모의계좌): 지금 자산 − 그 시장 날짜의 하루 시작 자산. 시작 자산 기록이 오늘 것이 아니면 없음 */
+  /** 통화별 오늘 손익(모의계좌): 지금 자산 − 그 시장 날짜의 하루 시작 자산. 시작 자산 기록이 오늘 것이 아니면 없음(가드와 같은 계산) */
   function todayPnlOf(t: Date): ServerState["todayPnl"] {
     const out: NonNullable<ServerState["todayPnl"]> = {};
-    for (const cur of ["KRW", "USD"] as const) {
-      const ds = store.state.dayStart[cur];
-      const date = marketClock(cur === "KRW" ? "KR" : "US", t).date;
-      if (!ds || ds.date !== date || !(ds.equity > 0)) continue;
-      const pnl = paperEquity(store.state.paper[cur]) - ds.equity;
-      out[cur] = { date, pnl, pct: (pnl / ds.equity) * 100 };
+    for (const r of REGIONS) {
+      const date = marketClock(r, t).date;
+      const d = dayPnlOf(store, r, date);
+      if (!d.snapshot) continue;
+      out[currencyOfRegion(r)] = { date, pnl: d.pnl, pct: (d.pnl / d.base) * 100 };
     }
+    return out;
+  }
+
+  /** 통화별 리스크 가드를 지금 설정·오늘 날짜로 다시 계산한다(스캔 결과의 가드는 그 스캔 때 값이라 화면은 이것을 쓴다) */
+  function guardsOf(t: Date): ServerState["guards"] {
+    const out: NonNullable<ServerState["guards"]> = {};
+    for (const r of REGIONS) out[currencyOfRegion(r)] = guardsFor(store, r, marketClock(r, t).date);
     return out;
   }
 
@@ -170,7 +180,7 @@ export function buildApp({ provider, store, exporter, scheduler, macro, extras, 
     const before = store.state.settings;
     store.state.settings = sanitizeSettings(req.body, before);
     const after = store.state.settings;
-    if (after.depositKRW !== before.depositKRW || after.depositUSD !== before.depositUSD) syncPaperWithDeposit(store);
+    if (after.depositKRW !== before.depositKRW || after.depositUSD !== before.depositUSD) syncPaperWithDeposit(store, false, now());
     store.save();
     exporter.request();
     return { settings: store.state.settings, paper: store.state.paper };
@@ -182,7 +192,7 @@ export function buildApp({ provider, store, exporter, scheduler, macro, extras, 
   });
 
   app.post("/api/paper/reset", async () => {
-    syncPaperWithDeposit(store, true);
+    syncPaperWithDeposit(store, true, now());
     store.save();
     exporter.request();
     return { paper: store.state.paper };
@@ -213,7 +223,8 @@ export function buildApp({ provider, store, exporter, scheduler, macro, extras, 
 
   /** 일지 입력 검사 + 매수 점검(주문 전 체크리스트·손실 중 추가 매수). 저장(POST)과 미리 보기(check)가 같이 쓴다 */
   type JournalBody = Partial<JournalEntry> & { plannedAdd?: boolean };
-  function checkJournal(b: JournalBody): { error: string } | { code: string; side: "BUY" | "SELL"; date: string; price: number; qty: number; stop?: number; target?: number; reason: string; weightPct?: number; notes: Note[] } {
+  type Checked = { code: string; side: "BUY" | "SELL"; date: string; price: number; qty: number; stop?: number; target?: number; reason: string; weightPct?: number; notes: Note[]; plannedAdd: boolean };
+  function checkJournal(b: JournalBody): { error: string } | Checked {
     const code = normCode(String(b.code ?? ""));
     const price = Number(b.price), qty = Number(b.qty);
     if (!isValidCode(code)) return BAD_CODE;
@@ -224,19 +235,25 @@ export function buildApp({ provider, store, exporter, scheduler, macro, extras, 
     const stop = optNum(b.stop), target = optNum(b.target), reason = String(b.reason ?? "").slice(0, 500);
     const weightPct = optNum(b.weightPct) != null ? Math.min(100, optNum(b.weightPct)!) : undefined;
 
-    // 매수는 주문 전 체크리스트(손절가·목표가·근거·비중)와 손실 중 추가 매수를 점검한다(5.5, M4-02). 막지는 않고 기록에 남긴다
+    // 매수는 주문 전 체크리스트(손절가·목표가·근거·비중·1회 손실)와 손실 중 추가 매수를 점검한다(5.5, M4-02). 막지는 않고 기록에 남긴다.
+    // 비중 상한과 1회 손실 한도는 사용자가 설정한 값(주문 검토 시트와 같은 기준). 계좌 기준 금액도 시트와 같다(모의매매면 모의계좌 자산, 아니면 예수금)
     const notes: Note[] = [];
+    let plannedAdd = false;
     if (b.side === "BUY") {
-      notes.push(...preTradeChecklist({ stop, target, reason, price, weightPct }));
+      const s = store.state.settings;
+      const cur = currencyOfRegion(regionOfCode(code));
+      const account = s.paperEnabled ? paperEquity(store.state.paper[cur]) : cur === "KRW" ? s.depositKRW : s.depositUSD;
+      notes.push(...preTradeChecklist({ stop, target, reason, price, weightPct, qty, account }, { maxWeightPct: s.maxWeightPct, maxPerTradeRiskPct: s.riskPct }));
       // 모의계좌(자동) 보유분은 내 실제 보유가 아니라서 직접 쓴 기록끼리만 본다
       const manual = store.state.journal.filter((e) => (e.source ?? "수동") === "수동");
       const avg = averagingDownCheck(manual, { code, side: "BUY", price, date }).notes;
       // 사전에 계획한 분할 매수라고 확인했으면 위반 대신 기록으로 남긴다(UI 지도서 9.3 계획 외 추가 매수 확인)
-      if (b.plannedAdd === true && avg.some((n) => n.tone !== "info"))
+      if (b.plannedAdd === true && avg.some((n) => n.tone !== "info")) {
+        plannedAdd = true;
         notes.push({ tone: "info", text: "손실 중 추가 매수지만 처음부터 계획한 분할 매수라고 확인했어요.", rule: avg.find((n) => n.rule)?.rule });
-      else notes.push(...avg);
+      } else notes.push(...avg);
     }
-    return { code, side: b.side, date, price, qty, stop, target, reason, weightPct, notes };
+    return { code, side: b.side, date, price, qty, stop, target, reason, weightPct, notes, plannedAdd };
   }
 
   // 주문 검토 시트가 확인 전에 부르는 미리 보기(저장하지 않음)
@@ -251,7 +268,7 @@ export function buildApp({ provider, store, exporter, scheduler, macro, extras, 
     const b = req.body ?? {};
     const c = checkJournal(b);
     if ("error" in c) return reply.code(400).send(c);
-    const { code, side, date, price, qty, stop, target, reason, weightPct, notes } = c;
+    const { code, side, date, price, qty, stop, target, reason, weightPct, notes, plannedAdd } = c;
     const info = await provider.getInfo(code).catch(() => undefined);
     const violations = notes.filter((n) => n.tone === "bad").map((n) => n.text);
     const selfCheck = optSelfCheck(b.selfCheck);
@@ -269,6 +286,7 @@ export function buildApp({ provider, store, exporter, scheduler, macro, extras, 
       ...(optText(b.emotion, 200) ? { emotion: optText(b.emotion, 200) } : {}),
       ...(violations.length ? { violations } : {}),
       ...(selfCheck ? { selfCheck } : {}),
+      ...(plannedAdd ? { plannedAdd: true } : {}),
     };
     store.state.journal.push(entry);
     store.save();

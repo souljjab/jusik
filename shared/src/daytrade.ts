@@ -2,6 +2,7 @@ import { atr, rsi, sma } from "./indicators";
 import { positionSize } from "./risk";
 import type { Regime } from "./regime";
 import type { Candle, Market, Note, Region } from "./types";
+import { signedPct } from "./fmt";
 
 export interface DayTradeParams {
   /** 후보로 인정하는 최소 점수(0~100) */
@@ -148,9 +149,9 @@ export function scoreDayTrade(ref: StockRef, candles: Candle[], regime: Regime |
   else if (c.close > c.open && pos >= 0.6) add(8, "info", "양봉, 종가가 범위 상단");
   else if (pos < 0.4) add(-10, "warn", "윗꼬리가 긺(차익 매물 출회)");
 
-  if (changePct >= 3 && changePct <= 10) add(10, "good", `당일 ${changePct.toFixed(1)}% 상승(적정 탄력)`);
-  else if (changePct > 10) add(5, "warn", `당일 ${changePct.toFixed(1)}% 급등(추격 주의)`);
-  else add(5, "info", `당일 ${changePct.toFixed(1)}% 상승`);
+  if (changePct >= 3 && changePct <= 10) add(10, "good", `당일 ${signedPct(changePct)} 상승(적정 탄력)`);
+  else if (changePct > 10) add(5, "warn", `당일 ${signedPct(changePct)} 급등(추격 주의)`);
+  else add(5, "info", `당일 ${signedPct(changePct)}${changePct > 0 ? " 상승" : changePct < 0 ? " 하락" : " 보합"}`);
 
   if (r >= 70) add(-8, "warn", `RSI ${r.toFixed(0)}: 단기 과열 구간`);
   if (regime === "BEAR") add(-15, "bad", "시장 국면 약세 — 단타도 성공률이 떨어지는 구간");
@@ -229,6 +230,8 @@ export interface Plan {
   spendable: number;
   used: number;
   remainingCash: number;
+  /** 계획을 세울 때 기준으로 삼은 현금(계획 당시 값. 모의매매가 실행된 뒤의 현금과 다를 수 있다). 이전 저장분에는 없다 */
+  cash?: number;
 }
 
 export const EXPOSURE_CAP_REASON = "국면별 투자 상한 도달";
@@ -279,5 +282,5 @@ export function planWithCash(candidates: DayTradeCandidate[], p: PlanParams): Pl
     used += amount;
     items.push({ candidate: cand, qty, amount, riskAmount: qty * (cand.entry - cand.stop), weightPct: p.cash > 0 ? (amount / p.cash) * 100 : 0 });
   }
-  return { items, skipped, spendable, used, remainingCash: p.cash - used };
+  return { items, skipped, spendable, used, remainingCash: p.cash - used, cash: p.cash };
 }

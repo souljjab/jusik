@@ -29,6 +29,8 @@ export interface PaperAccount {
   realizedPnl: number;
   closed: number;
   wins: number;
+  /** 보유 종목 현재가(lastPrice)를 마지막으로 새로 받은 시각(ISO). 아직 받지 않았으면 없다 */
+  pricedAt?: string;
 }
 
 export interface PaperCosts {
@@ -58,6 +60,13 @@ export function weekdaysBetween(from: string, to: string): number {
   return n;
 }
 
+/** ymd 다음 평일(공휴일은 모른다) */
+export function nextWeekday(ymd: string): string {
+  let t = Date.parse(`${ymd}T00:00:00Z`) + 86_400_000;
+  while ([0, 6].includes(new Date(t).getUTCDay())) t += 86_400_000;
+  return new Date(t).toISOString().slice(0, 10);
+}
+
 const uuid = () => globalThis.crypto.randomUUID();
 const round2 = (x: number) => Math.round(x * 100) / 100;
 
@@ -67,6 +76,7 @@ export const PAPER_STRATEGY = "단타 돌파";
 /**
  * 모의 매수. 예수금이 모자라면 null.
  * equity(계좌 총자산)를 넘기면 매매일지에 계좌 대비 비중(체결 금액 ÷ equity × 100)을 남긴다.
+ * 이미 가진 종목은 더 사지 않으므로 이 값이 곧 '주문 뒤 그 종목 전체 비중'이다(JournalEntry.weightPct와 같은 뜻).
  */
 export function paperOpen(
   acct: PaperAccount, item: PlanItem, now: Date, clock: MarketClock, costs: PaperCosts, regime: string | null = null, equity?: number,

@@ -35,3 +35,4 @@ export * from "./evidence";
 export * from "./settingsDefaults";
 export * from "./josa";
 export * from "./journalStrategies";
+export * from "./fmt";

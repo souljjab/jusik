@@ -1,6 +1,7 @@
 import type { Analysis } from "./analyze";
 import type { CandleMasterResult } from "./candleMaster";
 import type { DayTradeCandidate, DayTradeCheckId } from "./daytrade";
+import { signedPct } from "./fmt";
 import { POSTURE_LABEL } from "./regimeScore";
 import type { StrategyBacktest } from "./strategies";
 
@@ -51,15 +52,24 @@ function build(strategy: EvidenceStrategy, headline: string, cells: EvidenceCell
 
 // ───────────────────────── 단타 후보 ─────────────────────────
 
-/** 단타 후보 칸 순서(고정) */
-export const DAYTRADE_CELLS: { id: DayTradeCheckId; label: string }[] = [
-  { id: "volume2x", label: "거래량 2배" },
-  { id: "breakout20", label: "20일 고점 돌파" },
-  { id: "trend", label: "단기 정배열" },
-  { id: "closeHigh", label: "고가 부근 마감" },
-  { id: "momentum", label: "적정 상승폭" },
-  { id: "regime", label: "시장 국면" },
+/** 앱이 정한 단타 기준(기초 자료집 규칙 카탈로그에 같은 규칙이 없는 칸)의 출처 표기 */
+export const APP_DAYTRADE_RULE = "앱 단타 규칙";
+
+/**
+ * 단타 후보 칸 순서(고정)와 출처. 카탈로그에 있는 규칙은 그 번호(4.7 강창권 '일봉 5·20·60일선 정배열',
+ * M1 시장 국면), 앱이 정한 기준(거래량 2배·20일 고점·고가 부근 마감·상승폭 3~10%)은 '앱 단타 규칙'
+ */
+export const DAYTRADE_CELLS: { id: DayTradeCheckId; label: string; rule: string }[] = [
+  { id: "volume2x", label: "거래량 2배", rule: APP_DAYTRADE_RULE },
+  { id: "breakout20", label: "20일 고점 돌파", rule: APP_DAYTRADE_RULE },
+  { id: "trend", label: "단기 정배열", rule: "4.7 강창권" },
+  { id: "closeHigh", label: "고가 부근 마감", rule: APP_DAYTRADE_RULE },
+  { id: "momentum", label: "적정 상승폭", rule: APP_DAYTRADE_RULE },
+  { id: "regime", label: "시장 국면", rule: "M1 시장 국면" },
 ];
+
+/** 오늘 등락률 문장: "오늘 +6.00% 올랐어요" / "오늘 -1.50% 내렸어요" / "오늘 0.00%로 그대로예요" */
+const changeSentence = (pct: number) => `오늘 ${signedPct(pct)}${pct > 0 ? " 올랐어요" : pct < 0 ? " 내렸어요" : "로 그대로예요"}`;
 
 /** checks가 없는 이전 버전 후보: 근거 문장으로 추정한다 */
 function checksFromNotes(c: DayTradeCandidate): Record<DayTradeCheckId, boolean | null> {
@@ -82,12 +92,10 @@ export function dayTradeEvidence(c: DayTradeCandidate): Evidence {
     breakout20: k.breakout20 ? "종가가 직전 20일 고점을 넘었어요" : "직전 20일 고점을 아직 넘지 못했어요",
     trend: k.trend ? "5일선이 20일선 위, 종가가 20일선 위예요" : "단기 이동평균 정배열이 아니에요",
     closeHigh: k.closeHigh ? "양봉이고 종가가 하루 범위의 위쪽 20% 안이에요" : "종가가 하루 고가에서 멀어요(윗꼬리)",
-    momentum: `오늘 ${c.changePct >= 0 ? "+" : ""}${fx(c.changePct, 2)}% 올랐어요(기준 3~10%)`,
+    momentum: `${changeSentence(c.changePct)}(기준 3~10%)`,
     regime: k.regime == null ? "시장 국면을 판정하지 못했어요" : k.regime ? "시장이 약세 국면이 아니에요" : "시장이 약세 국면이에요",
   };
-  const cells = DAYTRADE_CELLS.map(({ id, label }) => ({
-    id, label, state: st(k[id]), detail: detail[id], ...(id === "regime" ? { rule: "M1 시장 국면" } : {}),
-  }));
+  const cells = DAYTRADE_CELLS.map(({ id, label, rule }) => ({ id, label, state: st(k[id]), detail: detail[id], rule }));
   const parts = [k.breakout20 ? "20일 고점 돌파" : null, `거래량 ${fx(c.volumeRatio)}배`].filter(Boolean);
   return build("daytrade", parts.join(", "), cells);
 }

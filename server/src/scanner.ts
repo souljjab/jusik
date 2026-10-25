@@ -1,10 +1,10 @@
 import {
-  assessRegime, consecutiveLosses, currencyOfRegion, DAYTRADE_BY_REGION, marketClock, marketRegime, newPaperAccount, PAPER_COSTS, paperCheckExits, paperEquity, paperOpen,
-  paperTradesFromJournal, paperUnrealizedPnl, planWithCash, regionOf, regionOfCode, scoreDayTrade, todayPnl, tradingGuards, weekdaysBetween,
+  assessRegime, consecutiveLosses, currencyOfRegion, DAYTRADE_BY_REGION, marketClock, marketRegime, newPaperAccount, nextWeekday, PAPER_COSTS, paperCheckExits, paperEquity, paperOpen,
+  paperTradesFromJournal, planWithCash, regionOf, regionOfCode, scoreDayTrade, shortDateKo, todayPnl, tradingGuards, weekdaysBetween,
   type Currency, type DayTradeParams, type Disclosure, type GuardResult, type JournalEntry, type MacroSnapshot, type Market, type PaperAccount, type Region,
 } from "@jusik/shared";
 import type { BreadthResult, BreadthSource } from "./breadthSource";
-import { disclosureAlerts, positionAlerts, scanAlerts } from "./alerts";
+import { disclosureAlerts, guardAlert, positionAlerts, scanAlerts } from "./alerts";
 import type { ExtrasSource, MacroSource } from "./extras";
 import { minuteDecision, minuteFor } from "./intradayCheck";
 import type { MinuteSource } from "./minute";
@@ -127,38 +127,53 @@ export function markDayStart(store: Store, region: Region, today: string) {
 }
 
 /**
+ * 오늘 손익(모의계좌): 지금 자산 − 오늘(그 시장 날짜) 하루 시작 자산(markDayStart).
+ * 오늘 시작 자산이 없으면(장 시작 전·주말·그날 첫 점검 전) 오늘 실현 손익만 본다 — 전날부터 들고 온
+ * 평가손익은 오늘 손익이 아니다(장 밖에서 누적 평가손실로 신규 매수를 잠그지 않게).
+ * snapshot은 오늘 시작 자산 기록이 있는지(화면의 '오늘 손익'은 이때만 보여 준다).
+ */
+export function dayPnlOf(store: Store, region: Region, today: string, pending: JournalEntry[] = []): { pnl: number; base: number; snapshot: boolean } {
+  const cur = currencyOfRegion(region);
+  const equity = paperEquity(store.state.paper[cur]);
+  const ds = store.state.dayStart[cur];
+  if (ds && ds.date === today && ds.equity > 0) return { pnl: equity - ds.equity, base: ds.equity, snapshot: true };
+  const mine = [...store.state.journal, ...pending].filter((e) => regionOfCode(e.code) === region);
+  const pnl = todayPnl(mine, today);
+  return { pnl, base: equity - pnl, snapshot: false };
+}
+
+/**
  * 계좌 단위 리스크 가드(M4-04 일일 손실 한도, 5.5 연속 손실 휴식). 모의계좌와 자동(모의) 매매 기록으로 계산한다.
- * - 오늘 손익 = 지금 자산 − 하루 시작 자산(markDayStart). 기록이 없으면 오늘 실현 손익 + 평가손실(평가이익은 빼고)
+ * 스캔 때뿐 아니라 GET /api/state마다 지금 설정·오늘 날짜로 다시 계산한다(설정을 바꾸거나 날이 바뀌면 바로 맞게).
+ * - 오늘 손익 = dayPnlOf(오늘 시작 자산 대비, 없으면 오늘 실현 손익만)
  * - 연속 손실 휴식은 마지막 손실이 난 날과 그다음 거래일까지 신규 진입을 멈춘다. 마감 무렵 시간 청산으로
  *   연속 손실이 채워져도 다음 날 장 전체를 쉬게 하려는 것이다. 그 뒤에는 규모를 줄이라는 경고만 남긴다
  *   (계속 막으면 새 거래가 없어 연속 손실이 영원히 풀리지 않는다).
  */
 export function guardsFor(store: Store, region: Region, today: string, pending: JournalEntry[] = []): GuardResult {
-  const { settings: s, paper, journal } = store.state;
-  const cur = currencyOfRegion(region);
-  const acct = paper[cur];
+  const { settings: s, journal } = store.state;
   const mine = [...journal, ...pending].filter((e) => regionOfCode(e.code) === region);
   const closed = paperTradesFromJournal(mine).map((t) => t.returnPct);
   const lastSell = mine.filter((e) => e.source === "자동(모의)" && e.side === "SELL").reduce<string | null>((a, e) => (a == null || e.date > a ? e.date : a), null);
   const resting = lastSell != null && lastSell <= today && weekdaysBetween(lastSell, today) <= 1;
-  const equity = paperEquity(acct);
-  const ds = store.state.dayStart[cur];
-  const pnl = ds && ds.date === today ? equity - ds.equity : todayPnl(mine, today) + Math.min(0, paperUnrealizedPnl(acct));
-  const g = tradingGuards({
+  const { pnl, base } = dayPnlOf(store, region, today, pending);
+  const g: GuardResult = tradingGuards({
     closedReturnsPct: resting ? closed : [],
     todayPnl: pnl,
-    equityStartOfDay: equity - pnl,
+    equityStartOfDay: base,
     riskPct: s.riskPct,
     maxWeightPct: s.maxWeightPct,
     params: { dailyLossLimitPct: s.dailyLossLimitPct, maxConsecutiveLosses: s.maxConsecutiveLosses },
   });
+  g.date = today;
   const streak = consecutiveLosses(closed);
-  if (s.maxConsecutiveLosses > 0 && streak >= s.maxConsecutiveLosses)
-    g.notes.push(
-      resting
-        ? { tone: "info", text: `연속 손실 휴식은 마지막 손실이 난 날(${lastSell})과 그다음 거래일까지예요.`, rule: STREAK_RULE }
-        : { tone: "warn", text: `최근 ${streak}번 연속 손실 뒤 쉬었어요. 다시 진입하되 규모를 줄이세요.`, rule: STREAK_RULE },
-    );
+  if (s.maxConsecutiveLosses > 0 && streak >= s.maxConsecutiveLosses) {
+    if (resting) {
+      const until = nextWeekday(lastSell);
+      if (g.reasons?.includes("streak")) g.restUntil = until;
+      g.notes.push({ tone: "info", text: `마지막 손실이 난 날(${shortDateKo(lastSell)})과 그다음 거래일(${shortDateKo(until)})까지 쉬어요.`, rule: STREAK_RULE });
+    } else g.notes.push({ tone: "warn", text: `최근 ${streak}번 연속 손실 뒤 쉬었어요. 다시 진입하되 규모를 줄이세요.`, rule: STREAK_RULE });
+  }
   return g;
 }
 
@@ -290,9 +305,9 @@ async function autoTrade(deps: Deps, scan: ScanResult, at: Date) {
     const entries: JournalEntry[] = [];
 
     if (acct.positions.length) {
-      const prices = await provider.getPrices(acct.positions.map((p) => p.code)).catch(() => ({}));
-      const r = paperCheckExits(acct, prices, clock, PAPER_COSTS[region]);
-      acct = r.acct;
+      const prices = await provider.getPrices(acct.positions.map((p) => p.code)).catch(() => null);
+      const r = paperCheckExits(acct, prices ?? {}, clock, PAPER_COSTS[region]);
+      acct = prices ? { ...r.acct, pricedAt: at.toISOString() } : { ...r.acct, ...(acct.pricedAt ? { pricedAt: acct.pricedAt } : {}) };
       entries.push(...r.entries);
     }
     if (clock.inEntryWindow) {
@@ -342,9 +357,11 @@ export async function monitorPositions(deps: Deps): Promise<number> {
     markDayStart(store, region, clock.date);
     const prices = await provider.getPrices(acct.positions.map((p) => p.code));
     const r = paperCheckExits(acct, prices, clock, PAPER_COSTS[region]);
-    store.state.paper[cur] = r.acct;
+    store.state.paper[cur] = { ...r.acct, pricedAt: at.toISOString() };
     store.state.journal.push(...r.entries);
     closed += r.entries.length;
+    // 스캔 사이에 손절로 한도에 닿아도 바로 알린다(화면의 잠금은 GET /api/state가 매번 다시 계산한다)
+    if (r.entries.length) guardAlert(store, region, guardsFor(store, region, clock.date), at.toISOString(), clock.date);
   }
   const alerts = positionAlerts(store, at);
   if (closed || alerts || store.state.paper.KRW.positions.length || store.state.paper.USD.positions.length) store.save();
@@ -357,17 +374,19 @@ export function alertDisclosures(src: ExtrasSource, code: string): Promise<Discl
   return src.sec ? src.sec.filings(code, 7) : Promise.resolve([]);
 }
 
-/** 설정이 바뀌었을 때 모의계좌를 예수금에 맞춘다(보유 포지션이 없을 때만). */
-export function syncPaperWithDeposit(store: Store, force = false) {
+/**
+ * 설정이 바뀌었을 때 모의계좌를 예수금에 맞춘다(보유 포지션이 없을 때만). force면 보유가 있어도 새로 만든다(초기화).
+ * 계좌를 새로 만들면 하루 시작 자산도 다시 잡는다(예수금 변경이 손익으로 보이지 않게). now를 주면 그 시장의 오늘 날짜로
+ * 새 계좌 자산을 하루 시작 자산으로 남겨, 초기화 전 오늘 손실이 새 계좌의 일일 손실 한도로 다시 잡히지 않게 한다.
+ */
+export function syncPaperWithDeposit(store: Store, force = false, now?: Date) {
   const { settings: s, paper } = store.state;
-  // 계좌를 새로 만들면 하루 시작 자산도 다시 잡는다(예수금 변경이 손익으로 보이지 않게)
-  if (force || paper.KRW.positions.length === 0) {
-    store.state.paper.KRW = newPaperAccount(s.depositKRW);
-    delete store.state.dayStart.KRW;
-  }
-  if (force || paper.USD.positions.length === 0) {
-    store.state.paper.USD = newPaperAccount(s.depositUSD);
-    delete store.state.dayStart.USD;
+  for (const region of REGIONS) {
+    const cur = currencyOfRegion(region);
+    if (!force && paper[cur].positions.length) continue;
+    store.state.paper[cur] = newPaperAccount(cur === "KRW" ? s.depositKRW : s.depositUSD);
+    if (now) store.state.dayStart[cur] = { date: marketClock(region, now).date, equity: paperEquity(store.state.paper[cur]) };
+    else delete store.state.dayStart[cur];
   }
 }
 

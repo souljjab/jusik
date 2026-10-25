@@ -5,6 +5,8 @@ import {
 import { sessionBars, type MinuteSource } from "./minute";
 import type { MarketDataProvider } from "./provider";
 
+const hm = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+
 /** 전일 상한가로 볼 등락률(국내 가격제한폭 30%, 호가 단위 반올림 여유) */
 const LIMIT_UP_RATIO = 1.295;
 
@@ -45,7 +47,8 @@ export async function minuteFor(deps: { provider: MarketDataProvider; minute: Mi
     dailyAligned: isDailyAligned(daily.map((c) => c.close)),
     prevLimitUp: region === "KR" && prevPrev ? prevDay.close >= prevPrev.close * LIMIT_UP_RATIO : undefined,
     sessionOpen: INTRADAY_SESSIONS[region].open,
-    nowMinutes: sessionDate === clock.date ? clock.minutes : undefined,
+    // 장이 끝난 뒤에는 마감 시각까지로 본다('장 시작 후 경과'가 정규장 길이를 넘지 않게)
+    nowMinutes: sessionDate === clock.date ? Math.min(clock.minutes, hm(INTRADAY_SESSIONS[region].close)) : undefined,
   });
   return out;
 }

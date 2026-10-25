@@ -1,5 +1,5 @@
 // 새로 추가된 매크로 타입·상수라 상대 경로로 가져온다(통합 때 "@jusik/shared"로 바꾼다)
-import { MACRO_RELEASE_LAG_DAYS, type IsmReading, type MacroSeriesId, type MacroSeriesPoint } from "@jusik/shared";
+import { josa, MACRO_RELEASE_LAG_DAYS, type IsmReading, type MacroSeriesId, type MacroSeriesPoint } from "@jusik/shared";
 import type { Http } from "./http";
 
 /*
@@ -188,7 +188,7 @@ export function manualIsm(input: { value: number; month: string }, today: string
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return { error: `달은 YYYY-MM 형식으로 넣어 주세요(받은 값: ${month || "없음"})` };
   if (!inRange(value)) return { error: `PMI 값은 ${ISM_PARAMS.minValue}~${ISM_PARAMS.maxValue} 사이여야 해요(받은 값: ${input?.value})` };
   const r = datedReading(value, month, today);
-  if (!r) return { error: `${month}은(는) 아직 발표되지 않은 달이에요` };
+  if (!r) return { error: `${josa(month, "은/는")} 아직 발표되지 않은 달이에요` };
   return { reading: { ...r, source: "수동" } };
 }
 

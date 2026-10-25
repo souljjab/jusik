@@ -102,8 +102,11 @@ export interface SchedulerStatus {
   running: boolean;
   scanning: boolean;
   lastScanAt: string | null;
+  /** 다음 자동 스캔 시각. 자동 스캔이 꺼져 있거나 켠 시장이 모두 닫혀 있으면 null(그때는 자동으로 스캔하지 않는다) */
   nextScanAt: string | null;
   lastError: string | null;
+  /** 마지막 스캔 시도가 끝난 시각(성공·실패 모두). 실패하면 lastScanAt은 그대로이고 이것만 바뀐다. 이전 서버에는 없다 */
+  lastAttemptAt?: string | null;
   marketOpen: { KR: boolean; US: boolean };
 }
 
