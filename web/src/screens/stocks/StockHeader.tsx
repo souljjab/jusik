@@ -1,13 +1,10 @@
 import { ChevronLeft, Star } from "lucide-react";
-import { regionOf, type Market } from "@jusik/shared";
+import { josa, regionOf } from "@jusik/shared";
 import type { StockData } from "../../api";
 import { useApp } from "../../app/AppContext";
 import { href } from "../../app/router";
-import { Change, IconButton, MarketStatus, Price, srQuote, useToast } from "../../ui";
-import { objParticle } from "./stocksModel";
+import { Change, IconButton, MARKET_LABEL, MarketStatus, Price, srQuote, useToast } from "../../ui";
 import { useExtras } from "./useExtras";
-
-const MARKET_LABEL: Record<Market, string> = { KOSPI: "코스피", KOSDAQ: "코스닥", US: "미국" };
 
 /** 핸드폰·태블릿 세로: 관심종목 목록으로 돌아가기 */
 export function BackLink() {
@@ -21,7 +18,7 @@ export function BackLink() {
 
 /**
  * 가격 머리말(UI 지도서 5.2 B): 현재가를 가장 크게, 등락은 색·삼각형·부호를 함께. 장 상태와 기준 시각, 관심종목 별.
- * 핸드폰·태블릿 세로에서는 위에 '관심종목'으로 돌아가는 단추를 둔다.
+ * 핸드폰·태블릿 세로에서는 위에 '관심종목'으로 돌아가는 단추를 둔다. 등락은 컴퓨터는 가격 옆 한 줄, 핸드폰은 가격 아래(지도서 8장 시세 표시).
  */
 export function StockHeader({ data, at, back = false }: { data: StockData; at: number | null; back?: boolean }) {
   const { now, isWatched, toggleWatch } = useApp();
@@ -51,7 +48,7 @@ export function StockHeader({ data, at, back = false }: { data: StockData; at: n
             className={watched ? "stk-star on" : "stk-star"}
             onClick={() => {
               toggleWatch(info.code);
-              toast(`${info.name}${objParticle(info.name)} 관심종목${watched ? "에서 뺐어요" : "에 추가했어요"}`, "ok");
+              toast(`${josa(info.name, "을/를")} 관심종목${watched ? "에서 뺐어요" : "에 추가했어요"}`, "ok");
             }}
           >
             <Star size={20} strokeWidth={watched ? 2 : 1.5} fill={watched ? "currentColor" : "none"} aria-hidden="true" />
@@ -60,7 +57,7 @@ export function StockHeader({ data, at, back = false }: { data: StockData; at: n
       </div>
       <div className="stk-head-quote">
         <span className="sr-only">{srQuote(info.name, quote.price, quote.changePct, region)}</span>
-        <span aria-hidden="true" className="row base wrap">
+        <span aria-hidden="true" className="stk-head-px">
           <Price value={quote.price} region={region} size="lg" />
           <Change change={quote.change} pct={quote.changePct} region={region} />
         </span>

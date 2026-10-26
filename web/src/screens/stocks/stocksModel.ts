@@ -1,6 +1,6 @@
 import { defaultBuyQty } from "../../features/orderMath";
 import {
-  BUY_ACTIONS, SELL_ACTIONS, STAGE_LABEL, assessRegimeAt, candleMasterAt, candleMasterSignals, completedWeeks, dailyRegimeLookup,
+  BUY_ACTIONS, SELL_ACTIONS, assessRegimeAt, candleMasterAt, candleMasterSignals, completedWeeks, dailyRegimeLookup,
   dailySignalsFromPrep, macd, prepareDailySignals, prepareStage, relativeStrength, rsi, shortDateKo, sma, stageAt, toWeekly,
   type Analysis, type Candle, type CandleMasterResult, type DailySignal, type DayTradeCandidate, type Evidence, type EvidenceCell,
   type IntradayAssessment, type Posture, type Region, type RegimeAssessment, type StageResult,
@@ -356,8 +356,6 @@ export function analysisAt(a: Analysis, stage: StageResult, posture: RegimeAsses
   return { ...a, timing: stage, posture };
 }
 
-export const stageTitle = (r: StageResult) => STAGE_LABEL[r.stage];
-
 // ───────────────────────── 포지션 미리 계산(G·E) ─────────────────────────
 
 export interface OrderPreviewInput {
@@ -385,21 +383,29 @@ export interface OrderPreview {
   /** 주문 후 종목 비중(%) */
   weightAfter: number | null;
   stopOk: boolean;
+  /** 1회 손실 한도로는 1주도 못 사서 1주를 제안했다(1주만 사도 한도를 넘는다) */
+  overRisk: boolean;
+  /** 이미 가진 수량만으로 종목 비중 상한에 닿아 더 살 수 없다(0주) */
+  overWeight: boolean;
 }
 
 /**
  * 주문 검토 시트(features/OrderReviewSheet)와 같은 식으로 기본 수량을 낸다:
- * 1회 손실 한도(예수금 × riskPct) ÷ 주당 손절폭, 종목 비중 상한(maxWeightPct) 이내. 매도는 보유 수량.
- * 미리 보기와 시트의 수량이 같아야 사용자가 헷갈리지 않는다.
+ * 1회 손실 한도(예수금 × riskPct) ÷ 주당 손절폭, 이미 가진 수량을 더해 종목 비중 상한(maxWeightPct) 이내. 매도는 보유 수량.
+ * 미리 보기와 시트의 수량이 같아야 사용자가 헷갈리지 않는다. 한도를 넘는 경우(overRisk·overWeight)도 시트와 같이 알린다.
  */
 export function orderPreview(i: OrderPreviewInput): OrderPreview {
   const price = i.price > 0 ? i.price : 0;
   const stopOk = i.side === "SELL" || (i.stop > 0 && price > 0 && i.stop < price);
   const perShare = i.side === "BUY" && stopOk ? price - i.stop : 0;
   let qty: number;
+  let overRisk = false, overWeight = false;
   if (i.side === "SELL") qty = Math.max(0, i.held);
   else {
-    qty = defaultBuyQty({ capital: i.capital, riskPct: i.riskPct, maxWeightPct: i.maxWeightPct, price, stop: stopOk ? i.stop : 0 }).qty;
+    const d = defaultBuyQty({ capital: i.capital, riskPct: i.riskPct, maxWeightPct: i.maxWeightPct, price, stop: stopOk ? i.stop : 0, held: Math.max(0, i.held) });
+    qty = d.qty;
+    overRisk = d.overRisk;
+    overWeight = !!d.overWeight;
   }
   const loss = perShare * qty;
   const after = i.side === "BUY" ? i.held + qty : Math.max(0, i.held - qty);
@@ -411,6 +417,8 @@ export function orderPreview(i: OrderPreviewInput): OrderPreview {
     stopPct: i.stop > 0 && price > 0 ? (i.stop / price - 1) * 100 : null,
     weightAfter: i.capital > 0 && price > 0 ? ((after * price) / i.capital) * 100 : null,
     stopOk,
+    overRisk,
+    overWeight,
   };
 }
 
@@ -557,13 +565,4 @@ export function saveMemo(code: string, text: string): boolean {
   } catch {
     return false;
   }
-}
-
-// ───────────────────────── 문장 ─────────────────────────
-
-/** 목적격 조사: 받침이 있으면 '을', 없으면 '를'. 한글이 아니면 '을(를)' */
-export function objParticle(word: string): string {
-  const c = word.charCodeAt(word.length - 1) - 0xac00;
-  if (!(c >= 0 && c < 11172)) return "을(를)";
-  return c % 28 === 0 ? "를" : "을";
 }

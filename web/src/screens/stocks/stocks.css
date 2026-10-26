@@ -88,8 +88,13 @@
 .stk-head { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
 .stk-head-top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2) var(--space-3); flex-wrap: wrap; }
 .stk-head-name { display: flex; flex-direction: column; min-width: 0; }
-.stk-head-actions { display: flex; align-items: center; gap: var(--space-1); }
+/* 글자를 키우면 장 상태 알약과 별 단추가 다음 줄로 내려간다(가로로 밀려나지 않게) */
+.stk-head-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-1); min-width: 0; max-width: 100%; }
+.stk-head-actions .ui-mstatus { white-space: normal; flex-wrap: wrap; row-gap: 0; }
 .stk-head-quote .ui-change { font-size: var(--font-size-section); }
+/* 가격과 등락: 컴퓨터·태블릿은 한 줄, 핸드폰은 가격 아래 등락(지도서 8장 시세 표시) */
+.stk-head-px { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-1) var(--space-2); }
+@media (max-width: 599.98px) { .stk-head-px { flex-direction: column; align-items: flex-start; gap: 0; } }
 .stk-star.on { color: var(--color-accent); }
 .stk-back { display: inline-flex; align-items: center; gap: var(--space-1); min-height: var(--touch-min); margin-left: -6px; color: var(--color-text); text-decoration: none; font-weight: var(--font-weight-medium); align-self: flex-start; }
 

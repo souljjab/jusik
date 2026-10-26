@@ -1,10 +1,9 @@
 import { ExternalLink, RefreshCw } from "lucide-react";
 import {
-  classifyDisclosure, classifySecFiling, FLOW_RULES, secItemsOfTitle, US_FLOW_RULES,
+  classifyDisclosure, classifySecFiling, FLOW_RULES, josa, secItemsOfTitle, US_FLOW_RULES,
   type Disclosure, type InvestorFlow, type Region, type StockExtras, type UsHolders,
 } from "@jusik/shared";
 import { Button, Change, fmtDate, fmtInt, fmtNum, fmtPct, fmtPrice, Notice, NoteList, Section, SkeletonRows, Stat, Stats } from "../../ui";
-import { objParticle } from "./stocksModel";
 import { useExtras } from "./useExtras";
 
 /*
@@ -320,7 +319,7 @@ export function DisclosureTab({ code, region, sample, compact }: { code: string;
       <div className="stk-tabbody">
         <Notice
           tone="warn"
-          title={`${what}${objParticle(what)} 받지 못했어요`}
+          title={`${josa(what, "을/를")} 받지 못했어요`}
           action={
             <Button size="sm" onClick={reload} icon={<RefreshCw size={14} strokeWidth={1.5} aria-hidden="true" />}>
               다시 불러오기

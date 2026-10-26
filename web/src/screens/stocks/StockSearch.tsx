@@ -2,6 +2,7 @@ import { Search } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { isValidCode, type StockInfo } from "@jusik/shared";
 import { searchStocks } from "../../api";
+import { MARKET_LABEL } from "../../ui";
 
 /** 목록 위 종목 검색(지도서 6.1 '종목 검색'): 이름·코드·티커. ↑↓로 고르고 Enter로 연다 */
 export function StockSearch({ onPick }: { onPick: (code: string) => void }) {
@@ -81,7 +82,7 @@ export function StockSearch({ onPick }: { onPick: (code: string) => void }) {
             >
               <span className="ellipsis">{s.name}</span>
               <span className="t-cap nowrap">
-                {s.code} · {s.market}
+                {s.code} · {MARKET_LABEL[s.market] ?? s.market}
               </span>
             </li>
           ))}
