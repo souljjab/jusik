@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { regionOf, signalStats, type Evidence, type Note, type SignalStats } from "@jusik/shared";
 import { loadStock } from "../api";
 import { navigate } from "../app/router";
-import { defaultParams, runSelected } from "../screens/discover/strategyRun";
+import { defaultParams, runSelected } from "./strategyRun";
 import { Button, EvidenceList, EvidenceStripFull, NoteList, Sheet, Skeleton, Stat, Stats } from "../ui";
 
 /** 근거 전략 → 과거 성과를 낼 백테스트 전략 */

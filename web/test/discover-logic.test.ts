@@ -4,7 +4,7 @@ import {
   FILTER_CHIPS, FIXED_RULES, PREFILTER_REASON, SCAN_DEFAULTS, bindingRejection, changedKeys, draftProblems, filterCandidates, filterCounts, indexEquity, lastScanText,
   nextScanText, periodLabel, postureLine, rejectionAdvice, scanDraftOf, summarizeBacktest, topRejection,
 } from "../src/screens/discover/logic";
-import { ALL_STRATEGIES, btCostText, defaultParams, fmtYmd, hasRegimeToggle, runSelected, signalEvidenceFor, strategyMeta } from "../src/screens/discover/strategyRun";
+import { ALL_STRATEGIES, btCostText, defaultParams, fmtYmd, hasRegimeToggle, runSelected, signalEvidenceFor, strategyMeta } from "../src/features/strategyRun";
 
 const ALL_MET: Record<DayTradeCheckId, boolean | null> = { volume2x: true, breakout20: true, trend: true, closeHigh: true, momentum: true, regime: true };
 

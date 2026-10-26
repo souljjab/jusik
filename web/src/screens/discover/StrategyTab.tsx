@@ -17,7 +17,7 @@ import { MIN_SAMPLE, indexEquity, periodLabel, summarizeBacktest } from "./logic
 import {
   ALL_STRATEGIES, APP_STRATEGIES, BOOK_STRATEGIES, DEFAULT_STRATEGY_ID, btCostText, btCosts, defaultParams, fmtYmd, hasRegimeToggle, runSelected, signalEvidenceFor, strategyMeta,
   type AnyBacktest, type BtParams, type StrategyMeta,
-} from "./strategyRun";
+} from "../../features/strategyRun";
 
 const INDEX_NAME: Record<Market, string> = { KOSPI: "코스피", KOSDAQ: "코스닥", US: "S&P 500" };
 const TF: Record<StrategyMeta["timeframe"], string> = { daily: "일봉", weekly: "주봉" };

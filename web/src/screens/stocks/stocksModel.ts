@@ -434,20 +434,7 @@ export function stopFromPct(price: number, pct: number, region: Region): number 
   return Math.floor(raw / t) * t;
 }
 
-/** 가격 입력칸 표시: 국내는 정수에 천 단위 쉼표, 미국은 소수 둘째 자리까지 */
-export function fmtInputPrice(raw: string, region: Region): string {
-  if (region === "US") {
-    const [a = "", ...rest] = raw.replace(/[^\d.]/g, "").split(".");
-    return rest.length ? `${a}.${rest.join("").slice(0, 2)}` : a;
-  }
-  const digits = raw.replace(/[^\d]/g, "").replace(/^0+(?=\d)/, "");
-  return digits ? Number(digits).toLocaleString("ko-KR") : "";
-}
-/** 입력칸 글자 → 숫자(쉼표 등은 무시). 비었거나 읽을 수 없으면 0 */
-export const parseInputPrice = (s: string) => {
-  const n = Number(s.replace(/[^\d.]/g, ""));
-  return Number.isFinite(n) ? n : 0;
-};
+export { fmtInputPrice, parseInputPrice } from "../../ui/format";
 
 /** 손절 슬라이더 범위(지도서 6.1 E): −15%~−1% */
 export const STOP_SLIDER = { min: -15, max: -1, step: 0.1 } as const;

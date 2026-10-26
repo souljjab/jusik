@@ -6,7 +6,7 @@ import {
 } from "@jusik/shared";
 import { addJournal, checkJournal, type JournalInput } from "../api";
 import { useApp } from "../app/AppContext";
-import { fmtInputPrice, parseInputPrice } from "../screens/stocks/stocksModel";
+import { fmtInputPrice, parseInputPrice } from "../ui/format";
 import {
   Button, Chip, errorText, EvidenceStrip, Field, fmtPct, fmtPnl, fmtRatio, meterState, NoteList, Notice, NumberStepper, RiskMeter, Sheet, useBreakpoint, useToast,
 } from "../ui";

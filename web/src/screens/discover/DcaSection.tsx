@@ -4,7 +4,7 @@ import { useChartColors } from "../../theme";
 import { Change, Chip, Field, NoteList, Notice, RuleTag, Section, Stat, Stats, Toggle, arrowOf, fmtInt, fmtMoney, fmtNum, fmtPct, fmtPnl, fmtPrice } from "../../ui";
 import { ChartLegend, EquityChart, type ChartLine } from "./EquityChart";
 import { periodLabel } from "./logic";
-import { btCostText, btCosts, btDefaultCash, fmtYmd } from "./strategyRun";
+import { btCostText, btCosts, btDefaultCash, fmtYmd } from "../../features/strategyRun";
 
 const RULE = "M3-19 헬로마녀";
 
