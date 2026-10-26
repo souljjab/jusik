@@ -1,5 +1,5 @@
 import {
-  DEFAULT_BACKTEST, DEFAULT_RUN, PAPER_COSTS, STRATEGIES, candleMasterEvidence, dayTradeEvidence, getStrategy, runBacktest, runStageBacktest, runStrategy, weinsteinEvidence, weinsteinStrategy,
+  DEFAULT_BACKTEST, DEFAULT_RUN, PAPER_COSTS, STRATEGIES, candleMasterEvidence, dayTradeEvidence, getStrategy, runBacktest, runStageBacktest, runStrategy, shortDateKo, weinsteinEvidence, weinsteinStrategy,
   type Analysis, type BacktestResult, type Candle, type DayTradeCandidate, type Evidence, type Region, type StockInfo, type Strategy, type StrategyTrade,
 } from "@jusik/shared";
 
@@ -107,8 +107,18 @@ export function runSelected(id: string, candles: Candle[], index: Candle[] | nul
 /** 전략에 지수 국면 거르기 설정이 있는가 */
 export const hasRegimeToggle = (id: string) => id === "weinstein" || id === "app-stage";
 
-/** 표의 날짜: 여러 해에 걸치므로 연도까지 "2024.03.05" */
-export const fmtYmd = (d: string | null | undefined) => (d ? d.slice(0, 10).replace(/-/g, ".") : "-");
+/** 오늘(한국 날짜 "YYYY-MM-DD") */
+const todayKst = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+
+/**
+ * 표의 날짜(지도서 3.2 월.일(요일)): 올해면 "3.05(목)", 여러 해에 걸친 백테스트라 다른 해면 연도 두 자리를 앞에 "24.3.05(화)".
+ * 종목 화면의 신호 날짜(stocksModel.markDate)와 같은 규칙이다.
+ */
+export function fmtYmd(d: string | null | undefined, today: string = todayKst()): string {
+  if (!d) return "-";
+  const ymd = d.slice(0, 10);
+  return ymd.slice(0, 4) === today.slice(0, 4) ? shortDateKo(ymd) : `${ymd.slice(2, 4)}.${shortDateKo(ymd)}`;
+}
 
 /**
  * 고른 전략으로 본 이 종목의 지금 신호 근거(근거 스트립). 근거 칸을 정의한 전략만:

@@ -89,7 +89,7 @@ describe("조건 충족 0개: 가장 많이 걸러낸 조건(지도서 9.2)", ()
     expect(a.fix?.patch).toEqual({ minScore: 45 });
     expect(rejectionAdvice("점수 미달(48)", SCAN_DEFAULTS).fix?.patch).toEqual({ minScore: 45 });
     const tv = rejectionAdvice(PREFILTER_REASON, SCAN_DEFAULTS);
-    expect(tv.fix?.patch).toEqual({ minTradeValueKRW: 5e8, minTradeValueUSD: 3e6 });
+    expect(tv.fix?.patch).toEqual({ minTradeValueKRW: 5e8, minTradeValueUSD: 2.5e6 });
     expect(rejectionAdvice(PREFILTER_REASON, { ...SCAN_DEFAULTS, minTradeValueKRW: 0, minTradeValueUSD: 0 }).fix).toBeUndefined();
     const rsi = rejectionAdvice("RSI 과열", SCAN_DEFAULTS);
     expect(rsi.fixed).toBe(true);
@@ -166,7 +166,9 @@ describe("전략 실행", () => {
     expect(runSelected("app-score", c.slice(0, 20), null, info, "KR", defaultParams("KR"))).toBeNull();
   });
   it("표 날짜와 비용 문구", () => {
-    expect(fmtYmd("2024-03-05")).toBe("2024.03.05");
+    // 지도서 3.2 월.일(요일). 다른 해면 연도 두 자리를 앞에 붙인다
+    expect(fmtYmd("2024-03-05", "2026-10-26")).toBe("24.3.05(화)");
+    expect(fmtYmd("2026-10-23", "2026-10-26")).toBe("10.23(금)");
     expect(fmtYmd(null)).toBe("-");
     expect(btCostText("KR")).toBe("수수료 0.015%(매수·매도) · 매도세 0.18% · 슬리피지 0.1%");
     expect(btCostText("KR", false)).not.toMatch(/슬리피지/);

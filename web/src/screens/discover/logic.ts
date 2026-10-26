@@ -1,9 +1,9 @@
 import {
   DEFAULT_SETTINGS,
-  DAYTRADE_BY_REGION, DAYTRADE_CELLS, POSTURE_LABEL, dayTradeEvidence, expectancy, regionOf,
-  type BacktestResult, type Candle, type DayTradeCandidate, type DayTradeCheckId, type EquityPoint, type Market, type Region, type SchedulerStatus, type Settings,
+  DAYTRADE_BY_REGION, DAYTRADE_CELLS, POSTURE_LABEL, dayTradeEvidence, expectancy, josa, regionOf,
+  type BacktestResult, type Candle, type DayTradeCandidate, type DayTradeCheckId, type EquityPoint, type Market, type Region, type ScanResult, type SchedulerStatus, type Settings,
 } from "@jusik/shared";
-import { fmtBig, fmtTime, fmtWhen } from "../../ui/format";
+import { MARKET_LABEL, fmtBig, fmtInt, fmtTime, fmtWhen } from "../../ui/format";
 
 /*
  * 발굴 화면의 순수 계산(화면과 따로 시험한다): 필터 칩, 스캔 상태 문장, 탈락 사유 → 완화 제안(지도서 9.2),
@@ -46,8 +46,6 @@ export function filterCounts(list: DayTradeCandidate[]): Record<FilterId, number
 
 // ───────────────────────── 스캔 상태 문장 ─────────────────────────
 
-export const MARKET_NAME: Record<Market, string> = { KOSPI: "코스피", KOSDAQ: "코스닥", US: "미국" };
-
 /** "마지막 스캔 15:12 기준"(오늘이 아니면 날짜도) */
 export function lastScanText(at: string | null | undefined, now: Date): string {
   return at ? `마지막 스캔 ${fmtWhen(at, now)} 기준` : "아직 스캔하지 않았어요";
@@ -62,6 +60,38 @@ export function nextScanText(sch: Pick<SchedulerStatus, "running" | "nextScanAt"
   const open = (Object.keys(s.markets) as Market[]).some((m) => s.markets[m] && sch.marketOpen[regionOf(m)]);
   if (!open) return `장이 열리면 ${s.scanIntervalMin}분마다 자동으로 찾아요`;
   return sch.nextScanAt ? `다음 스캔 ${fmtTime(sch.nextScanAt)}` : `${s.scanIntervalMin}분마다 자동으로 찾아요`;
+}
+
+// ───────────────────────── 지금 스캔: 끝났는지와 결과 문장 ─────────────────────────
+
+/** 스캔을 시작하기 직전의 스케줄러 표시(끝났는지 비교할 기준) */
+export type ScanMark = Pick<SchedulerStatus, "lastScanAt" | "lastAttemptAt">;
+
+export const scanMarkOf = (s: Partial<ScanMark> | null | undefined): ScanMark => ({ lastScanAt: s?.lastScanAt ?? null, lastAttemptAt: s?.lastAttemptAt ?? null });
+
+/**
+ * 시작한 스캔이 끝났는가: 스캔 중이 아니고, 성공 시각(lastScanAt)이나 시도 시각(lastAttemptAt)이 바뀌었으면 끝났다.
+ * 실패한 스캔은 lastScanAt을 그대로 두고 lastAttemptAt만 바꾸므로 둘 다 본다(이전 서버에는 lastAttemptAt이 없다).
+ */
+export function scanFinished(before: ScanMark, s: Pick<SchedulerStatus, "scanning" | "lastScanAt"> & Partial<Pick<SchedulerStatus, "lastAttemptAt">>): boolean {
+  if (s.scanning) return false;
+  return (s.lastScanAt ?? null) !== before.lastScanAt || (s.lastAttemptAt != null && s.lastAttemptAt !== before.lastAttemptAt);
+}
+
+/**
+ * 서버 스캔 오류(scheduler.lastError) → 화면 문장. 서버가 보낸 한국어 문장은 그대로 쓰고, 영어 예외 메시지는 그대로 보이지 않고
+ * 무엇이 일어났고 어디서 확인하는지로 바꾼다(지도서 9.2). 서버 쪽 오류라 브라우저 연결 문장(errorText)은 쓰지 않는다.
+ */
+export function scanErrorText(msg: string | null | undefined): string {
+  const m = msg?.trim() ?? "";
+  if (m && /[가-힣]/.test(m)) return /[.!?]$/.test(m) ? m : `${m}.`;
+  return "서버가 스캔하다 오류가 났어요. 자세한 내용은 서버 기록에 있어요.";
+}
+
+/** 끝난 스캔의 결과 문장: 실패면 무엇이 일어났고 어떻게 하는지, 성공이면 조건 충족 수 */
+export function scanDoneToast(s: Pick<SchedulerStatus, "lastError">, candidates: number): { text: string; tone: "ok" | "warn" } {
+  if (s.lastError) return { text: `스캔을 마치지 못했어요. ${scanErrorText(s.lastError)} 잠시 뒤 다시 스캔해 보세요.`, tone: "warn" };
+  return { text: `스캔을 마쳤어요. 조건 충족 ${candidates}종목이에요.`, tone: "ok" };
 }
 
 // ───────────────────────── 스크리너: 조건 초안 ─────────────────────────
@@ -98,6 +128,17 @@ export function scanDraftOf(s: Partial<Settings>): ScanDraft {
 /** 바뀐 조건 이름(저장 버튼·안내 문장용) */
 export function changedKeys(saved: ScanDraft, draft: ScanDraft): ScanKey[] {
   return SCAN_KEYS.filter((k) => (k === "markets" ? (["KOSPI", "KOSDAQ", "US"] as const).some((m) => saved.markets[m] !== draft.markets[m]) : saved[k] !== draft[k]));
+}
+
+/** 조건 묶음 한 줄 요약(내 전략 목록): "최소 점수 55점 · 국내 100억 · 미국 $5.0M · 코스피·코스닥" */
+export function draftSummary(d: ScanDraft): string {
+  const markets = (["KOSPI", "KOSDAQ", "US"] as const).filter((m) => d.markets[m]).map((m) => MARKET_LABEL[m]);
+  return [
+    `최소 점수 ${d.minScore}점`,
+    `국내 ${fmtBig(d.minTradeValueKRW, "KR")}`,
+    `미국 ${fmtBig(d.minTradeValueUSD, "US")}`,
+    markets.length ? markets.join("·") : "대상 시장 없음",
+  ].join(" · ");
 }
 
 /** 범위 밖 값 안내(서버가 범위 안으로 맞추지만 미리 알린다). 시장을 하나도 안 켜면 스캔할 것이 없다 */
@@ -161,12 +202,23 @@ export interface RejectionAdvice {
 const krw = (n: number) => fmtBig(n, "KR");
 const usd = (n: number) => fmtBig(n, "US");
 
+/**
+ * 최소 거래대금 절반: 정확히 반으로 나눈 뒤 알기 쉬운 단위(국내 1천만 원·미국 10만 달러)로 내림한다.
+ * 반올림하면 1억·$1M에서 그대로 남아 '절반으로' 버튼이 아무것도 바꾸지 못한다.
+ */
+export function halfTradeValue(d: Pick<ScanDraft, "minTradeValueKRW" | "minTradeValueUSD">): { minTradeValueKRW: number; minTradeValueUSD: number } {
+  return {
+    minTradeValueKRW: Math.max(0, Math.floor(d.minTradeValueKRW / 2 / 1e7) * 1e7),
+    minTradeValueUSD: Math.max(0, Math.floor(d.minTradeValueUSD / 2 / 1e5) * 1e5),
+  };
+}
+
 /** 탈락 사유(서버 scanner.ts·scoreDayTrade 문구) → 조건 이름과 완화 제안 */
 export function rejectionAdvice(reason: string, d: ScanDraft): RejectionAdvice {
   const r = reason.replace(/\(\d+\)$/, "");
   const lowerScore = Math.max(0, Math.min(d.minScore - 10, 45));
-  const lowerKrw = Math.max(0, Math.round(d.minTradeValueKRW / 2 / 1e8) * 1e8);
-  const lowerUsd = Math.max(0, Math.round(d.minTradeValueUSD / 2 / 1e6) * 1e6);
+  const { minTradeValueKRW: lowerKrw, minTradeValueUSD: lowerUsd } = halfTradeValue(d);
+  const canHalve = lowerKrw < d.minTradeValueKRW || lowerUsd < d.minTradeValueUSD;
   switch (r) {
     case "점수 미달":
       return d.minScore > 0
@@ -177,8 +229,10 @@ export function rejectionAdvice(reason: string, d: ScanDraft): RejectionAdvice {
       return {
         condition: r === "거래대금 부족" ? `최소 거래대금(국내 ${krw(d.minTradeValueKRW)} · 미국 ${usd(d.minTradeValueUSD)})` : "사전 필터(주가·등락률·거래대금)",
         fixed: false,
-        text: `등락률 2~20%와 최소 주가는 고정 규칙이라, 바꿀 수 있는 건 최소 거래대금이에요. 국내 ${krw(lowerKrw)} · 미국 ${usd(lowerUsd)}로 낮추거나 장중에 다시 스캔해 보세요.`,
-        ...(d.minTradeValueKRW > 0 || d.minTradeValueUSD > 0 ? { fix: { label: "최소 거래대금 절반으로", patch: { minTradeValueKRW: lowerKrw, minTradeValueUSD: lowerUsd } } } : {}),
+        text: canHalve
+          ? `등락률 2~20%와 최소 주가는 고정 규칙이라, 바꿀 수 있는 건 최소 거래대금이에요. 국내 ${krw(lowerKrw)} · 미국 ${josa(usd(lowerUsd), "으로/로")} 낮추거나 장중에 다시 스캔해 보세요.`
+          : "등락률 2~20%와 최소 주가는 고정 규칙이고, 최소 거래대금은 이미 가장 낮아요. 장중에 다시 스캔해 보세요.",
+        ...(canHalve ? { fix: { label: "최소 거래대금 절반으로", patch: { minTradeValueKRW: lowerKrw, minTradeValueUSD: lowerUsd } } } : {}),
       };
     case "RSI 과열":
       return { condition: "RSI 80 이하(고정 규칙)", fixed: true, text: "과열 종목을 거르는 고정 규칙이라 바꿀 수 없어요. 과열이 풀린 뒤 다시 스캔해 보세요." };
@@ -199,6 +253,17 @@ export function rejectionAdvice(reason: string, d: ScanDraft): RejectionAdvice {
     default:
       return { condition: r, fixed: true, text: "다음 스캔에서 다시 확인해 보세요." };
   }
+}
+
+/**
+ * 조건 충족 0개일 때의 사실 문장(지도서 9.2): 가장 많이 걸러낸 조건과 그 종목 수. 홈의 빈 화면도 같은 문장을 쓴다.
+ * 완화 버튼은 스크리너(ZeroResult)에 있으니 그리로 안내한다.
+ */
+export function zeroScanSentence(scan: Pick<ScanResult, "rejected" | "scannedCount">, settings: Partial<Settings>): string {
+  const top = bindingRejection(scan.rejected, scan.scannedCount);
+  return top
+    ? `모든 조건을 만족하는 종목이 없어요. 가장 많이 걸러낸 조건은 ${rejectionAdvice(top.reason, scanDraftOf(settings)).condition}(${fmtInt(top.count)}종목)이에요. 스크리너에서 완화 제안을 볼 수 있어요.`
+    : "모든 조건을 만족하는 종목이 없어요. 장중에 다시 스캔해 보세요.";
 }
 
 // ───────────────────────── 백테스트 요약 ─────────────────────────
@@ -279,5 +344,5 @@ export const MIN_SAMPLE = 30;
 
 /** 국면 한 줄: "코스피 중립 · 상한 50%" */
 export function postureLine(market: Market, p: { posture: keyof typeof POSTURE_LABEL; exposureCapPct: number } | null | undefined): string {
-  return p ? `${MARKET_NAME[market]} ${POSTURE_LABEL[p.posture]} · 상한 ${p.exposureCapPct}%` : `${MARKET_NAME[market]} 판정 불가`;
+  return p ? `${MARKET_LABEL[market]} ${POSTURE_LABEL[p.posture]} · 상한 ${p.exposureCapPct}%` : `${MARKET_LABEL[market]} 판정 불가`;
 }
