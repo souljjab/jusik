@@ -1,25 +1,41 @@
 import {
   currencyOfRegion, dayTradeEvidence, DAYTRADE_CELLS, macd, MACRO_PARAMS, regionOf, sma, toWeekly,
   type BreadthSummary, type Candle, type Currency, type DayTradeCandidate, type Evidence, type MacroSnapshot, type Market, type PaperPosition,
-  type RegimeAssessment, type Region, type ScanResult, type Settings,
+  type RegimeAssessment, type Region, type ScanResult, type SchedulerStatus, type Settings,
 } from "@jusik/shared";
+import { nearStopSentence, type NearStop } from "../../features/risk/riskSummary";
+import { fmtDate, fmtIndex, fmtInt, MARKET_LABEL } from "../../ui/format";
+import { bindingRejection, nextScanText, rejectionAdvice, scanDraftOf } from "../discover/logic";
 
 /*
  * 홈(UI 지도서 5.1·7.1)과 시장 국면 상세(부록 A)가 쓰는 순수 계산. 화면 없이 시험할 수 있게 여기에 모았다.
+ * 시장 이름은 ui/format의 MARKET_LABEL 하나만 쓴다. 빼기 기호는 ASCII '-'(fmtPct와 같다).
  */
 
 export const MARKET_ORDER: Market[] = ["KOSPI", "KOSDAQ", "US"];
-export const MARKET_LABEL: Record<Market, string> = { KOSPI: "코스피", KOSDAQ: "코스닥", US: "미국" };
 /** 지수 이름(미국은 S&P 500 지수를 쓴다) */
 export const INDEX_LABEL: Record<Market, string> = { KOSPI: "코스피", KOSDAQ: "코스닥", US: "S&P 500" };
 
 export const signed = (n: number) => `${n > 0 ? "+" : ""}${n}`;
+/** 부호와 소수 d자리: +0.62 · -0.30 · 0.00 */
+export function signedFixed(n: number, d: number): string {
+  const r = Number(n.toFixed(d));
+  return `${r > 0 ? "+" : r < 0 ? "-" : ""}${Math.abs(r).toFixed(d)}`;
+}
+/** "2026-09" 또는 "2026-09-30" → "2026년 9월"(연도가 바뀌는 월간·분기 자료라 연도를 함께 쓴다) */
+export const monthKo = (ym: string) => `${ym.slice(0, 4)}년 ${Number(ym.slice(5, 7))}월`;
 
-/** 화면 낭독용 지수 문장: "코스피 2,731.52, 0.84% 상승" */
-export function srIndex(name: string, close: number, pct: number | null | undefined): string {
-  const v = close.toLocaleString("ko-KR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  if (pct == null || !Number.isFinite(pct)) return `${name} ${v}`;
-  return `${name} ${v}, ${Math.abs(pct).toFixed(2)}% ${pct > 0 ? "상승" : pct < 0 ? "하락" : "보합"}`;
+/** 경로 질의의 시장(?market=KOSDAQ — 국면 알림이 가리키는 시장). 모르는 값이면 null */
+export function marketFromQuery(q: string | null | undefined): Market | null {
+  return MARKET_ORDER.includes(q as Market) ? (q as Market) : null;
+}
+
+/** 화면 낭독용 지수 문장: "코스피 2,731.52, 0.84% 상승". 마지막 일봉이 오늘이 아니면 "10.23(금) 종가"를 붙인다 */
+export function srIndex(name: string, close: number, pct: number | null | undefined, closeDate?: string | null): string {
+  const v = fmtIndex(close);
+  const day = closeDate ? `, ${fmtDate(closeDate)} 종가` : "";
+  if (pct == null || !Number.isFinite(pct)) return `${name} ${v}${day}`;
+  return `${name} ${v}, ${Math.abs(pct).toFixed(2)}% ${pct > 0 ? "상승" : pct < 0 ? "하락" : "보합"}${day}`;
 }
 
 /** 설정에서 켠 시장(순서 고정). 하나도 없으면 마지막 스캔 시장, 그것도 없으면 코스피 */
@@ -154,8 +170,9 @@ export function seriesSummary(name: string, s: IndexSeries, period: ChartPeriod)
   const a = s.close[0], z = s.close.at(-1), m = s.ma.at(-1);
   if (!a || !z) return `${name} ${PERIOD_NAME[period]} 자료가 없어요`;
   const ch = ((z.value / a.value - 1) * 100).toFixed(1);
-  const pos = m ? (z.value >= m.value ? `${s.maLabel} 위` : `${s.maLabel} 아래`) : "";
-  return `${name} ${PERIOD_NAME[period]}, 기간 중 ${Number(ch) > 0 ? "+" : ""}${ch}%, 마지막 종가는 ${pos}`.replace(/, $/, "");
+  const head = `${name} ${PERIOD_NAME[period]}, 기간 중 ${Number(ch) > 0 ? "+" : ""}${ch}%`;
+  // 기준선이 아직 없으면(봉이 이동평균 기간보다 적으면) 위·아래 문장을 붙이지 않는다
+  return m ? `${head}, 마지막 종가는 ${s.maLabel} ${z.value >= m.value ? "위" : "아래"}` : head;
 }
 
 // ───────────────────────── 후보 필터 칩 ─────────────────────────
@@ -205,11 +222,11 @@ export interface ScorePart {
 export function scoreParts(b: Partial<RegimeAssessment["breakdown"]>): ScorePart[] {
   const v = (x: number | undefined) => (typeof x === "number" && Number.isFinite(x) ? x : 0);
   return [
-    { key: "stage", label: "주봉 30주선 단계", value: v(b.stage), min: -2, max: 2, rule: "M1-01·02 와인스타인", how: "지수가 상승하는 30주선 위면 +2, 30주선 아래 하락이면 −2" },
-    { key: "macd", label: "지수 MACD", value: v(b.macd), min: -1, max: 1, rule: "M1-03 강동진", how: "MACD가 시그널 위면 +1, 아래면 −1" },
-    { key: "rsi", label: "지수 RSI", value: v(b.rsi), min: -1, max: 1, rule: "M1-08·2.4 강영현", how: "과매도(30 아래)에서 회복하면 +1, 과열(75 위)이면 −1" },
-    { key: "macro", label: "매크로", value: v(b.macro), min: -2, max: 0, rule: "2.3 강영현", how: "부정 신호 1개당 −1, 최대 −2" },
-    { key: "breadth", label: "시장 폭", value: v(b.breadth), min: -1, max: 1, rule: "2.2 와인스타인", how: "A/D선 괴리·MI 교차·신고가-신저가를 더해 −1~+1" },
+    { key: "stage", label: "주봉 30주선 단계", value: v(b.stage), min: -2, max: 2, rule: "M1-01·02 와인스타인", how: "지수가 상승하는 30주선 위면 +2, 30주선 아래 하락이면 -2" },
+    { key: "macd", label: "지수 MACD", value: v(b.macd), min: -1, max: 1, rule: "M1-03 강동진", how: "MACD가 시그널 위면 +1, 아래면 -1" },
+    { key: "rsi", label: "지수 RSI", value: v(b.rsi), min: -1, max: 1, rule: "M1-08·2.4 강영현", how: "과매도(30 아래)에서 회복하면 +1, 과열(75 위)이면 -1" },
+    { key: "macro", label: "매크로", value: v(b.macro), min: -2, max: 0, rule: "2.3 강영현", how: "부정 신호 1개당 -1, 최대 -2" },
+    { key: "breadth", label: "시장 폭", value: v(b.breadth), min: -1, max: 1, rule: "2.2 와인스타인", how: "A/D선 괴리·MI 교차·신고가-신저가를 더해 -1~+1" },
   ];
 }
 
@@ -246,9 +263,9 @@ export interface MacroItem {
   tag?: string;
 }
 
-const sgn = (n: number, d: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(n).toFixed(d)}`;
+const sgn = signedFixed;
 const quarterOf = (date: string) => `${date.slice(0, 4)}년 ${Math.floor((Number(date.slice(5, 7)) - 1) / 3) + 1}분기`;
-const obs = (d: string | undefined) => (d ? `관측 ${d}` : "데이터 없음");
+const obs = (d: string | undefined) => (d ? `관측 ${fmtDate(d)}` : "데이터 없음");
 
 /** 매크로 스냅숏 → 화면 칸(값이 없으면 '-'). warn은 경고 기준을 넘었다는 뜻 */
 export function macroItems(s: MacroSnapshot, region?: Region): MacroItem[] {
@@ -256,7 +273,7 @@ export function macroItems(s: MacroSnapshot, region?: Region): MacroItem[] {
   const out: MacroItem[] = [];
   const sp = s.yieldSpread;
   out.push({
-    label: "장단기 금리차(10년−2년)", value: sp ? `${sgn(sp.value, 2)}%p${sp.value < P.yieldSpreadInverted ? " 역전" : ""}` : "-",
+    label: "장단기 금리차(10년-2년)", value: sp ? `${sgn(sp.value, 2)}%p${sp.value < P.yieldSpreadInverted ? " 역전" : ""}` : "-",
     when: obs(sp?.date), warn: !!sp && sp.value < P.yieldSpreadInverted, basis: "0 아래면 수익률곡선 역전(M1-06)",
   });
   const vix = s.vix;
@@ -274,8 +291,8 @@ export function macroItems(s: MacroSnapshot, region?: Region): MacroItem[] {
   });
   const ex = s.excessLiquidity;
   out.push({
-    label: "초과 유동성(M2−GDP 증가율)", value: ex != null ? `${sgn(ex, 1)}%p` : "-",
-    when: s.m2YoY && s.gdpYoY ? `M2 ${s.m2YoY.date.slice(0, 7)} · GDP ${quarterOf(s.gdpYoY.date)}` : "데이터 없음",
+    label: "초과 유동성(M2-GDP 증가율)", value: ex != null ? `${sgn(ex, 1)}%p` : "-",
+    when: s.m2YoY && s.gdpYoY ? `M2 ${monthKo(s.m2YoY.date)} · GDP ${quarterOf(s.gdpYoY.date)}` : "데이터 없음",
     warn: ex != null && ex < P.excessLiquidityNegative, basis: "0 아래면 유동성 축소(M1-07)",
   });
   const krw = s.krwPerUsd, ch = s.krwChange20dPct;
@@ -287,7 +304,7 @@ export function macroItems(s: MacroSnapshot, region?: Region): MacroItem[] {
   const ism = s.ism, proxy = s.ismProxy;
   if (ism) {
     out.push({
-      label: "ISM 제조업지수", value: `${ism.value.toFixed(1)} ${ism.value < P.ismLine ? "수축" : "확장"}`, when: `${ism.month}분 · 발표 ${ism.date}`,
+      label: "ISM 제조업지수", value: `${ism.value.toFixed(1)} ${ism.value < P.ismLine ? "수축" : "확장"}`, when: `${monthKo(ism.month)}분 · 발표 ${fmtDate(ism.date)}`,
       warn: ism.value < P.ismLine, tag: ism.source === "수동" ? "직접 입력" : "ISM 발표", basis: `${P.ismLine} 아래면 미국 제조업 수축(2.3 강영현·강동진)`,
     });
   } else if (proxy?.philly || proxy?.empire) {
@@ -314,4 +331,49 @@ export function unrealized(positions: PaperPosition[]): { pnl: number; pct: numb
     cost += p.cost > 0 ? p.cost : p.entryPrice * p.qty;
   }
   return { pnl: value - cost, pct: cost > 0 ? (value / cost - 1) * 100 : null, value };
+}
+
+/** 리스크 '손절가' 머리 문장: 손절가 아래로 내려간 종목을 따로 센다("손절가 아래 1종목 · 근접 2종목") */
+export function nearStopHead(list: Pick<NearStop, "breached">[]): string {
+  const below = list.filter((x) => x.breached).length;
+  const near = list.length - below;
+  if (!list.length) return "손절가 근접 종목 없음";
+  if (!below) return `손절가 근접 ${near}종목`;
+  return near ? `손절가 아래 ${below}종목 · 근접 ${near}종목` : `손절가 아래 ${below}종목`;
+}
+
+// ───────────────────────── 스캔 안내 문장 ─────────────────────────
+
+/**
+ * 자동 스캔 안내 한 문장. 발굴과 같은 규칙(discover/logic nextScanText): 서버 자동 스캔이 켜져 있고 켠 시장이 열려 있을 때만
+ * 다음 시각을 말하고, 그 밖에는 '꺼져 있어요' / '장이 열리면 N분마다'라고 사실대로 쓴다
+ */
+export function scheduleSentence(sch: Pick<SchedulerStatus, "running" | "nextScanAt" | "marketOpen">, s: Pick<Settings, "markets" | "scanIntervalMin">): string {
+  return `${nextScanText(sch, s)}.`;
+}
+
+/**
+ * 후보 0개일 때의 사실 문장(지도서 9.2 '조건 충족 0개'): 가장 많이 걸러낸 조건과 몇 종목을 걸렀는지.
+ * 조건 이름과 완화 제안은 발굴 스크리너와 같은 계산(bindingRejection·rejectionAdvice)을 쓴다
+ */
+export function zeroCandidatesText(scan: Pick<ScanResult, "rejected" | "scannedCount" | "universeCount">, settings: Partial<Settings>): string {
+  const top = bindingRejection(scan.rejected, scan.scannedCount);
+  if (top) {
+    const cond = rejectionAdvice(top.reason, scanDraftOf(settings)).condition;
+    return `가장 많이 걸러낸 조건은 ${cond}(${fmtInt(top.count)}종목)이에요. 스크리너에서 완화 제안을 볼 수 있어요.`;
+  }
+  return scan.universeCount === 0 ? "후보 목록을 받지 못했어요. 대상 시장과 서버 연결을 확인해 주세요." : "장중에 다시 스캔해 보세요.";
+}
+
+/**
+ * 핸드폰 '내 포지션' 경고 문장: 가장 급한 종목 하나(이미 손절가 아래면 '손절가보다 44.4% 아래예요')와 나머지 수.
+ * 손절가 아래인 종목을 '0% 남았어요'로 줄여 말하지 않는다
+ */
+export function nearStopNotice(list: Pick<NearStop, "position" | "leftPct" | "breached">[]): string {
+  if (!list.length) return "";
+  const [first, ...rest] = list;
+  const head = `${nearStopSentence(first!)}.`;
+  if (!rest.length) return head;
+  const below = rest.filter((x) => x.breached).length;
+  return `${head} 다른 ${rest.length}종목도 ${below ? "손절가 아래이거나 가까이 있어요" : "손절가 가까이 있어요"}.`;
 }

@@ -1,14 +1,15 @@
 import { ChevronRight, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { type Market, type ServerState } from "@jusik/shared";
+import { marketSession, type Market, type ServerState } from "@jusik/shared";
+import type { IndexQuote } from "../../api";
 import { useApp } from "../../app/AppContext";
-import { Link, useRoute } from "../../app/router";
+import { Link, navigate, useRoute } from "../../app/router";
 import { CandidateList } from "../../features/candidates/CandidateList";
 import { riskSummary } from "../../features/risk/riskSummary";
-import { atLeast, Button, Change, EmptyState, fmtAsOf, fmtNum, fmtRatio, MarketStatus, Notice, RiskMeter, Section, Segmented, Skeleton, SkeletonRows, useBreakpoint, type Breakpoint } from "../../ui";
+import { atLeast, Button, Change, EmptyState, fmtDate, fmtIndex, fmtRatio, MarketStatus, Notice, ProgressLine, RiskMeter, Section, Segmented, Skeleton, useBreakpoint, useSlow, type Breakpoint } from "../../ui";
 import { AlertsBlock } from "./AlertsBlock";
-import { CandidatesBlock, ScanButton, ScanMeta } from "./CandidatesBlock";
-import { currenciesOf, enabledMarkets, INDEX_LABEL, MARKET_ORDER, PERIOD_LABEL, PERIOD_NAME, pickMarket, srIndex, unrealized, type ChartPeriod } from "./homeModel";
+import { CandidatesBlock, NoCandidates, ScanButton, ScanMeta } from "./CandidatesBlock";
+import { currenciesOf, enabledMarkets, INDEX_LABEL, marketFromQuery, MARKET_ORDER, nearStopNotice, PERIOD_LABEL, PERIOD_NAME, pickMarket, scheduleSentence, srIndex, unrealized, type ChartPeriod } from "./homeModel";
 import { IndexChart } from "./LazyCharts";
 import { appliedCap, postureStateOf, RegimeBlock } from "./RegimeBlock";
 import { RegimeDetail } from "./RegimeDetail";
@@ -18,8 +19,8 @@ import "./home.css";
 
 /*
  * 홈(UI 지도서 2장: M1 시장 국면 + M4 요약, 5.1 그림 4, 7.1 그림 9 왼쪽)과 시장 국면 상세(/?view=regime).
- *  - 컴퓨터(1200 이상): 시장 국면 · 지수 차트 · 리스크 / 오늘의 후보 · 알림
- *  - 태블릿: 국면과 리스크를 위에, 그 아래 차트·후보·알림
+ *  - 컴퓨터(1200 이상): 시장 국면 · 지수 차트와 주요 지수 · 리스크 / 오늘의 후보 · 알림
+ *  - 태블릿: 국면과 리스크를 위에, 그 아래 차트·주요 지수·후보·알림
  *  - 핸드폰: 시장 상태, 국면, 주요 지수, 내 포지션, 오늘의 신호
  */
 
@@ -45,9 +46,15 @@ function isTyping(t: EventTarget | null): boolean {
   return !!el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName));
 }
 
-/** 주요 지수(핸드폰·좁은 태블릿 — 상단 바에 지수가 없는 너비) */
+/** 지수의 마지막 일봉이 그 시장의 오늘이 아니면 그 날짜(오래된 값을 오늘 값으로 착각하지 않게 '10.23(금) 종가'로 쓴다) */
+function closeDateOf(x: IndexQuote, now: Date): string | null {
+  const day = x.date.slice(0, 10);
+  return day !== marketSession(x.market === "US" ? "US" : "KR", now).date ? day : null;
+}
+
+/** 주요 지수(지도서 2장 홈: 시장 국면·주요 지수·내 포지션·오늘의 신호). 상단 바는 너비에 따라 일부만 보여 주므로 홈에는 늘 셋 다 둔다 */
 function IndicesRow() {
-  const { indices, indicesAt } = useApp();
+  const { indices, now } = useApp();
   if (!indices.length)
     return (
       <div className="home-indices" aria-hidden="true">
@@ -62,22 +69,26 @@ function IndicesRow() {
     );
   const order = [...indices].sort((a, b) => MARKET_ORDER.indexOf(a.market) - MARKET_ORDER.indexOf(b.market));
   return (
-    <section aria-label={`주요 지수${indicesAt ? `, ${fmtAsOf(indicesAt)}` : ""}`}>
+    <section aria-label="주요 지수">
       <ul className="home-indices">
-        {order.map((x) => (
-          <li key={x.market} className="home-index">
-            <span className="sr-only">{srIndex(INDEX_LABEL[x.market], x.close, x.changePct)}</span>
-            <span className="t-cap" aria-hidden="true">
-              {INDEX_LABEL[x.market]}
-            </span>
-            <span className="home-index-v num" aria-hidden="true">
-              {fmtNum(x.close, 2)}
-            </span>
-            <span aria-hidden="true">
-              <Change pct={x.changePct} showAbs={false} className="t-cap" />
-            </span>
-          </li>
-        ))}
+        {order.map((x) => {
+          const day = closeDateOf(x, now);
+          return (
+            <li key={x.market} className="home-index">
+              <span className="sr-only">{srIndex(INDEX_LABEL[x.market], x.close, x.changePct, day)}</span>
+              <span className="t-cap" aria-hidden="true">
+                {INDEX_LABEL[x.market]}
+              </span>
+              <span className="home-index-v num" aria-hidden="true">
+                {fmtIndex(x.close)}
+              </span>
+              <span className="home-index-ch" aria-hidden="true">
+                <Change pct={x.changePct} showAbs={false} className="t-cap" />
+                {day && <span className="t-cap num">{fmtDate(day)} 종가</span>}
+              </span>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
@@ -110,6 +121,7 @@ function MyPosition({ server, markets }: { server: ServerState; markets: Market[
             {r.blocked && (
               <Notice tone="warn" title="신규 매수가 잠겼어요(모의 자동매매)">
                 {r.blockReason}
+                {r.releaseText && ` ${r.releaseText}`}
               </Notice>
             )}
           </div>
@@ -117,35 +129,42 @@ function MyPosition({ server, markets }: { server: ServerState; markets: Market[
       })}
       {rs.nearStop.length > 0 && (
         <Notice tone="warn" action={<Link to="/trade" className="home-more">보유 보기</Link>}>
-          {rs.nearStop[0]!.position.name} 손절가까지 {fmtRatio(Math.max(0, rs.nearStop[0]!.leftPct))} 남았어요{rs.nearStop.length > 1 ? ` 외 ${rs.nearStop.length - 1}종목` : ""}.
+          {nearStopNotice(rs.nearStop)}
         </Notice>
       )}
     </Section>
   );
 }
 
-/** 불러오는 중: 실제 배치와 같은 모양 */
+/** 불러오는 중: 실제 배치와 같은 모양. 1초가 넘으면 진행 표시를 더한다(지도서 9.2) */
 function DashSkeleton({ bp }: { bp: Breakpoint }) {
+  const slow = useSlow();
   return (
-    <div className={`home-grid ${bp}`} role="status" aria-label="불러오는 중">
-      <div className="home-area-regime stack-3">
-        <Skeleton w={72} h={14} />
-        <Skeleton w={120} h={44} />
-        <Skeleton w={200} h={14} />
-        <Skeleton w="80%" h={14} />
-      </div>
-      {bp !== "compact" && (
-        <div className="home-area-chart">
-          <Skeleton h={200} />
+    <div className="home-skel" role="status" aria-label="불러오는 중">
+      {slow && <ProgressLine text="시장 국면과 후보를 받는 중이에요" />}
+      <div className={`home-grid ${bp}`}>
+        <div className="home-area-regime stack-3">
+          <Skeleton w={72} h={14} />
+          <Skeleton w={120} h={44} />
+          <Skeleton w={200} h={14} />
+          <Skeleton w="80%" h={14} />
         </div>
-      )}
-      <div className={`${bp === "large" ? "home-area-side" : "home-area-risk"} stack-3`}>
-        <Skeleton w={64} h={18} />
-        <Skeleton h={36} />
-        <Skeleton h={36} />
-      </div>
-      <div className="home-area-cands">
-        <SkeletonRows rows={5} h={22} />
+        {bp !== "compact" && (
+          <div className="home-area-chart">
+            <Skeleton h={200} />
+          </div>
+        )}
+        <div className={`${bp === "large" ? "home-area-side" : "home-area-risk"} stack-3`}>
+          <Skeleton w={64} h={18} />
+          <Skeleton h={36} />
+          <Skeleton h={36} />
+        </div>
+        {/* 진행 표시는 위에 하나만(SkeletonRows는 자기 진행 표시를 따로 띄우므로 쓰지 않는다) */}
+        <div className="home-area-cands stack-3">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} h={22} w={`${100 - (i % 3) * 12}%`} />
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -172,10 +191,12 @@ function ChartArea({ market, period, onPeriod }: { market: Market; period: Chart
   );
 }
 
-function NoScan({ block = false }: { block?: boolean }) {
+function NoScan({ server, block = false }: { server: ServerState; block?: boolean }) {
   return (
     <EmptyState title="아직 스캔 기록이 없어요" action={<ScanButton variant="primary" size={block ? "lg" : "md"} block={block} />}>
-      <span className="t-2">스캔하면 시장 국면과 오늘의 후보가 여기에 나와요. 장이 열린 동안에는 정해진 간격으로 자동 스캔해요.</span>
+      <span className="t-2">
+        스캔하면 시장 국면과 오늘의 후보가 여기에 나와요. {scheduleSentence(server.status.scheduler, server.settings)}
+      </span>
     </EmptyState>
   );
 }
@@ -201,13 +222,12 @@ function Dashboard({ server, markets, market, onMarket, bp }: { server: ServerSt
   return (
     <div className={`home-grid ${bp}`}>
       <div className="home-area-regime">
-        {scan ? <RegimeBlock state={postureStateOf(scan, market)} applied={appliedCap(scan, market)} market={market} markets={markets} onMarket={onMarket} candles={candles} headingId="home-regime-h" /> : <NoScan />}
+        {scan ? <RegimeBlock state={postureStateOf(scan, market)} applied={appliedCap(scan, market)} market={market} markets={markets} onMarket={onMarket} candles={candles} headingId="home-regime-h" /> : <NoScan server={server} />}
       </div>
-      {bp === "medium" && (
-        <div className="home-area-indices">
-          <IndicesRow />
-        </div>
-      )}
+      {/* 주요 지수: 태블릿 세로는 국면 아래, 태블릿 가로·컴퓨터는 지수 차트 아래(상단 바는 너비에 따라 지수를 다 못 보여 준다) */}
+      <div className="home-area-indices">
+        <IndicesRow />
+      </div>
       <div className="home-area-chart">
         <ChartArea market={market} period={period} onPeriod={setPeriod} />
       </div>
@@ -238,27 +258,32 @@ function Dashboard({ server, markets, market, onMarket, bp }: { server: ServerSt
 
 /** 핸드폰 홈(지도서 그림 9 왼쪽) */
 function PhoneHome({ server, markets, market, onMarket }: { server: ServerState; markets: Market[]; market: Market; onMarket: (m: Market) => void }) {
-  const { now, serverAt } = useApp();
+  const { now, indices } = useApp();
   const scan = server.latestScan;
   const candles = useIndexCandles(scan ? market : null);
   const showUS = markets.includes("US");
+  // 기준 시각은 바로 아래 지수 데이터의 시각(상단 바와 같다). 서버가 알려 주지 않으면 받은 시각이라고 밝힌다
+  const kr = indices.find((x) => x.market === "KOSPI") ?? indices.find((x) => x.market === "KOSDAQ");
+  const us = indices.find((x) => x.market === "US");
   return (
     <div className="home-phone stack-5">
       <div className="row wrap">
-        {markets.some((m) => m !== "US") && <MarketStatus region="KR" now={now} asOf={serverAt} />}
-        {/* 두 시장을 한 줄에: 국내가 있으면 미국은 짧게(자세한 문구는 툴팁) */}
-        {showUS && <MarketStatus region="US" now={now} asOf={serverAt} compact={markets.some((m) => m !== "US")} />}
+        {markets.some((m) => m !== "US") && <MarketStatus region="KR" now={now} asOf={kr?.asOf} receivedAt={kr?.receivedAt} />}
+        {/* 두 시장을 한 줄에: 국내가 있으면 미국은 짧게 */}
+        {showUS && <MarketStatus region="US" now={now} asOf={us?.asOf} receivedAt={us?.receivedAt} compact={markets.some((m) => m !== "US")} />}
       </div>
-      {scan ? <RegimeBlock state={postureStateOf(scan, market)} applied={appliedCap(scan, market)} market={market} markets={markets} onMarket={onMarket} candles={candles} compact headingId="home-regime-h" /> : <NoScan block />}
+      {scan ? <RegimeBlock state={postureStateOf(scan, market)} applied={appliedCap(scan, market)} market={market} markets={markets} onMarket={onMarket} candles={candles} compact headingId="home-regime-h" /> : <NoScan server={server} block />}
       <IndicesRow />
       <MyPosition server={server} markets={markets} />
       {scan && (
         <Section title="오늘의 신호" sub={<ScanMeta scan={scan} />}>
-          <CandidateList candidates={scan.candidates} limit={5} showPrice={false} empty={<p className="t-2">조건에 맞는 후보가 아직 없어요. 장이 열린 동안 계속 살펴봐요.</p>} />
-          <Link to="/discover" className="ui-btn secondary block home-linkbtn home-touch">
-            발굴에서 모두 보기
-            <ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" />
-          </Link>
+          <CandidateList candidates={scan.candidates} limit={5} showPrice={false} empty={<NoCandidates scan={scan} block />} />
+          {scan.candidates.length > 0 && (
+            <Link to="/discover" className="ui-btn secondary block home-linkbtn home-touch">
+              후보 모두 보기
+              <ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" />
+            </Link>
+          )}
         </Section>
       )}
     </div>
@@ -270,12 +295,28 @@ export default function HomeScreen() {
   const route = useRoute();
   const bp = useBreakpoint();
   const [chosen, setChosen] = useState<Market | null>(loadMarket);
+  // 국면 알림은 '/?view=regime&market=KOSDAQ'처럼 시장을 가리킨다. 그 시장을 고른 시장으로 삼는다
+  const queryMarket = marketFromQuery(route.query.get("market"));
+  useEffect(() => {
+    if (!queryMarket) return;
+    setChosen(queryMarket);
+    saveMarket(queryMarket);
+  }, [queryMarket]);
   const markets = enabledMarkets(server?.settings, server?.latestScan);
-  const market = pickMarket(chosen ?? server?.latestScan?.markets.find((m) => markets.includes(m)), markets);
-  const onMarket = useCallback((m: Market) => {
-    setChosen(m);
-    saveMarket(m);
-  }, []);
+  const market = pickMarket(queryMarket ?? chosen ?? server?.latestScan?.markets.find((m) => markets.includes(m)), markets);
+  const onMarket = useCallback(
+    (m: Market) => {
+      setChosen(m);
+      saveMarket(m);
+      // 경로에 시장이 적혀 있으면 함께 바꾼다(그대로 두면 경로의 시장이 고른 시장을 덮는다)
+      if (route.query.has("market")) {
+        const q = new URLSearchParams(route.query);
+        q.set("market", m);
+        navigate(`${route.path}?${q}`, { replace: true });
+      }
+    },
+    [route],
+  );
   const [retrying, setRetrying] = useState(false);
   const detail = route.query.get("view") === "regime";
 
@@ -297,7 +338,7 @@ export default function HomeScreen() {
                   setRetrying(false);
                 }}
               >
-                다시 연결
+                다시 불러오기
               </Button>
             }
           >

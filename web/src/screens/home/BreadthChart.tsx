@@ -1,3 +1,4 @@
+import { AlertTriangle } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ColorType, createChart, LineStyle, type Time } from "lightweight-charts";
 import { BREADTH_PARAMS, BREADTH_SERIES_LABEL, type BreadthAnalysis, type BreadthPoint, type BreadthResponse, type Candle } from "@jusik/shared";
@@ -12,7 +13,7 @@ type LogRow = BreadthResponse["log"][number];
 const KIND_LABEL: Record<Kind, string> = { ad: "A/D선", mi: "MI(200일)", mc: "맥클렐런(보조)", log: "거래소 A/D" };
 
 /**
- * 쌓아 둔 거래소 전체 등락 종목 수 → 누적 (상승+상한) − (하락+하한). 서버 엑셀 「시장폭」 시트와 같은 식이다.
+ * 쌓아 둔 거래소 전체 등락 종목 수 → 누적 (상승+상한) - (하락+하한). 서버 엑셀 「시장폭」 시트와 같은 식이다.
  * 기록을 시작한 날을 기준으로 누적하므로 높이가 아니라 모양을 본다
  */
 export function logAdLine(log: LogRow[]): BreadthPoint[] {
@@ -53,7 +54,13 @@ function Explain({ kind, a, overlay }: { kind: Kind; a: BreadthAnalysis; overlay
         <RuleTag rule="M1-04 와인스타인" /> 지수는 고점을 높이는데 A/D선은 고점을 낮추면(약세 괴리) 하락장을 먼저 알려 주는 경고예요.
         {overlay ? " 옅은 선이 지수 종가(왼쪽 눈금)예요." : ""} 최근 {P.divRecent}일과 그 앞 {P.divPrior}일의 고점·저점을 지수와 비교해요(기간은 앱 기본값).
         첫 집계일을 0으로 놓고 누적해서 높이보다 모양을 봐요.
-        {a.divergence === "BEARISH" && <strong className="warn-text"> 지금 약세 괴리예요.</strong>}
+        {a.divergence === "BEARISH" && (
+          <strong className="warn-text">
+            {" "}
+            <AlertTriangle size={14} strokeWidth={1.5} aria-hidden="true" className="home-warn-ic" />
+            지금 약세 괴리예요.
+          </strong>
+        )}
         {a.divergence === "BULLISH" && <strong> 지금 강세 괴리예요(참고만 하고 점수에는 넣지 않아요).</strong>}
       </p>
     );
@@ -65,6 +72,7 @@ function Explain({ kind, a, overlay }: { kind: Kind; a: BreadthAnalysis; overlay
         {a.miSignal && (
           <strong className={a.miSignal.dir === "DOWN" ? "warn-text" : ""}>
             {" "}
+            {a.miSignal.dir === "DOWN" && <AlertTriangle size={14} strokeWidth={1.5} aria-hidden="true" className="home-warn-ic" />}
             {fmtDate(a.miSignal.date)}에 0선 {a.miSignal.dir === "UP" ? "위로" : "아래로"} 교차했어요(화살표).
           </strong>
         )}
@@ -100,7 +108,8 @@ export function BreadthChart({ analysis: a, log, index }: { analysis: BreadthAna
   const data: BreadthPoint[] = kind === "ad" ? a.adLine : kind === "mi" ? a.mi : kind === "mc" ? a.mcclellan : logLine;
   const idxAll = useMemo(() => (a.adLine.length ? indexPoints(index, a.adLine[0]!.date, a.adLine.at(-1)!.date) : []), [index, a.adLine]);
   const overlay = kind === "ad" && withIndex && idxAll.length > 1 ? idxAll : null;
-  const lineColor = kind === "ad" ? colors.accent : kind === "mi" ? colors.ma60 : kind === "mc" ? colors.ma5 : colors.ma20;
+  // 시리즈는 차트 전용 색(line1~3). 강조색은 고른 신호 표식(MI 0선 교차 화살표)에만 쓴다
+  const lineColor = kind === "mi" ? colors.line2 : kind === "mc" ? colors.line3 : colors.line1;
 
   useEffect(() => {
     const box = el.current;
@@ -151,14 +160,10 @@ export function BreadthChart({ analysis: a, log, index }: { analysis: BreadthAna
         </div>
       ) : (
         <figure className="home-chart">
-          <div
-            ref={el}
-            className="home-chart-box"
-            style={{ height: 240 }}
-            role="img"
-            aria-label={`${label} 차트, ${fmtDate(data[0]!.date)}부터 ${fmtDate(last!.date)}까지, 마지막 값 ${fmtAxis(last!.value)}`}
-          />
+          {/* 요약 문장은 figcaption에 둔다. 차트 칸에 role=img를 주면 라이브러리가 넣는 출처 링크가 이름 없는 탭 정지가 된다 */}
+          <div ref={el} className="home-chart-box" style={{ height: 240 }} />
           <figcaption className="home-legend t-cap">
+            <span className="sr-only">{`${label} 차트, ${fmtDate(data[0]!.date)}부터 ${fmtDate(last!.date)}까지, 마지막 값 ${fmtAxis(last!.value)}.`}</span>
             <span>
               <i className="home-key" style={{ background: lineColor }} aria-hidden="true" />
               {label}

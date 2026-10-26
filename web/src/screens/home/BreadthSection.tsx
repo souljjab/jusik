@@ -1,3 +1,4 @@
+import { AlertTriangle } from "lucide-react";
 import { useState } from "react";
 import { BREADTH_PARAMS, type BreadthAnalysis, type BreadthResponse, type Market } from "@jusik/shared";
 import { Button, fmtDate, fmtInt, fmtNum, NoteList, Notice, RuleTag, Section, SkeletonRows } from "../../ui";
@@ -7,6 +8,9 @@ import { useBreadth, useIndexCandles } from "./useHomeData";
 
 export const HILO_STATE_LABEL: Record<"GOOD" | "BAD" | "NEUTRAL", string> = { GOOD: "신고가 우세", BAD: "신저가 우세", NEUTRAL: "뚜렷하지 않음" };
 const DIVERGENCE: Record<"BEARISH" | "BULLISH", string> = { BEARISH: "약세 괴리", BULLISH: "강세 괴리(참고)" };
+
+/** 경고 값 앞의 작은 경고 아이콘(색에만 기대지 않게, 낱말은 옆 글자가 말한다) */
+const WarnIc = () => <AlertTriangle size={14} strokeWidth={1.5} aria-hidden="true" className="home-warn-ic" />;
 
 /** 스캔에 남은 시장 폭 요약 한 덩어리(국면 점수에 실제로 쓴 값) */
 export function BreadthBrief({ b }: { b: BreadthState }) {
@@ -21,20 +25,34 @@ export function BreadthBrief({ b }: { b: BreadthState }) {
       </div>
       <div>
         <dt>A/D선 괴리</dt>
-        <dd className={b.divergence === "BEARISH" ? "warn-text" : ""}>{b.divergence ? DIVERGENCE[b.divergence] : "없음"}</dd>
+        <dd className={b.divergence === "BEARISH" ? "warn-text" : ""}>
+          {b.divergence === "BEARISH" && <WarnIc />}
+          {b.divergence ? DIVERGENCE[b.divergence] : "없음"}
+        </dd>
       </div>
       <div>
         <dt>MI(200일)</dt>
         <dd className="num">
           {b.mi == null ? "집계일 부족" : `${b.mi > 0 ? "+" : ""}${fmtInt(b.mi)}`}
-          {b.miSignal && <span className={b.miSignal.dir === "DOWN" ? "warn-text" : ""}> · 0선 {b.miSignal.dir === "UP" ? "상향" : "하향"} 교차 {fmtDate(b.miSignal.date)}</span>}
+          {b.miSignal && (
+            <span className={b.miSignal.dir === "DOWN" ? "warn-text" : ""}>
+              {" · "}
+              {b.miSignal.dir === "DOWN" && <WarnIc />}0선 {b.miSignal.dir === "UP" ? "상향" : "하향"} 교차 {fmtDate(b.miSignal.date)}
+            </span>
+          )}
         </dd>
       </div>
       <div>
-        <dt>52주 신고가−신저가</dt>
+        <dt>52주 신고가-신저가</dt>
         <dd className="num">
-          {fmtInt(b.hiLo.newHigh)} − {fmtInt(b.hiLo.newLow)}
-          {b.hiLoState && <span className={b.hiLoState === "BAD" ? "warn-text" : "t-2"}> {HILO_STATE_LABEL[b.hiLoState]}</span>}
+          {fmtInt(b.hiLo.newHigh)} - {fmtInt(b.hiLo.newLow)}
+          {b.hiLoState && (
+            <span className={b.hiLoState === "BAD" ? "warn-text" : "t-2"}>
+              {" "}
+              {b.hiLoState === "BAD" && <WarnIc />}
+              {HILO_STATE_LABEL[b.hiLoState]}
+            </span>
+          )}
         </dd>
       </div>
     </dl>
@@ -46,9 +64,9 @@ function HiLo({ a }: { a: BreadthAnalysis }) {
   const h = a.hiLo;
   return (
     <div className="stack">
-      <h4 className="home-sub">
+      <h3 className="home-sub">
         52주 신고가·신저가 <RuleTag rule="2.2 와인스타인" />
-      </h4>
+      </h3>
       <dl className="home-facts">
         <div>
           <dt>신고가 · {fmtDate(a.asOf)}</dt>
@@ -82,7 +100,7 @@ function TodayCounts({ res }: { res: BreadthResponse }) {
   const n = res.log.length;
   return (
     <div className="stack">
-      <h4 className="home-sub">거래소 전체 등락 종목 수</h4>
+      <h3 className="home-sub">거래소 전체 등락 종목 수</h3>
       {!t ? (
         <p className="t-2">오늘 등락 종목 수를 읽지 못했어요. 장 시작 전이거나 페이지 형식이 바뀌었을 수 있어요.</p>
       ) : (
@@ -126,7 +144,7 @@ function BreadthFull({ market }: { market: Market }) {
           서버 연결을 확인한 뒤 다시 불러오세요.
         </Notice>
       ) : res.pending ? (
-        <Notice tone="info" title="시장 폭을 계산하는 중이에요" action={<Button size="sm" busy={busy} onClick={retry}>다시 보기</Button>}>
+        <Notice tone="info" title="시장 폭을 계산하는 중이에요" action={<Button size="sm" busy={busy} onClick={retry}>다시 불러오기</Button>}>
           처음 계산은 표본 종목 일봉을 모두 받아 1분 넘게 걸릴 수 있어요. 15초마다 다시 확인해요.
         </Notice>
       ) : !a ? (
@@ -160,14 +178,14 @@ function BreadthFull({ market }: { market: Market }) {
 }
 
 /**
- * 시장 폭(2.2 시장 내부 지표: M1-04 A/D선, M1-05 MI, 고점-저점 수치). 국면 점수의 보조 신호(−1~+1점).
+ * 시장 폭(2.2 시장 내부 지표: M1-04 A/D선, M1-05 MI, 고점-저점 수치). 국면 점수의 보조 신호(-1~+1점).
  * 핸드폰은 스캔 요약만 보여 주고(근거 문장은 위 '판정 근거'에 이미 있다), 차트와 세부 수치는 눌러서 펼친다.
  */
 export function BreadthSection({ market, brief, compact }: { market: Market; brief: BreadthState; compact: boolean }) {
   const [open, setOpen] = useState(false);
   const full = !compact || open;
   return (
-    <Section title="시장 폭" sub="A/D선·시장 탄력지수·신고가−신저가">
+    <Section title="시장 폭" sub="A/D선·시장 탄력지수·신고가-신저가">
       <BreadthBrief b={brief} />
       {full ? (
         <BreadthFull market={market} />

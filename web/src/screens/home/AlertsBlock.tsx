@@ -1,5 +1,6 @@
 import { ChevronRight } from "lucide-react";
 import { ALERT_CATEGORY_LABEL, type AlertItem } from "@jusik/shared";
+import { fixParticles } from "../../app/notify";
 import { href, Link } from "../../app/router";
 import { EmptyState, fmtWhen } from "../../ui";
 
@@ -16,7 +17,7 @@ export function AlertsBlock({ alerts, now, limit = 6, headingId }: { alerts: Ale
           알림
         </h2>
         <Link to="/alerts" className="home-more">
-          모두 보기
+          알림 모두 보기
           <ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" />
         </Link>
       </div>
@@ -35,7 +36,8 @@ export function AlertsBlock({ alerts, now, limit = 6, headingId }: { alerts: Ale
                     {fmtWhen(a.at, now)}
                   </time>
                 </span>
-                <span className="home-alert-text">{a.text}</span>
+                {/* 예전에 저장된 알림의 '(으)로'·'을(를)' 같은 자리표시 조사도 바르게 읽히게 */}
+                <span className="home-alert-text">{fixParticles(a.text)}</span>
               </>
             );
             return (
