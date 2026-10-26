@@ -1,10 +1,10 @@
 import { AlertTriangle } from "lucide-react";
 import { MACRO_PARAMS, type Region, type ScanResult } from "@jusik/shared";
 import { fmtDate, fmtWhen, Notice, RuleTag, Section, SkeletonRows } from "../../ui";
-import { macroItems } from "./homeModel";
+import { macroItems, monthKo, signedFixed } from "./homeModel";
 import { useMacro } from "./useHomeData";
 
-const pp = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(n).toFixed(2)}%p`;
+const pp = (n: number) => `${signedFixed(n, 2)}%p`;
 
 /** 스캔에 쓴 매크로 요약: ISM 제조업지수와 금리 추세(2.3 강영현·강동진, M2-10 금리 상승기 조건) */
 export function MacroBrief({ scan }: { scan: ScanResult }) {
@@ -25,10 +25,11 @@ export function MacroBrief({ scan }: { scan: ScanResult }) {
           {i ? (
             <>
               <span className="nowrap">
+                {contracting && <AlertTriangle size={14} strokeWidth={1.5} aria-hidden="true" className="home-warn-ic" />}
                 <span className="num">{i.value.toFixed(1)}</span> {contracting ? "수축" : "확장"}
               </span>
               <span className="t-cap home-dd-sub">
-                {i.month}분 · {i.source === "수동" ? "직접 입력" : "ISM 발표"}
+                {monthKo(i.month)}분 · {i.source === "수동" ? "직접 입력" : "ISM 발표"}
               </span>
             </>
           ) : (
@@ -41,7 +42,10 @@ export function MacroBrief({ scan }: { scan: ScanResult }) {
           금리 추세 <RuleTag rule="2.3·M2-10 강영현" />
         </dt>
         <dd className={m.rateRising ? "warn-text" : ""}>
-          <span className="nowrap">{m.rateRising == null ? "추세 모름" : m.rateRising ? "금리 상승기" : "상승기 아님"}</span>
+          <span className="nowrap">
+            {m.rateRising && <AlertTriangle size={14} strokeWidth={1.5} aria-hidden="true" className="home-warn-ic" />}
+            {m.rateRising == null ? "추세 모름" : m.rateRising ? "금리 상승기" : "상승기 아님"}
+          </span>
           {m.us10yChange6m != null && (
             <span className="t-cap home-dd-sub">
               미 10년물 약 6개월 <span className="num">{pp(m.us10yChange6m)}</span>(기준 +{MACRO_PARAMS.rateRisingPp}%p)
@@ -76,7 +80,12 @@ export function MacroSection({ scan, region, compact }: { scan: ScanResult; regi
                 <li key={it.label} title={it.basis}>
                   <span className="t-2">{it.label}</span>
                   <span className={`home-macro-v num ${it.warn ? "warn-text" : ""}`}>
-                    {it.warn && <AlertTriangle size={14} strokeWidth={1.5} aria-label="경고" />}
+                    {it.warn && (
+                      <>
+                        <AlertTriangle size={14} strokeWidth={1.5} aria-hidden="true" />
+                        <span className="sr-only">경고 </span>
+                      </>
+                    )}
                     {it.value}
                   </span>
                   <span className="t-cap">

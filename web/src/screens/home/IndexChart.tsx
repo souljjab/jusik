@@ -6,7 +6,7 @@ import { Skeleton } from "../../ui";
 import { indexSeries, seriesSummary, type ChartPeriod } from "./homeModel";
 
 /**
- * 지수 종가 + 30주선(같은 기간 이동평균) 작은 선 차트(지도서 그림 4 '코스피 주봉').
+ * 지수 종가 + 30주선(같은 기간 이동평균) 작은 선 차트(지도서 그림 4 '코스피 주봉'). 30주선은 차트 전용 색(line1, 강조색 아님).
  * 장식 없이 두 선만 그리고, 축 글자는 옅게. 끌기·확대는 끈다(홈은 훑어보는 곳).
  */
 export function IndexChart({ candles, period, name, height = 180 }: { candles: Candle[] | null | undefined; period: ChartPeriod; name: string; height?: number }) {
@@ -31,7 +31,7 @@ export function IndexChart({ candles, period, name, height = 180 }: { candles: C
     });
     const close = chart.addLineSeries({ color: colors.text, lineWidth: 2, priceLineVisible: false, lastValueVisible: true, crosshairMarkerRadius: 3 });
     close.setData(series.close.map((p) => ({ time: p.time as Time, value: p.value })));
-    const ma = chart.addLineSeries({ color: colors.accent, lineWidth: 2, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+    const ma = chart.addLineSeries({ color: colors.line1, lineWidth: 2, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
     ma.setData(series.ma.map((p) => ({ time: p.time as Time, value: p.value })));
     chart.timeScale().fitContent();
     const ro = new ResizeObserver(() => {
@@ -54,14 +54,16 @@ export function IndexChart({ candles, period, name, height = 180 }: { candles: C
     );
   return (
     <figure className="home-chart">
-      <div ref={box} className="home-chart-box" role="img" aria-label={seriesSummary(name, series, period)} style={{ height }} />
+      {/* 요약 문장은 figcaption에 둔다. 차트 칸에 role=img를 주면 라이브러리가 넣는 출처 링크가 이름 없는 탭 정지가 된다 */}
+      <div ref={box} className="home-chart-box" style={{ height }} />
       <figcaption className="home-legend t-cap">
+        <span className="sr-only">{seriesSummary(name, series, period)}.</span>
         <span>
           <i className="home-key close" aria-hidden="true" />
           종가
         </span>
         <span>
-          <i className="home-key ma" aria-hidden="true" />
+          <i className="home-key ma" style={{ borderTopColor: colors.line1 }} aria-hidden="true" />
           {series.maLabel}
         </span>
       </figcaption>

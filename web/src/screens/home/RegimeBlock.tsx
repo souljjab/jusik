@@ -1,8 +1,8 @@
 import { ChevronRight } from "lucide-react";
 import { currencyOfRegion, POSTURE_LABEL, regionOf, type Candle, type Market, type RegimeAssessment, type ScanResult } from "@jusik/shared";
 import { Link } from "../../app/router";
-import { fmtDate, RegimeGauge, Segmented } from "../../ui";
-import { capSource, lastMacdCross, MARKET_LABEL, regimeReasons, signed } from "./homeModel";
+import { fmtDate, MARKET_LABEL, RegimeGauge, Segmented } from "../../ui";
+import { capSource, lastMacdCross, regimeReasons, signed } from "./homeModel";
 
 /** 고른 시장의 국면 판정과 그 상태(이전 버전 스캔·이번 스캔에 없음·판정 불가) */
 export type PostureState =
@@ -98,7 +98,7 @@ export function RegimeBlock({ state, applied, market, markets, onMarket, candles
       ) : (
         <p className="t-2">{STATE_TEXT[state.kind as Exclude<PostureState["kind"], "ok">]}</p>
       )}
-      <Link to="/?view=regime" className="home-more">
+      <Link to={`/?view=regime&market=${market}`} className="home-more">
         국면 근거 보기
         <ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" />
       </Link>
