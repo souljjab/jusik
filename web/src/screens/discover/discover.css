@@ -169,6 +169,10 @@ html:has(.disc-bottom-bar) { --actionbar-h: 65px; }
 .disc-desc { max-width: 76ch; }
 .disc-rules { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); }
 .disc-rules .t-cap:first-child { color: var(--color-text); font-weight: var(--font-weight-medium); }
+/* 금액 입력칸: 천 단위 쉼표, 오른쪽에 단위(주문 검토 시트의 가격 칸과 같은 모양) */
+.disc-amount { position: relative; display: flex; align-items: center; }
+.disc-amount .ui-input { width: 100%; padding-right: calc(var(--space-3) + 2.6em); }
+.disc-amount-unit { position: absolute; right: var(--space-3); font-size: var(--font-size-secondary); color: var(--color-text-2); pointer-events: none; }
 .disc-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--space-3); max-width: 760px; }
 .disc-signal { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
 .disc-stockline { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); min-height: 32px; }
@@ -177,7 +181,10 @@ html:has(.disc-bottom-bar) { --actionbar-h: 65px; }
 .disc-kvrow dd { margin: 0; font-weight: var(--font-weight-medium); }
 .disc-cycle { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); border-radius: var(--radius-panel); background: var(--color-surface-2); }
 .disc-kvgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-2) var(--space-6); margin: 0; }
-.disc-kvgrid .disc-kv dd { white-space: nowrap; }
+/* 글자를 키우면 값이 다음 줄로 내려가고(오른쪽 맞춤), 숫자 하나는 .num이라 중간에서 끊기지 않는다 */
+.disc-kvgrid .disc-kv { flex-wrap: wrap; }
+.disc-kvgrid .disc-kv dd { margin-left: auto; }
+.disc-nowrap { white-space: nowrap; }
 
 /* 종목 검색 */
 .disc-picker { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
@@ -192,6 +199,7 @@ html:has(.disc-bottom-bar) { --actionbar-h: 65px; }
 .disc-dropdown li[aria-selected="true"] { background: var(--color-accent-soft); }
 
 /* 차트와 범례 */
+.disc-chart-fig { margin: 0; min-width: 0; }
 .disc-chart { width: 100%; min-width: 0; }
 .disc-legend { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); font-size: var(--font-size-secondary); color: var(--color-text-2); }
 .disc-legend-item { display: inline-flex; align-items: center; gap: 6px; padding: 2px 0; min-height: 28px; background: none; border: 0; color: inherit; font: inherit; }

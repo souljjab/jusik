@@ -87,6 +87,54 @@ export const defaultParams = (region: Region): BtParams => ({
   stopPct: 0,
 });
 
+/**
+ * 입력칸 글자 그대로의 초안. 숫자로 바로 바꾸면 '-'만 친 중간 상태가 0이 되어 음수 기준점을 칠 수 없고,
+ * 투자금도 쉼표 없이 '10000000'으로 보인다. '백테스트 실행'을 누를 때 parseBtForm으로 읽는다.
+ */
+export interface BtForm {
+  /** 투자금(쉼표 포함 글자) */
+  cash: string;
+  buy: string;
+  sell: string;
+  stop: string;
+  useRegime: boolean;
+}
+
+/** 금액 입력칸 표시: 정수에 천 단위 쉼표(국내·미국 모두 정수 금액) */
+export function fmtAmountInput(raw: string): string {
+  const digits = raw.replace(/[^\d]/g, "").replace(/^0+(?=\d)/, "");
+  return digits ? Number(digits).toLocaleString("ko-KR") : "";
+}
+/** 금액 입력칸 글자 → 숫자(쉼표 등은 무시, 비었으면 0) */
+export const parseAmountInput = (s: string) => {
+  const n = Number(s.replace(/[^\d]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+};
+
+export const btFormOf = (p: BtParams): BtForm => ({
+  cash: fmtAmountInput(String(Math.round(p.initialCash))),
+  buy: String(p.buyThreshold),
+  sell: String(p.sellThreshold),
+  stop: String(p.stopPct),
+  useRegime: p.useRegime,
+});
+
+export type BtFormField = "cash" | "buy" | "sell" | "stop";
+
+/** 초안 → 실행 값. 읽을 수 없거나 범위 밖이면 칸별 문장(errors)을 돌려준다 */
+export function parseBtForm(f: BtForm, base: BtParams): { params: BtParams | null; errors: Partial<Record<BtFormField, string>> } {
+  const errors: Partial<Record<BtFormField, string>> = {};
+  const num = (s: string) => (/^\s*-?\d+(\.\d+)?\s*$/.test(s) ? Number(s) : NaN);
+  const cash = parseAmountInput(f.cash);
+  if (!(cash > 0)) errors.cash = "투자금을 0보다 크게 넣어 주세요.";
+  const buy = num(f.buy), sell = num(f.sell), stop = f.stop.trim() === "" ? 0 : num(f.stop);
+  if (!(buy >= -100 && buy <= 100)) errors.buy = "-100~100 사이 숫자로 넣어 주세요.";
+  if (!(sell >= -100 && sell <= 100)) errors.sell = "-100~100 사이 숫자로 넣어 주세요.";
+  if (!(stop >= 0 && stop <= 50)) errors.stop = "0~50 사이로 넣어 주세요(0이면 쓰지 않아요).";
+  if (Object.keys(errors).length) return { params: null, errors };
+  return { params: { ...base, initialCash: cash, buyThreshold: buy, sellThreshold: sell, stopPct: stop, useRegime: f.useRegime }, errors };
+}
+
 /** 백테스트 결과(앱 엔진은 진입·청산 근거 문장이 없다) */
 export type AnyTrade = BacktestResult["trades"][number] & Partial<Pick<StrategyTrade, "entryReason" | "exitReason" | "entryRule" | "exitRule">>;
 export type AnyBacktest = Omit<BacktestResult, "trades"> & { trades: AnyTrade[] };

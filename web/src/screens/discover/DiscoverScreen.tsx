@@ -1,7 +1,7 @@
 import { lazy, Suspense } from "react";
 import { useApp } from "../../app/AppContext";
 import { navigate, useRoute } from "../../app/router";
-import { Button, EmptyState, Skeleton, SkeletonRows, Tabs, useBreakpoint } from "../../ui";
+import { Button, EmptyState, ProgressLine, Skeleton, SkeletonRows, Tabs, useBreakpoint, useSlow } from "../../ui";
 import { RecommendTab } from "./RecommendTab";
 import { ScreenerTab } from "./ScreenerTab";
 import "./discover.css";
@@ -48,8 +48,8 @@ export default function DiscoverScreen() {
       />
       <div className="disc-panel" role="tabpanel" id={`disc-${tab}`} aria-labelledby={`disc-tab-${tab}`}>
         {offline && !server && tab !== "strategy" ? (
-          <EmptyState title="스캔 결과를 받지 못했어요" action={<Button onClick={() => void refreshServer()}>다시 연결</Button>}>
-            서버에 연결되면 후보와 스캔 조건이 여기에 나와요. 전략과 백테스트도 서버에서 시세를 받아야 돌릴 수 있어요.
+          <EmptyState title="스캔 결과를 받지 못했어요" action={<Button onClick={() => void refreshServer()}>다시 불러오기</Button>}>
+            서버에 연결하지 못했어요. 앱 서버가 켜져 있는지 확인한 뒤 다시 불러오세요. 연결되면 후보와 스캔 조건이 여기에 나와요.
           </EmptyState>
         ) : tab === "screener" ? (
           <ScreenerTab />
@@ -66,8 +66,10 @@ export default function DiscoverScreen() {
 }
 
 function StrategySkeleton() {
+  const slow = useSlow();
   return (
     <div className="stack-4" aria-busy="true">
+      {slow && <ProgressLine text="전략과 백테스트 화면을 여는 중이에요" />}
       <div className="row wrap">
         <Skeleton w={120} h={32} />
         <Skeleton w={120} h={32} />
