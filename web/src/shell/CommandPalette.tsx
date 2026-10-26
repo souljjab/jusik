@@ -1,80 +1,102 @@
 import { ArrowRight, Compass, Search, Star } from "lucide-react";
 import { createPortal } from "react-dom";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { isValidCode, STRATEGIES, type StockInfo } from "@jusik/shared";
-import { searchStocks } from "../api";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import type { StockInfo } from "@jusik/shared";
+import { knownName, searchStocks, stockNames } from "../api";
 import { useApp } from "../app/AppContext";
-import { navigate } from "../app/router";
-import { SCREENS } from "./nav";
-
-interface Item {
-  key: string;
-  group: "종목" | "전략" | "화면";
-  label: string;
-  sub?: string;
-  go: () => void;
-}
+import { useOverlayLayer } from "../ui";
+import { paletteItems, WATCH_MAX, type PaletteItem } from "./paletteModel";
 
 /** 명령 검색(Ctrl K, 맥은 Cmd K): 종목·전략·화면을 찾아 바로 이동 */
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { watchlist, openStock } = useApp();
+  const { watchlist, openStock, server, journal } = useApp();
   const [q, setQ] = useState("");
-  const [stocks, setStocks] = useState<StockInfo[]>([]);
+  const [results, setResults] = useState<{ q: string; list: StockInfo[] } | null>(null);
+  const [fetched, setFetched] = useState<Record<string, string>>({});
   const [active, setActive] = useState(0);
+  const dialog = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
-  const opener = useRef<Element | null>(null);
+  useOverlayLayer(open, dialog, onClose, "input");
 
   useEffect(() => {
     if (!open) return;
-    opener.current = document.activeElement;
     setQ("");
+    setResults(null);
     setActive(0);
-    setTimeout(() => input.current?.focus(), 0);
-    return () => (opener.current as HTMLElement | null)?.focus?.();
   }, [open]);
 
   useEffect(() => {
-    if (!open || !q.trim()) return setStocks([]);
+    const query = q.trim();
+    if (!open || !query) return;
     let alive = true;
-    const t = setTimeout(() => searchStocks(q.trim()).then((r) => alive && setStocks(r.slice(0, 8))).catch(() => alive && setStocks([])), 150);
+    const t = setTimeout(
+      () =>
+        searchStocks(query)
+          .then((r) => alive && setResults({ q: query, list: r.slice(0, 8) }))
+          .catch(() => alive && setResults({ q: query, list: [] })),
+      150,
+    );
     return () => {
       alive = false;
       clearTimeout(t);
     };
   }, [q, open]);
 
-  const items = useMemo<Item[]>(() => {
-    const t = q.trim().toLowerCase();
-    const match = (s: string) => !t || s.toLowerCase().includes(t);
-    const out: Item[] = [];
-    const seen = new Set<string>();
-    for (const s of stocks) {
-      seen.add(s.code);
-      out.push({ key: `s:${s.code}`, group: "종목", label: s.name, sub: `${s.code} · ${s.market === "US" ? "미국" : s.market}`, go: () => openStock(s.code) });
+  // 관심종목 이름: 마지막 스캔 후보·매매일지·이미 받은 이름에서 먼저 찾고, 모르는 것만 검색으로 찾는다
+  const names = useMemo(() => {
+    const m: Record<string, string> = { ...fetched };
+    for (const e of journal) if (e.name && e.name !== e.code) m[e.code] = e.name;
+    for (const c of server?.latestScan?.candidates ?? []) m[c.code] = c.name;
+    for (const c of watchlist) {
+      const k = knownName(c);
+      if (k) m[c] = k;
     }
-    const up = q.trim().toUpperCase();
-    if (up && isValidCode(up) && !seen.has(up)) out.push({ key: `s:${up}`, group: "종목", label: up, sub: "코드로 열기", go: () => openStock(up) });
-    if (!t) for (const c of watchlist.slice(0, 5)) out.push({ key: `w:${c}`, group: "종목", label: c, sub: "관심종목", go: () => openStock(c) });
-    for (const s of STRATEGIES) if (match(`${s.name} ${s.source} ${s.description}`)) out.push({ key: `t:${s.id}`, group: "전략", label: s.name, sub: s.source, go: () => navigate(`/discover/strategy?id=${s.id}`) });
-    for (const s of SCREENS) if (match(`${s.label} ${s.keywords}`)) out.push({ key: `p:${s.path}`, group: "화면", label: s.label, go: () => navigate(s.path) });
-    return out;
-  }, [q, stocks, watchlist, openStock]);
+    return m;
+  }, [fetched, journal, server?.latestScan, watchlist]);
+
+  const shownWatch = watchlist.slice(0, WATCH_MAX);
+  const missing = shownWatch.filter((c) => !names[c]).join(",");
+  useEffect(() => {
+    if (!open || !missing) return;
+    let alive = true;
+    void stockNames(missing.split(",")).then((r) => alive && Object.keys(r).length && setFetched((f) => ({ ...f, ...r })));
+    return () => {
+      alive = false;
+    };
+  }, [open, missing]);
+
+  const items = useMemo(() => paletteItems({ q, results, watchlist, names, openStock }), [q, results, watchlist, names, openStock]);
 
   useEffect(() => setActive((a) => Math.min(a, Math.max(0, items.length - 1))), [items.length]);
 
   if (!open) return null;
-  const run = (it: Item | undefined) => {
+  const run = (it: PaletteItem | undefined) => {
     if (!it) return;
     onClose();
     it.go();
+  };
+  const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "ArrowDown") (e.preventDefault(), setActive((a) => Math.min(a + 1, items.length - 1)));
+    else if (e.key === "ArrowUp") (e.preventDefault(), setActive((a) => Math.max(a - 1, 0)));
+    else if (e.key === "Enter") (e.preventDefault(), run(items[active]));
   };
   let lastGroup = "";
   return createPortal(
     <>
       <div className="ui-scrim" onClick={onClose} aria-hidden="true" />
-      <div className="ui-sheet center cmd" role="dialog" aria-modal="true" aria-label="명령 검색">
+      {/* 목록의 빈 곳·묶음 이름을 눌러도 포커스는 입력 칸에 남는다(Esc·화살표가 계속 듣게) */}
+      <div
+        ref={dialog}
+        className="ui-sheet ui-sheet--center cmd"
+        role="dialog"
+        aria-modal="true"
+        aria-label="명령 검색"
+        tabIndex={-1}
+        onKeyDown={onKey}
+        onMouseDown={(e) => e.target !== input.current && e.preventDefault()}
+      >
         <div className="cmd-input">
-          <Search size={18} className="muted" aria-hidden="true" />
+          <Search size={18} strokeWidth={1.5} className="muted" aria-hidden="true" />
           <input
             ref={input}
             value={q}
@@ -83,14 +105,8 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
             role="combobox"
             aria-expanded="true"
             aria-controls="cmd-list"
+            aria-autocomplete="list"
             aria-activedescendant={items[active] ? `cmd-${items[active]!.key}` : undefined}
-            onKeyDown={(e) => {
-              if (e.key === "ArrowDown") (e.preventDefault(), setActive((a) => Math.min(a + 1, items.length - 1)));
-              else if (e.key === "ArrowUp") (e.preventDefault(), setActive((a) => Math.max(a - 1, 0)));
-              else if (e.key === "Enter") (e.preventDefault(), run(items[active]));
-              else if (e.key === "Escape") (e.preventDefault(), onClose());
-              else if (e.key === "Tab") e.preventDefault();
-            }}
           />
           <span className="kbd">Esc</span>
         </div>
@@ -111,7 +127,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                 onMouseEnter={() => setActive(i)}
                 onMouseDown={(e) => (e.preventDefault(), run(it))}
               >
-                <Icon size={16} className="muted" aria-hidden="true" />
+                <Icon size={16} strokeWidth={1.5} className="muted" aria-hidden="true" />
                 <span>{it.label}</span>
                 {it.sub && <span className="sub">{it.sub}</span>}
               </li>,

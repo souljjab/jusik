@@ -1,5 +1,5 @@
-import { Loader2, Minus, Plus } from "lucide-react";
-import { forwardRef, useId, useRef, type ButtonHTMLAttributes, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import { AlertTriangle, Loader2, Minus, Plus } from "lucide-react";
+import { forwardRef, useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 
 /**
  * 버튼(UI 지도서 8장): 매수·매도·기본·보조·비활성·처리 중. 버튼 문구는 무엇이 일어나는지 동사로('매수 확인', '일지 저장').
@@ -21,7 +21,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLBut
       aria-busy={busy || undefined}
       {...rest}
     >
-      {busy ? <Loader2 className="spin" size={16} aria-hidden="true" /> : icon}
+      {busy ? <Loader2 className="spin" size={16} strokeWidth={1.5} aria-hidden="true" /> : icon}
       {children}
     </button>
   );
@@ -140,40 +140,98 @@ export function Toggle({ checked, onChange, label, hint, disabled, className = "
   );
 }
 
-/** 입력 칸 묶음: 이름, 필수 표시, 도움말, 오류(경고색 + 문장) */
+/**
+ * 입력 칸 묶음: 이름, 필수 표시, 도움말, 오류(경고색 + 아이콘 + 문장).
+ * 도움말·오류는 입력 칸(htmlFor로 가리킨 요소, 없으면 묶음 안의 첫 입력)에 aria-describedby로 이어 주고,
+ * 오류가 있으면 aria-invalid를 붙인다(포커스할 때 화면 낭독이 도움말의 숫자까지 읽게).
+ */
 export function Field({ label, required, hint, error, children, className = "", htmlFor }: { label: ReactNode; required?: boolean; hint?: ReactNode; error?: ReactNode; children: ReactNode; className?: string; htmlFor?: string }) {
+  const box = useRef<HTMLDivElement>(null);
+  const descId = `${useId()}-desc`;
+  const msg = error ? "err" : hint ? "hint" : null;
+  const invalid = !!error;
+  useEffect(() => {
+    const el = htmlFor ? document.getElementById(htmlFor) : box.current?.querySelector<HTMLElement>("input, select, textarea");
+    if (!el) return;
+    const others = (el.getAttribute("aria-describedby") ?? "").split(/\s+/).filter((x) => x && x !== descId);
+    const ids = msg ? [...others, descId] : others;
+    if (ids.length) el.setAttribute("aria-describedby", ids.join(" "));
+    else el.removeAttribute("aria-describedby");
+    if (invalid) el.setAttribute("aria-invalid", "true");
+    else if (el.dataset.fieldInvalid) el.removeAttribute("aria-invalid");
+    if (invalid) el.dataset.fieldInvalid = "1";
+    else delete el.dataset.fieldInvalid;
+  });
   return (
-    <div className={`ui-field ${className}`}>
+    <div ref={box} className={`ui-field ${className}`}>
       <label className="lbl" htmlFor={htmlFor}>
         {label}
         {required && <span className="req">필수</span>}
       </label>
       {children}
-      {error ? <span className="err" role="alert">{error}</span> : hint ? <span className="hint">{hint}</span> : null}
+      {error ? (
+        <span className="err" role="alert" id={descId}>
+          <AlertTriangle size={14} strokeWidth={1.5} aria-hidden="true" />
+          <span>{error}</span>
+        </span>
+      ) : hint ? (
+        <span className="hint" id={descId}>{hint}</span>
+      ) : null}
     </div>
   );
 }
 
-/** −/+ 단추가 붙은 수량 입력 */
-export function NumberStepper({ value, onChange, step = 1, min = 0, max, label, unit, id }: { value: number; onChange: (v: number) => void; step?: number; min?: number; max?: number; label: string; unit?: string; id?: string }) {
+/** 수량 입력에서 친 글자 → 숫자(빈 칸은 null) */
+export function parseQty(text: string): number | null {
+  const digits = text.replace(/[^\d]/g, "");
+  return digits === "" ? null : Number(digits);
+}
+
+/**
+ * −/+ 단추가 붙은 수량 입력. 고치는 동안에는 칸을 비울 수 있고(지운 뒤 5를 치면 15가 아니라 5),
+ * 비운 채로 나가면 최솟값으로 돌린다. 최댓값을 넘게 치면 바로 최댓값으로 맞춘다.
+ */
+export function NumberStepper({ value, onChange, step = 1, min = 0, max, label, unit, id, ...aria }: {
+  value: number;
+  onChange: (v: number) => void;
+  step?: number;
+  min?: number;
+  max?: number;
+  label: string;
+  unit?: string;
+  id?: string;
+  "aria-describedby"?: string;
+  "aria-invalid"?: boolean;
+}) {
   const clamp = (v: number) => Math.max(min, max != null ? Math.min(max, v) : v);
+  // 고치는 중인 글자(null이면 value를 그대로 보여 준다)
+  const [text, setText] = useState<string | null>(null);
   return (
     <div className="ui-stepper">
       <button type="button" aria-label={`${label} 줄이기`} onClick={() => onChange(clamp(value - step))} disabled={value <= min}>
-        <Minus size={16} aria-hidden="true" />
+        <Minus size={16} strokeWidth={1.5} aria-hidden="true" />
       </button>
       <input
         id={id}
         inputMode="numeric"
         aria-label={label}
-        value={Number.isFinite(value) ? String(value) : ""}
+        {...aria}
+        value={text ?? (Number.isFinite(value) ? String(value) : "")}
         onChange={(e) => {
-          const n = Number(e.target.value.replace(/[^\d]/g, ""));
-          onChange(clamp(Number.isFinite(n) ? n : min));
+          const n = parseQty(e.target.value);
+          if (n == null) {
+            setText("");
+            onChange(clamp(min));
+            return;
+          }
+          const v = clamp(n);
+          setText(v === n ? String(n) : String(v));
+          onChange(v);
         }}
+        onBlur={() => setText(null)}
       />
       <button type="button" aria-label={`${label} 늘리기`} onClick={() => onChange(clamp(value + step))} disabled={max != null && value >= max}>
-        <Plus size={16} aria-hidden="true" />
+        <Plus size={16} strokeWidth={1.5} aria-hidden="true" />
       </button>
       {unit && <span className="sr-only">{unit}</span>}
     </div>
@@ -252,9 +310,33 @@ export function Sparkline({ values, width = 72, height = 24, tone = "auto", labe
 export function Skeleton({ w = "100%", h = 14, className = "", style }: { w?: number | string; h?: number | string; className?: string; style?: CSSProperties }) {
   return <span className={`ui-skel ${className}`} style={{ width: w, height: h, ...style }} aria-hidden="true" />;
 }
-export function SkeletonRows({ rows = 4, h = 18 }: { rows?: number; h?: number }) {
+/** ms가 지나면 true(불러오기가 오래 걸릴 때 진행 표시를 띄우는 데 쓴다) */
+export function useSlow(active = true, ms = 1000): boolean {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (!active) return setSlow(false);
+    const t = setTimeout(() => setSlow(true), ms);
+    return () => clearTimeout(t);
+  }, [active, ms]);
+  return slow;
+}
+
+/** 진행 표시(가는 막대 + 문장). 불러오기가 1초를 넘으면 스켈레톤 위에 띄운다(지도서 9.2) */
+export function ProgressLine({ text = "불러오는 중이에요" }: { text?: string }) {
+  return (
+    <div className="ui-progress-line">
+      <span className="ui-progress-bar" aria-hidden="true" />
+      <span className="ui-progress">{text}</span>
+    </div>
+  );
+}
+
+/** 목록 모양 스켈레톤. 1초가 넘으면 진행 표시(progress 문장)가 함께 나온다 */
+export function SkeletonRows({ rows = 4, h = 18, progress }: { rows?: number; h?: number; progress?: string }) {
+  const slow = useSlow();
   return (
     <div className="ui-skel-rows" role="status" aria-label="불러오는 중">
+      {slow && <ProgressLine text={progress} />}
       {Array.from({ length: rows }, (_, i) => (
         <Skeleton key={i} h={h} w={`${100 - (i % 3) * 12}%`} />
       ))}

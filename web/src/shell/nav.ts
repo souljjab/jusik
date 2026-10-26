@@ -1,5 +1,5 @@
 import { ArrowLeftRight, Compass, House, NotebookPen, Settings, Star, type LucideIcon } from "lucide-react";
-import type { Area } from "../app/router";
+import { areaOf, type Area, type Route } from "../app/router";
 
 /**
  * 다섯 영역(UI 지도서 2장). 이름은 시스템 구조가 아니라 사용자의 행동으로 짓는다.
@@ -28,6 +28,26 @@ export const SETTINGS_AREA: NavArea = { id: "settings", label: "설정", tabLabe
 export const AREA_TITLE: Record<Area, string> = {
   home: "오늘", discover: "발굴", stocks: "관심종목", trade: "매매", records: "기록", alerts: "알림", settings: "설정",
 };
+
+/** 앱 이름(창 제목 끝에 붙는다) */
+export const APP_NAME = "주식 분석 어시스턴트";
+
+/**
+ * 화면마다 다른 창 제목(지도서 10장: 화면 낭독 사용자가 이동한 화면을 알 수 있게, 방문 기록도 구분되게).
+ * "발굴 · 스크리너 조건 · 주식 분석 어시스턴트", 종목 화면은 종목 이름("삼성전자 · 종목 · …").
+ */
+export function screenTitle(route: Route, stockName?: string): string {
+  const [a, b] = route.segments;
+  let title: string;
+  if (a === "stocks" && b) title = `${stockName || b} · 종목`;
+  else if (!a && route.query.get("view") === "regime") title = "시장 국면 · 홈";
+  else {
+    const path = `/${route.segments.slice(0, 2).join("/")}`;
+    const area = AREAS.find((x) => x.path === `/${a ?? ""}`) ?? (a === "settings" ? SETTINGS_AREA : null);
+    title = SCREENS.find((s) => s.path === path)?.label ?? SCREENS.find((s) => s.path === `/${a ?? ""}`)?.label ?? area?.label ?? AREA_TITLE[areaOf(route)];
+  }
+  return `${title} · ${APP_NAME}`;
+}
 
 /** 명령 검색에 나오는 화면 목록 */
 export const SCREENS: { label: string; path: string; keywords: string }[] = [
