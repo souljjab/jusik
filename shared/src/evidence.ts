@@ -158,7 +158,7 @@ export function candleMasterEvidence(r: CandleMasterResult | null): Evidence | n
     },
     {
       id: "stopFit", label: "손절폭 20% 이내", state: st(r.stopPct == null ? null : r.waitPrice == null),
-      detail: r.stopPct == null ? "신호가 없어 손절가가 없어요" : `진입가 대비 손절폭 −${fx(r.stopPct)}%`, rule: "M4-01 캔들마스터",
+      detail: r.stopPct == null ? "신호가 없어 손절가가 없어요" : `진입가 대비 손절폭 -${fx(r.stopPct)}%`, rule: "M4-01 캔들마스터",
     },
     {
       id: "standard", label: "표준형", state: st(hasSignal && r.wave.ok ? r.standard : null),

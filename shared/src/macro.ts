@@ -260,7 +260,10 @@ export function buildMacroSnapshot(series: Partial<Record<MacroSeriesId, MacroSe
 }
 
 const sign = (x: number) => (x > 0 ? "+" : "");
-const quarterOf = (date: string) => `${date.slice(0, 4)}-Q${Math.floor((Number(date.slice(5, 7)) - 1) / 3) + 1}`;
+/** "2022-10-01" → "2022년 4분기" */
+const quarterOf = (date: string) => `${date.slice(0, 4)}년 ${Math.floor((Number(date.slice(5, 7)) - 1) / 3) + 1}분기`;
+/** "2026-08-01"·"2026-08" → "2026년 8월"(형식이 다르면 그대로) */
+const monthOf = (date: string) => (/^\d{4}-\d{2}/.test(date) ? `${date.slice(0, 4)}년 ${Number(date.slice(5, 7))}월` : date);
 
 /** 원화 약세 신호는 한국 시장에만 의미가 있다(region이 US면 뺀다) */
 const krwApplies = (region?: Region) => region !== "US";
@@ -282,7 +285,7 @@ function ismNotes(s: MacroSnapshot, region?: Region): Note[] {
   const out: Note[] = [];
   if (s.ism) {
     const v = s.ism.value;
-    const head = `ISM 제조업지수 ${v.toFixed(1)}(${s.ism.month}${s.ism.source === "수동" ? ", 수동 입력" : ""})`;
+    const head = `ISM 제조업지수 ${v.toFixed(1)}(${monthOf(s.ism.month)}${s.ism.source === "수동" ? ", 수동 입력" : ""})`;
     out.push(
       v < P.ismLine
         ? { tone: "warn", text: `${head}: ${P.ismLine} 아래라 미국 제조업 경기가 수축 중이에요`, rule: ISM_RULE }
@@ -290,7 +293,7 @@ function ismNotes(s: MacroSnapshot, region?: Region): Note[] {
     );
   } else if (s.ismProxy) {
     const { philly, empire } = s.ismProxy;
-    const fmt = (name: string, x: MacroValue) => `${name} ${sign(x.value)}${x.value.toFixed(1)}(${x.date.slice(0, 7)})`;
+    const fmt = (name: string, x: MacroValue) => `${name} ${sign(x.value)}${x.value.toFixed(1)}(${monthOf(x.date)})`;
     const detail = [philly && fmt("필라델피아", philly), empire && fmt("뉴욕", empire)].filter(Boolean).join(" · ");
     const below = (x: MacroValue) => x.value < P.ismProxyLine;
     if (!philly || !empire) out.push({ tone: "info", text: `지역 연준 제조업 지수(ISM 대용): ${detail}. 하나만 있어 판단은 보류해요`, rule: ISM_RULE });
@@ -318,7 +321,7 @@ export function macroNotes(s: MacroSnapshot, region?: Region): Note[] {
 
   if (s.excessLiquidity != null && s.m2YoY && s.gdpYoY) {
     const ex = s.excessLiquidity;
-    const detail = `M2 ${s.m2YoY.value.toFixed(1)}%(${s.m2YoY.date.slice(0, 7)}) − GDP ${s.gdpYoY.value.toFixed(1)}%(${quarterOf(s.gdpYoY.date)})`;
+    const detail = `M2 ${s.m2YoY.value.toFixed(1)}%(${monthOf(s.m2YoY.date)}) - GDP ${s.gdpYoY.value.toFixed(1)}%(${quarterOf(s.gdpYoY.date)})`;
     notes.push(
       ex < P.excessLiquidityNegative
         ? { tone: "warn", text: `초과 유동성 ${ex.toFixed(1)}%p(${detail}): 유동성이 줄고 있어요. 지수가 뒤따라 약해진 경향이 있어요`, rule: "M1-07 강영현" }

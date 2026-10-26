@@ -130,7 +130,7 @@ describe("macroNotes / macroPressure", () => {
     };
     const n = notesFor(s);
     expect(n.every((x) => x.tone === "info")).toBe(true);
-    expect(n.find((x) => x.rule === "M1-07 강영현")?.text).toContain("2022-Q4");
+    expect(n.find((x) => x.rule === "M1-07 강영현")?.text).toContain("2022년 4분기");
     expect(macroPressure(s)).toBe(0);
   });
 
@@ -275,7 +275,7 @@ describe("ISM / rate notes and pressure", () => {
     const up = ismNote(withIsm(52.4));
     expect(up).toHaveLength(1);
     expect(up[0]).toMatchObject({ tone: "info" });
-    expect(up[0]!.text).toContain("ISM 제조업지수 52.4(2023-02)");
+    expect(up[0]!.text).toContain("ISM 제조업지수 52.4(2023년 2월)");
     expect(up[0]!.text).toContain("확장");
     expect(ismNote(withIsm(50))[0]!.tone).toBe("info");
     expect(macroPressure(withIsm(50))).toBe(0);
@@ -304,7 +304,7 @@ describe("ISM / rate notes and pressure", () => {
     expect(n).toHaveLength(1);
     expect(n[0]!.tone).toBe("warn");
     expect(n[0]!.text).toContain("지역 연준 제조업 지수 수축(ISM 대용)");
-    expect(n[0]!.text).toContain("필라델피아 -8.2(2023-02)");
+    expect(n[0]!.text).toContain("필라델피아 -8.2(2023년 2월)");
     expect(macroPressure(both)).toBe(1);
     const kr = ismNote(both, "KR");
     expect(kr).toHaveLength(2);

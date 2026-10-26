@@ -79,9 +79,9 @@ export const BREADTH_PARAMS: Readonly<BreadthParams> = {
 
 /** 화면 표시용 시리즈 이름. 맥클렐런은 책의 MI가 아니라는 점을 이름에 밝힌다 */
 export const BREADTH_SERIES_LABEL = {
-  adLine: "A/D선(M1-04, 상승−하락 누적)",
+  adLine: "A/D선(M1-04, 상승-하락 누적)",
   mi: "시장 탄력지수 MI(M1-05, 순상승 200일 합계)",
-  mcclellan: "맥클렐런 오실레이터(책 밖 보조 지표, 비율 조정 순상승 EMA19−EMA39)",
+  mcclellan: "맥클렐런 오실레이터(책 밖 보조 지표, 비율 조정 순상승 EMA19-EMA39)",
   mcclellanSum: "맥클렐런 합산지수(책 밖 보조 지표, 오실레이터 누적)",
 } as const;
 

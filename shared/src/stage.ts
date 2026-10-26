@@ -297,7 +297,7 @@ export function stageAt(ctx: StageContext, k: number, rs?: (number | null)[]): S
   }
   // 하락 단계는 손절가보다 매도가 먼저라 상한 안내를 붙이지 않는다
   if (stage !== 4 && capStop > supportLow)
-    notes.push({ tone: "info", text: `손절폭 ${Math.round(P.maxStopPct * 100)}% 상한 적용: 최근 ${P.stopWeeks}주 저점(${px(supportLow)})이 멀어 종가 −${Math.round(P.maxStopPct * 100)}%(${px(capStop)})를 손절가로 써요`, rule: "M4-01 와인스타인" });
+    notes.push({ tone: "info", text: `손절폭 ${Math.round(P.maxStopPct * 100)}% 상한 적용: 최근 ${P.stopWeeks}주 저점(${px(supportLow)})이 멀어 종가 -${Math.round(P.maxStopPct * 100)}%(${px(capStop)})를 손절가로 써요`, rule: "M4-01 와인스타인" });
 
   return {
     stage, action, weekDate: w.date, close: w.close, ma30: m, slopePct, trendPct, pctFromMa, breakout, volumeRatio, cumVolumeRatio, volumeBasis,

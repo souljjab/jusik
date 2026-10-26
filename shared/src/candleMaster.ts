@@ -426,7 +426,7 @@ export function candleMasterAt(weekly: WeeklyBar[], k: number, params: Partial<C
   }
   if (stopPct > P.maxStopPct) {
     res.waitPrice = stop / (1 - P.maxStopPct / 100);
-    notes.push({ tone: "warn", text: `손절폭이 −${pct(stopPct)}%로 최대 −${P.maxStopPct}%를 넘어요. 진입가가 ${px(res.waitPrice)} 이하로, 범위 안으로 내려올 때까지 진입을 미뤄요`, rule: "M4-01 캔들마스터" });
+    notes.push({ tone: "warn", text: `손절폭이 -${pct(stopPct)}%로 최대 -${P.maxStopPct}%를 넘어요. 진입가가 ${px(res.waitPrice)} 이하로, 범위 안으로 내려올 때까지 진입을 미뤄요`, rule: "M4-01 캔들마스터" });
     return res;
   }
 
@@ -443,8 +443,8 @@ export function candleMasterAt(weekly: WeeklyBar[], k: number, params: Partial<C
   res.breakevenTrigger = entry * P.breakevenMultiple;
   notes.push(
     signalTextbook
-      ? { tone: "good", text: `손절가 ${px(stop)}(${primary.name} 저점 아래), 진입가 대비 −${pct(stopPct)}%로 기본 −${P.defaultStopPct}% 안이에요`, rule: "M4-01 캔들마스터" }
-      : { tone: "warn", text: `손절가 ${px(stop)}, 진입가 대비 −${pct(stopPct)}%로 기본 −${P.defaultStopPct}%보다 넓어요(최대 −${P.maxStopPct}% 안). 나눠 산다면 회차별 비중을 7~8%로 낮춰 실제 손실을 맞춰요`, rule: "M4-01 캔들마스터" },
+      ? { tone: "good", text: `손절가 ${px(stop)}(${primary.name} 저점 아래), 진입가 대비 -${pct(stopPct)}%로 기본 -${P.defaultStopPct}% 안이에요`, rule: "M4-01 캔들마스터" }
+      : { tone: "warn", text: `손절가 ${px(stop)}, 진입가 대비 -${pct(stopPct)}%로 기본 -${P.defaultStopPct}%보다 넓어요(최대 -${P.maxStopPct}% 안). 나눠 산다면 회차별 비중을 7~8%로 낮춰 실제 손실을 맞춰요`, rule: "M4-01 캔들마스터" },
     { tone: "info", text: `진입가 ${px(entry)}: 종가 ${px(w.close)}와 손절가 사이 1/3 지점에서 지정가로 기다려요(중간 지점 ${px(entryMid)}도 가능)`, rule: "M3-12 캔들마스터" },
     {
       tone: "info",

@@ -490,7 +490,7 @@ export function seolSwingStrategy(partial: Partial<SeolSwingParams> = {}): Strat
     name: "일봉 이평선 스윙",
     source: "설춘환",
     timeframe: "daily",
-    description: `20일선이 60일선 위인 종목에서 5·20일선 골든크로스나 눌림목에 사요. 손절 −${P.stopPct}%, +${P.takeProfitPct}%에서 절반을 팔고 남은 건 5일선을 깨면 팔아요. 20일선을 깨면 다 팔아요.`,
+    description: `20일선이 60일선 위인 종목에서 5·20일선 골든크로스나 눌림목에 사요. 손절 -${P.stopPct}%, +${P.takeProfitPct}%에서 절반을 팔고 남은 건 5일선을 깨면 팔아요. 20일선을 깨면 다 팔아요.`,
     rules: ["M3-05 설춘환", "M3-06 설춘환", "M3-08 설춘환", "5.3 설춘환"],
     prepare: (candles) => prepareDaily(candles),
     startIndex: () => 60,
@@ -539,7 +539,7 @@ export function rsiRecoveryStrategy(partial: Partial<RsiRecoveryParams> = {}): S
     name: "RSI 30 회복",
     source: "강영현·강동진",
     timeframe: "daily",
-    description: `RSI가 ${P.oversold} 아래에 있다가 위로 올라서고 종가가 5일선 위면 사요. 손절 −${P.stopPct}%, RSI가 ${P.overbought} 위에 올랐다가 ${P.overbought} 아래로 내려오면 팔고, ${P.maxHoldBars}봉이 지나면 정리해요.`,
+    description: `RSI가 ${P.oversold} 아래에 있다가 위로 올라서고 종가가 5일선 위면 사요. 손절 -${P.stopPct}%, RSI가 ${P.overbought} 위에 올랐다가 ${P.overbought} 아래로 내려오면 팔고, ${P.maxHoldBars}봉이 지나면 정리해요.`,
     rules: ["M3-14 강영현·강동진", "4.6 강동진", "5.1 박용선"],
     prepare: (candles) => prepareDaily(candles),
     startIndex: () => 15,
@@ -732,7 +732,7 @@ export function candleMasterStrategy(partial: Partial<CandleMasterStrategyParams
     name: "캔들마스터 주봉 캔들",
     source: "캔들마스터",
     timeframe: "weekly",
-    description: `직전 파동과 간격을 둔 수평 파동에서 주봉 매수 신호 캔들(양봉 스프링·꼬리 양봉·꼬리군)이 나오면 종가와 손절가 사이 ${P.entryMode === "mid" ? "중간" : "1/3"} 지점에 약 ${Math.round(P.limitBars / 5)}주 동안 지정가로 기다려요(손절폭이 −${CP.maxStopPct}%를 넘으면 범위 안에 드는 가격까지). 손절은 신호 저점 아래(최대 −${CP.maxStopPct}%), 목표는 표준 ${CP.standardMultiple}배·비표준 ${CP.nonStandardMultiple}배이고, +100%에 닿은 뒤엔 손절을 본전으로 올려요.`,
+    description: `직전 파동과 간격을 둔 수평 파동에서 주봉 매수 신호 캔들(양봉 스프링·꼬리 양봉·꼬리군)이 나오면 종가와 손절가 사이 ${P.entryMode === "mid" ? "중간" : "1/3"} 지점에 약 ${Math.round(P.limitBars / 5)}주 동안 지정가로 기다려요(손절폭이 -${CP.maxStopPct}%를 넘으면 범위 안에 드는 가격까지). 손절은 신호 저점 아래(최대 -${CP.maxStopPct}%), 목표는 표준 ${CP.standardMultiple}배·비표준 ${CP.nonStandardMultiple}배이고, +100%에 닿은 뒤엔 손절을 본전으로 올려요.`,
     rules: ["4.5 캔들마스터", "M3-12 캔들마스터", "M3-13 캔들마스터", "M4-01 캔들마스터"],
     prepare(candles) {
       const weekly = toWeekly(candles);
@@ -765,7 +765,7 @@ export function candleMasterStrategy(partial: Partial<CandleMasterStrategyParams
         stop: r.stop, stopRule: "M4-01 캔들마스터",
         targetPct: (CP.nonStandardMultiple - 1) * 100, targetFraction: 1, targetRule: "M3-13 캔들마스터",
         limitPrice: limit, limitBars: P.limitBars, sizeFraction: P.sizeFraction,
-        reason: `주봉 ${names} — 손절폭이 커 손절폭 −${CP.maxStopPct}% 이내가 되는 ${px(limit)}까지 지정가 대기(비표준 — 목표 ${CP.nonStandardMultiple}배)`,
+        reason: `주봉 ${names} — 손절폭이 커 손절폭 -${CP.maxStopPct}% 이내가 되는 ${px(limit)}까지 지정가 대기(비표준 — 목표 ${CP.nonStandardMultiple}배)`,
         rule: "M4-01 캔들마스터",
       };
     },
