@@ -115,13 +115,18 @@ export function buildTables(state: AppState, meta: { provider: string; sample: b
     }
   tables.push({ name: "모의포지션", headers: ["통화", "종목코드", "종목명", "체결일", "체결가", "수량", "손절가", "목표가", "현재가", "평가손익(%)", "평가손익", "진입 근거"], rows: pos });
 
-  // 5) 매매일지
+  // 5) 매매일지. 규칙 체크(스스로 표시, UI 지도서 7.2 G)는 세 칸으로: 예·아니요, 표시하지 않았으면 빈칸
+  const yn = (v: boolean | undefined) => (v == null ? "" : v ? "예" : "아니요");
   tables.push({
     name: "매매일지",
-    headers: ["날짜", "통화", "종목코드", "종목명", "구분", "가격", "수량", "손절가", "목표가", "비중(%)", "전략", "국면", "청산 사유", "R 배수", "이유", "복기", "감정", "어긴 규칙", "출처"],
+    headers: [
+      "날짜", "통화", "종목코드", "종목명", "구분", "가격", "수량", "손절가", "목표가", "비중(%)", "전략", "국면", "청산 사유", "R 배수", "이유", "복기", "감정", "어긴 규칙",
+      "손절가 미리 정함", "비중 상한 지킴", "계획에 없던 매수", "계획한 분할 매수", "출처",
+    ],
     rows: [...journal].sort((a, b) => b.date.localeCompare(a.date)).map((e) => [
       e.date, curOf(e.code), e.code, e.name, e.side === "BUY" ? "매수" : "매도", e.price, e.qty, e.stop ?? "", e.target ?? "", e.weightPct ?? "", e.strategy ?? "", e.regime ?? "",
-      e.exitReason ?? "", e.rMultiple ?? "", e.reason, e.review ?? "", e.emotion ?? "", (e.violations ?? []).join(" / "), e.source ?? "수동",
+      e.exitReason ?? "", e.rMultiple ?? "", e.reason, e.review ?? "", e.emotion ?? "", (e.violations ?? []).join(" / "),
+      yn(e.selfCheck?.stopSet), yn(e.selfCheck?.weightOk), yn(e.selfCheck?.unplanned), e.plannedAdd ? "예" : "", e.source ?? "수동",
     ]),
   });
 

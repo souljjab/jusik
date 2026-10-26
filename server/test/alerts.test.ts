@@ -33,12 +33,15 @@ describe("alerts", () => {
     const signals = store.state.alerts.filter((a) => a.category === "signal");
     expect(signals.length).toBe(Math.min(5, scan.candidates.length));
     expect(signals[0]!.text).toMatch(/근거 6개 중 \d개 충족/);
-    expect(signals[0]!.route).toBe(`/stocks/${scan.candidates[0]!.code}`);
+    // 최신 것부터 보여 주는 목록에서 점수가 가장 높은 후보가 맨 위에 오게 넣는다
+    expect(signals.at(-1)!.route).toBe(`/stocks/${scan.candidates[0]!.code}`);
     // 같은 날 다시 스캔해도 같은 신호 알림은 늘지 않는다
     await runScan(deps);
     expect(store.state.alerts.filter((a) => a.category === "signal")).toHaveLength(signals.length);
     const r = (await app.inject("/api/alerts")).json();
     expect(r.alerts[0].at >= r.alerts.at(-1).at).toBe(true);
+    const listed = r.alerts.filter((a: { category: string }) => a.category === "signal").map((a: { code: string }) => a.code);
+    expect(listed).toEqual(scan.candidates.slice(0, 5).map((c) => c.code));
   });
 
   it("reports a regime change between scans with the new exposure cap", async () => {
@@ -49,7 +52,9 @@ describe("alerts", () => {
     prev.postures![m] = { ...prev.postures![m]!, posture: scan.postures![m]!.posture === "ATTACK" ? "DEFENSE" : "ATTACK" };
     expect(scanAlerts(store, prev, scan, MON_1030_KST)).toBeGreaterThan(0);
     const a = store.state.alerts.find((x) => x.category === "regime")!;
-    expect(a.text).toMatch(/국면이 .+에서 .+(으)?로 바뀌었어요\. 주식 비중 상한 \d+%/);
+    expect(a.text).toMatch(/국면이 .+에서 (방어로|중립으로|공격으로) 바뀌었어요\. 주식 비중 상한 \d+%/);
+    expect(a.text).not.toContain("(으)로");
+    expect(a.route).toBe(`/?view=regime&market=${m}`);
   });
 
   it("warns when a paper position is within 2% of its stop", () => {

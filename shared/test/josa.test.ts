@@ -12,6 +12,13 @@ describe("josa", () => {
     expect(josa("한도", "은/는")).toBe("한도는");
     expect(josa("AAPL", "이/가")).toBe("AAPL가");
   });
+  it("reads a final digit the way it is spoken", () => {
+    expect(josa("2026-10", "은/는")).toBe("2026-10은");
+    expect(josa("3", "을/를")).toBe("3을");
+    expect(josa("2", "을/를")).toBe("2를");
+    expect(josa("1", "으로/로")).toBe("1로");
+    expect(josa("6", "으로/로")).toBe("6으로");
+  });
   it("lists journal strategies and maps evidence strategies onto them", () => {
     expect(JOURNAL_STRATEGIES[0]).toBe(PAPER_STRATEGY);
     expect(JOURNAL_STRATEGIES).toContain(MANUAL_STRATEGY);

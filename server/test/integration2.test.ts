@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { IntradayBar } from "@jusik/shared";
 import { buildApp } from "../src/app";
-import { BreadthSource, fallbackCodesFrom } from "../src/breadthSource";
+import { BreadthSource } from "../src/breadthSource";
 import { SampleDart } from "../src/dart";
 import { Exporter } from "../src/exporter";
 import { MockExtras, MockMacro } from "../src/extras";

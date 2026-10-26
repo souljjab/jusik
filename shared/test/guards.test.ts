@@ -129,10 +129,10 @@ describe("preTradeChecklist", () => {
   it("passes a complete plan", () => {
     expect(preTradeChecklist({ price: 10_000, stop: 9_300, target: 11_400, reason: "20일 고점 돌파 + 거래량 3배", weightPct: 15 })).toEqual([]);
   });
-  it("requires stop, target, reason and weight before ordering (5.5: 손절가·목표가·비중 필수)", () => {
+  it("requires stop, reason and weight before ordering and warns about a missing target (5.5, 목표가는 주문 검토에서 선택)", () => {
     const n = preTradeChecklist({ price: 10_000 });
     expect(n).toHaveLength(4);
-    expect(n.every((x) => x.tone === "bad")).toBe(true);
+    expect(n.map((x) => x.tone)).toEqual(["bad", "warn", "bad", "bad"]);
     expect(n.map((x) => x.text).join(" ")).toMatch(/손절가.*목표가.*매수 근거.*비중/);
     expect(preTradeChecklist({ price: 10_000, stop: 9_000, target: 11_000, reason: "   ", weightPct: 10 })).toHaveLength(1);
     expect(preTradeChecklist({ price: 10_000, stop: 9_000, target: 11_000, reason: "x", weightPct: 10 })).toEqual([]);
@@ -144,6 +144,18 @@ describe("preTradeChecklist", () => {
     expect(wide).toEqual([expect.objectContaining({ tone: "warn", rule: "M4-01 캔들마스터" })]);
     expect(wide[0]!.text).toContain("25%");
     expect(preTradeChecklist({ price: 10_000, stop: 9_000, target: 12_000, reason: "x", weightPct: 35 })).toEqual([expect.objectContaining({ tone: "bad", rule: "M4-03 강영현" })]);
+  });
+  it("uses the user's weight cap and per-trade risk limit when given", () => {
+    const plan = { price: 10_000, stop: 9_000, target: 12_000, reason: "x" };
+    expect(preTradeChecklist({ ...plan, weightPct: 40 }, { maxWeightPct: 50 })).toEqual([]);
+    const strict = preTradeChecklist({ ...plan, weightPct: 15 }, { maxWeightPct: 10 });
+    expect(strict).toEqual([expect.objectContaining({ tone: "bad", rule: "M4-03 강영현" })]);
+    expect(strict[0]!.text).toContain("10%");
+    // 손절 시 1,000원 × 30주 = 30,000원 = 계좌 100만 원의 3% > 1회 한도 1%
+    const risky = preTradeChecklist({ ...plan, weightPct: 10, qty: 30, account: 1_000_000 }, { maxPerTradeRiskPct: 1 });
+    expect(risky).toEqual([expect.objectContaining({ tone: "warn", rule: "M4-04 슈웨거" })]);
+    expect(risky[0]!.text).toContain("3%");
+    expect(preTradeChecklist({ ...plan, weightPct: 10, qty: 10, account: 1_000_000 }, { maxPerTradeRiskPct: 1 })).toEqual([]);
   });
 });
 

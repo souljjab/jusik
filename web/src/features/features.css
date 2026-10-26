@@ -1,0 +1,36 @@
+/* 공용 기능(features) 전용 스타일: 후보 목록, 주문 검토 시트. 색·간격은 토큰만 쓴다 */
+
+/* ───────── 후보 목록: 핸드폰·태블릿 세로 목록 행 ───────── */
+.cand-row { position: relative; align-items: center; }
+.cand-row:hover { background: var(--color-surface-2); }
+.cand-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.cand-line { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-1) var(--space-2); min-width: 0; }
+.cand-link { min-width: 0; flex: 1 1 auto; color: inherit; text-decoration: none; }
+/* 링크가 행 전체를 덮는다(어디를 눌러도 종목 분석). 포커스 테두리도 행 전체에 */
+.cand-link::after { content: ""; position: absolute; inset: 0; border-radius: var(--radius-chip); }
+.cand-link:focus-visible { outline: none; }
+.cand-link:focus-visible::after { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.cand-strategy { flex: none; white-space: nowrap; }
+/* '근거 보기'는 덮는 링크 위에 놓는다. 터치 화면에서는 손가락 크기(44~48) */
+.cand-ev { position: relative; z-index: 1; flex-wrap: wrap; }
+@media (max-width: 1199.98px) {
+  .cand-ev .ui-ev-open, .cand-table .ui-ev-open { min-height: var(--touch-min); display: inline-flex; align-items: center; padding: 0 var(--space-1); }
+}
+.cand-quote { display: inline-flex; align-items: baseline; gap: var(--space-2); white-space: nowrap; margin-left: auto; }
+.cand-score { flex: none; min-width: 2.5ch; text-align: right; }
+
+/* ───────── 후보 표: 이름·코드가 글자 단위로 꺾이지 않게(낱말 사이에서만 줄바꿈, 그래도 좁으면 표 안에서 가로 스크롤) ───────── */
+.cand-table td, .cand-table th { overflow-wrap: normal; word-break: keep-all; padding-left: var(--space-2); padding-right: var(--space-2); }
+.cand-table td:first-child, .cand-table th:first-child { padding-left: 0; }
+/* 좁을 때는 '근거 보기'가 칸 아래로 내려가 점수 열이 밀려나지 않게 */
+.cand-table .ui-ev { flex-wrap: wrap; row-gap: 2px; }
+.cand-name-link { color: inherit; text-decoration: none; }
+.cand-name-link:hover { text-decoration: underline; }
+
+/* ───────── 주문 검토 시트 ───────── */
+.ord-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11em), 1fr)); gap: var(--space-3); align-items: start; }
+.ord-input { position: relative; display: flex; align-items: center; }
+.ord-input .ui-input { width: 100%; padding-right: calc(var(--space-3) + 2.6em); }
+.ord-unit { position: absolute; right: var(--space-3); font-size: var(--font-size-secondary); color: var(--color-text-2); pointer-events: none; }
+.ord-foot-risk { display: flex; flex-wrap: wrap; gap: 2px var(--space-3); margin: 0; color: var(--color-text); }
+.ord-foot-risk b { font-weight: var(--font-weight-bold); }

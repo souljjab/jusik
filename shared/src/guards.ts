@@ -29,8 +29,8 @@ export const GUARD_DEFAULTS: GuardParams = {
   maxStopPct: 20, // M4-01 캔들마스터
 };
 
-/** 근거 노트에 붙이는 규칙 ID·출처(부록 A, ID가 없으면 절 번호) */
-const RULE = {
+/** 근거 노트에 붙이는 규칙 ID·출처(부록 A, ID가 없으면 절 번호). 화면이 어떤 점검의 노트인지 가를 때도 쓴다 */
+export const GUARD_RULE = {
   dailyLoss: "M4-04 슈웨거",
   perTrade: "M4-04 슈웨거",
   streak: "5.5 박용선·슈웨거",
@@ -42,12 +42,22 @@ const RULE = {
   stopWidth: "M4-01 캔들마스터",
   plan: "5.5 헬로마녀·박용선",
 } as const;
+const RULE = GUARD_RULE;
+
+/** 신규 진입을 멈춘 까닭: 일일 손실 한도(다음 거래일에 풀림), 연속 손실 휴식(마지막 손실일과 그다음 거래일까지) */
+export type GuardReason = "dailyLoss" | "streak";
 
 export interface GuardResult {
   /** true면 신규 진입을 멈춘다 */
   blocked: boolean;
   /** 걸린 항목만 담는다(비어 있으면 모두 통과) */
   notes: Note[];
+  /** 막힌 까닭(blocked일 때만, 둘 다일 수 있다) */
+  reasons?: GuardReason[];
+  /** 연속 손실 휴식이 이어지는 마지막 날(그 시장 날짜, YYYY-MM-DD). 쉬는 중일 때만 */
+  restUntil?: string;
+  /** 계산한 그 시장 날짜(YYYY-MM-DD) */
+  date?: string;
 }
 
 const pctText = (x: number) => (Math.round(x * 10) / 10).toString();
@@ -72,13 +82,13 @@ export function tradingGuards(input: {
 }): GuardResult {
   const P = { ...GUARD_DEFAULTS, ...input.params };
   const notes: Note[] = [];
-  let blocked = false;
+  const reasons: GuardReason[] = [];
 
   if (P.dailyLossLimitPct > 0) {
     if (input.equityStartOfDay > 0 && Number.isFinite(input.todayPnl)) {
       const lossPct = (-input.todayPnl / input.equityStartOfDay) * 100;
       if (lossPct >= P.dailyLossLimitPct) {
-        blocked = true;
+        reasons.push("dailyLoss");
         notes.push({ tone: "bad", text: `오늘 손실이 ${pctText(lossPct)}%로 하루 한도(${P.dailyLossLimitPct}%)에 닿았어요. 오늘은 신규 진입을 멈춰요.`, rule: RULE.dailyLoss });
       }
     } else {
@@ -88,7 +98,7 @@ export function tradingGuards(input: {
 
   const streak = consecutiveLosses(input.closedReturnsPct);
   if (P.maxConsecutiveLosses > 0 && streak >= P.maxConsecutiveLosses) {
-    blocked = true;
+    reasons.push("streak");
     notes.push({ tone: "bad", text: `최근 ${streak}번 연속 손실이에요. 잠시 쉬고, 다시 시작할 때는 규모를 줄여요.`, rule: RULE.streak });
   }
 
@@ -97,7 +107,7 @@ export function tradingGuards(input: {
   if (P.maxWeightPct > 0 && input.maxWeightPct > P.maxWeightPct)
     notes.push({ tone: "warn", text: `종목당 최대 비중이 ${input.maxWeightPct}%예요. 한 종목에 ${P.maxWeightPct}% 넘게 싣지 않아요.`, rule: RULE.weight });
 
-  return { blocked, notes };
+  return reasons.length ? { blocked: true, notes, reasons } : { blocked: false, notes };
 }
 
 /**
@@ -187,11 +197,14 @@ export function averagingDownCheck(
 }
 
 /**
- * 매수 주문 전 체크리스트(5.5 구현 메모: 손절가·목표가·비중을 필수 입력으로). 걸린 항목만 돌려준다.
- * tone "bad"는 채우거나 고쳐야 하는 항목, "warn"은 다시 생각해 볼 항목. 비어 있으면 통과.
+ * 매수 주문 전 체크리스트(5.5 구현 메모: 손절가·비중을 필수 입력으로). 걸린 항목만 돌려준다.
+ * tone "bad"는 채우거나 고쳐야 하는 항목(위반으로 남는다), "warn"은 다시 생각해 볼 항목. 비어 있으면 통과.
+ * - 목표가는 주문 검토에서 고를 수 있는 칸이라 비어 있으면 경고만 한다(적었는데 매수가 이하면 고쳐야 할 항목)
+ * - weightPct는 이번 주문 뒤 그 종목 전체 비중(보유분 + 이번 주문). 사용자 설정 상한은 params.maxWeightPct로 넘긴다
+ * - qty와 account(계좌 기준 금액)를 주면 손절 시 손실이 계좌의 params.maxPerTradeRiskPct(사용자 설정 riskPct)를 넘는지 본다(경고)
  */
 export function preTradeChecklist(
-  e: { stop?: number; target?: number; reason?: string; price?: number; weightPct?: number },
+  e: { stop?: number; target?: number; reason?: string; price?: number; weightPct?: number; qty?: number; account?: number },
   params: Partial<GuardParams> = {},
 ): Note[] {
   const P = { ...GUARD_DEFAULTS, ...params };
@@ -206,15 +219,20 @@ export function preTradeChecklist(
       const stopPct = (1 - e.stop / price) * 100;
       if (P.maxStopPct > 0 && stopPct > P.maxStopPct)
         notes.push({ tone: "warn", text: `손절폭이 ${pctText(stopPct)}%로 최대 ${P.maxStopPct}%를 넘어요. 진입 시점을 늦춰 폭을 줄여요.`, rule: RULE.stopWidth });
+      if (P.maxPerTradeRiskPct > 0 && valid(e.qty) && valid(e.account)) {
+        const riskPct = (((price - e.stop) * e.qty) / e.account) * 100;
+        if (riskPct > P.maxPerTradeRiskPct + 1e-9)
+          notes.push({ tone: "warn", text: `손절하면 계좌의 ${pctText(riskPct)}%를 잃어요. 1회 손실 한도 ${P.maxPerTradeRiskPct}%를 넘지 않게 수량을 줄여요.`, rule: RULE.perTrade });
+      }
     }
   }
 
-  if (!valid(e.target)) notes.push({ tone: "bad", text: "목표가(매도 기준)를 먼저 적어요.", rule: RULE.plan });
+  if (!valid(e.target)) notes.push({ tone: "warn", text: "목표가(매도 기준)를 정하지 않았어요. 어디서 팔지 미리 적어 두면 복기하기 쉬워요.", rule: RULE.plan });
   else if (price != null && e.target <= price) notes.push({ tone: "bad", text: "목표가가 매수가보다 낮거나 같아요.", rule: RULE.plan });
 
   if (!e.reason?.trim()) notes.push({ tone: "bad", text: "매수 근거를 적어요. 분석 없이 사지 않아요.", rule: RULE.plan });
 
-  // 5.5 구현 메모: 손절가·목표가·비중은 필수 입력
+  // 5.5 구현 메모: 손절가·비중은 필수 입력
   if (!valid(e.weightPct)) notes.push({ tone: "bad", text: "비중(계좌 대비 %)을 먼저 정해요.", rule: RULE.plan });
   else if (P.maxWeightPct > 0 && e.weightPct > P.maxWeightPct)
     notes.push({ tone: "bad", text: `비중이 ${pctText(e.weightPct)}%예요. 한 종목에 ${P.maxWeightPct}% 넘게 싣지 않아요.`, rule: RULE.weight });

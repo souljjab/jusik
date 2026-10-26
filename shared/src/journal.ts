@@ -23,7 +23,9 @@ export interface JournalEntry {
   strategy?: string;
   /** 매매 당시 계획한 목표가 */
   target?: number;
-  /** 계좌 대비 비중(%) */
+  /**
+   * 계좌 대비 비중(%): 이 주문 뒤 그 종목 전체 비중(이미 가진 수량 + 이번 주문). 주문 검토·일지 입력·모의매매가 같은 뜻으로 쓴다
+   */
   weightPct?: number;
   /** 진입 시점의 시장 국면 */
   regime?: string | null;
@@ -44,6 +46,8 @@ export interface JournalEntry {
    * 규칙 준수율 = 손절가·비중을 지키고 계획에 없던 매수가 아닌 기록의 비율
    */
   selfCheck?: { stopSet: boolean; weightOk: boolean; unplanned: boolean };
+  /** 손실 중 추가 매수였지만 처음부터 계획한 분할 매수라고 확인했다(UI 지도서 9.3) */
+  plannedAdd?: boolean;
 }
 
 /** 규칙을 지킨 기록인가: 서버가 찾은 위반이 없고, 스스로 표시한 체크가 있으면 셋 다 지켰는지. 판단할 근거가 없으면 null */
@@ -69,7 +73,8 @@ export function netOf(e: Pick<JournalEntry, "netPnl" | "netPct" | "review">): { 
     if (Number.isFinite(n)) pnl = n;
   }
   if (pct == null) {
-    const m = /순손익[^(]*\(([+-]?\d+(?:\.\d+)?)%\)/.exec(text) ?? /\(([+-]?\d+(?:\.\d+)?)%\)/.exec(text);
+    // '순손익 … (x%)' 문구만 읽는다. 직접 쓴 복기의 '(+5%)' 같은 글이 결과로 읽히지 않게
+    const m = /순손익[^(]*\(([+-]?\d+(?:\.\d+)?)%\)/.exec(text);
     const n = m ? Number(m[1]) : NaN;
     if (Number.isFinite(n)) pct = n;
   }
