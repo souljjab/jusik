@@ -1,4 +1,5 @@
 import { ALERT_CATEGORY_LABEL, type AlertCategory, type AlertItem } from "@jusik/shared";
+import { fixParticles } from "../../app/notify";
 import { fmtDate, kstDate } from "../../ui/format";
 
 /*
@@ -6,6 +7,7 @@ import { fmtDate, kstDate } from "../../ui/format";
  *  - 범주 거르기(전체·신호·리스크·공시·국면)와 범주별 개수
  *  - 날짜 묶음(오늘·어제·10.12(월)) — 한국 시간 기준
  *  - 행 제목과 문장: 서버 문장은 종목명으로 시작하므로 제목(종목명)과 겹치지 않게 떼어 낸다
+ *  - 예전에 저장된 알림의 조사 자리표시('중립(으)로')는 브라우저 알림과 같은 fixParticles(app/notify)로 고른다
  */
 
 export type AlertFilter = "all" | AlertCategory;
@@ -61,11 +63,6 @@ export function groupByDay(list: AlertItem[], now: Date): AlertGroup[] {
   return groups;
 }
 
-/** 서버 문장의 '(으)로'를 받침에 맞춰 고친다(국면 이름: 공격·중립·방어) */
-export function fixJosa(text: string): string {
-  return text.replace(/(공격|중립)\(으\)로/g, "$1으로").replace(/방어\(으\)로/g, "방어로");
-}
-
 const MARKET_PREFIX = ["코스피", "코스닥", "미국"];
 const REGION_PREFIX = ["국내", "미국"];
 
@@ -76,7 +73,7 @@ const REGION_PREFIX = ["국내", "미국"];
  *  - 계좌(가드) 알림: "국내 계좌" / "신규 매수를 멈췄어요…"
  */
 export function alertHeadline(a: AlertItem): { title: string; body: string } {
-  const text = fixJosa(a.text.trim());
+  const text = fixParticles(a.text.trim());
   if (a.name) {
     const body = text.startsWith(`${a.name} `) ? text.slice(a.name.length + 1) : text;
     return { title: a.name, body };
@@ -106,6 +103,19 @@ export function srAlert(a: AlertItem, time: string, unread: boolean): string {
 export const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 export const validTime = (s: string) => TIME_RE.test(s);
 
+// 24시 시각 고르기(지도서 3.2: 한국 시간 24시 표기). 브라우저의 시각 칸은 언어 설정에 따라 '오후 10:00'처럼 12시로 보여서 쓰지 않는다
+const pad2 = (n: number) => String(n).padStart(2, "0");
+export const HOUR_OPTIONS: string[] = Array.from({ length: 24 }, (_, i) => pad2(i));
+/** 분은 5분 단위. 지금 값이 5분 단위가 아니면(예전에 직접 친 값) 그 값도 넣어 둔다 */
+export function minuteOptions(current?: string): string[] {
+  const list = Array.from({ length: 12 }, (_, i) => pad2(i * 5));
+  return current && /^[0-5]\d$/.test(current) && !list.includes(current) ? [...list, current].sort() : list;
+}
+/** "22:05" → ["22", "05"] (올바르지 않으면 "00:00") */
+export function splitTime(t: string): [string, string] {
+  return validTime(t) ? [t.slice(0, 2), t.slice(3, 5)] : ["00", "00"];
+}
+
 export interface DndPref {
   enabled: boolean;
   start: string;
@@ -113,14 +123,28 @@ export interface DndPref {
   allowRisk: boolean;
 }
 
-/** "방해 금지 22:00~07:00" / "방해 금지 꺼짐" */
-export const dndSummary = (d: DndPref) => (d.enabled ? `방해 금지 ${d.start}~${d.end}` : "방해 금지 꺼짐");
+/** "방해 금지 22:00~07:00" / "방해 금지 꺼짐" (설정 목록의 알림 요약도 이것을 쓴다) */
+export const dndSummary = (d: Pick<DndPref, "enabled" | "start" | "end">) => (d.enabled ? `방해 금지 ${d.start}~${d.end}` : "방해 금지 꺼짐");
 
 /** 시작과 끝이 같으면 구간이 비어 동작하지 않는다 */
 export function dndProblem(d: DndPref): string | null {
   if (!validTime(d.start) || !validTime(d.end)) return "시각은 00:00~23:59 사이로 넣어 주세요.";
   if (d.start === d.end) return "시작과 끝이 같으면 방해 금지가 동작하지 않아요. 끝나는 시각을 바꿔 주세요.";
   return null;
+}
+
+// ───────────────────────── 장중 신호 요약(지도서 7.4) ─────────────────────────
+
+/** 요약 시각은 이만큼까지 */
+export const DIGEST_MAX_TIMES = 4;
+const DIGEST_CANDIDATES = ["12:00", "15:40", "10:00", "14:00", "09:30", "11:00", "13:00", "15:00"];
+/** '시각 더하기'로 넣을 새 시각: 아직 없는 흔한 시각 중 첫 번째 */
+export function nextDigestTime(times: string[]): string {
+  return DIGEST_CANDIDATES.find((t) => !times.includes(t)) ?? HOUR_OPTIONS.map((h) => `${h}:00`).find((t) => !times.includes(t)) ?? "12:00";
+}
+/** 같은 시각을 두 번 골랐을 때 안내(저장은 하나로 합친다) */
+export function digestTimesProblem(times: string[]): string | null {
+  return new Set(times).size < times.length ? "같은 시각이 두 번 있어요. 한 번만 보내요." : null;
 }
 
 /** 브라우저 알림 상태 */
