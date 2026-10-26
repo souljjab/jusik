@@ -135,7 +135,7 @@ describe("macro items", () => {
     const items = macroItems(s, "KR");
     const by = (l: string) => items.find((x) => x.label.startsWith(l))!;
     expect(by("장단기").warn).toBe(true);
-    expect(by("장단기").value).toBe("−0.30%p 역전");
+    expect(by("장단기").value).toBe("-0.30%p 역전");
     expect(by("VIX").warn).toBe(true);
     expect(by("금리 추세").tag).toBe("금리 상승기");
     expect(by("원/달러").warn).toBe(true);

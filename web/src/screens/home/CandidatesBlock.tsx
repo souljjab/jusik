@@ -5,8 +5,9 @@ import { startScan } from "../../api";
 import { useApp } from "../../app/AppContext";
 import { Link } from "../../app/router";
 import { CandidateList } from "../../features/candidates/CandidateList";
-import { Button, Chip, EmptyState, fmtInt, fmtTime, fmtWhen, Notice, useToast } from "../../ui";
-import { candidateFilters, filterCandidates } from "./homeModel";
+import { Button, Chip, EmptyState, errorText, fmtInt, fmtWhen, Notice, useToast } from "../../ui";
+import { nextScanText } from "../discover/logic";
+import { candidateFilters, filterCandidates, scheduleSentence, zeroCandidatesText } from "./homeModel";
 
 /** '지금 스캔': 서버가 스캔 중이면 처리 중 표시. 결과는 서버 상태를 다시 받아 반영한다 */
 export function ScanButton({ variant = "secondary", size = "sm", block = false }: { variant?: "primary" | "secondary"; size?: "sm" | "md" | "lg"; block?: boolean }) {
@@ -20,6 +21,9 @@ export function ScanButton({ variant = "secondary", size = "sm", block = false }
       const r = await startScan();
       toast(r.started ? "스캔을 시작했어요. 끝나면 후보가 바뀌어요." : r.message, r.started ? "info" : "warn");
       await refreshServer();
+    } catch (e) {
+      // 무엇이 일어났는지 + 어떻게 하는지(errorText가 연결 오류면 서버 확인 문장을 준다)
+      toast(`스캔을 시작하지 못했어요. ${errorText(e)}`, "warn");
     } finally {
       setPending(false);
     }
@@ -31,20 +35,43 @@ export function ScanButton({ variant = "secondary", size = "sm", block = false }
   );
 }
 
-/** 스캔 기준 시각과 다음 자동 스캔 */
+/** 스캔 기준 시각과 자동 스캔 안내(발굴과 같은 문장: 꺼져 있으면 꺼져 있다고, 장이 닫혀 있으면 열리면 찾는다고) */
 export function ScanMeta({ scan }: { scan: ScanResult }) {
   const { server, now } = useApp();
-  const next = server?.status.scheduler.nextScanAt;
   return (
     <span className="t-cap">
       <span className="num">{fmtWhen(scan.at, now)} 기준</span>
-      {next && <> · 다음 자동 스캔 <span className="num">{fmtTime(next)}</span></>}
+      {server && <> · {nextScanText(server.status.scheduler, server.settings)}</>}
     </span>
   );
 }
 
 /**
- * 오늘의 후보(지도서 5.1 F): 근거 칸으로 만든 필터 칩, 후보 표(근거 스트립·충족 개수·점수), '모두 보기'.
+ * 후보 0개(지도서 9.2): 가장 많이 걸러낸 조건을 말하고, 같은 조건으로 다시 스캔하는 대신 스크리너로 보낸다.
+ * 자동 스캔 문장은 서버 상태 그대로(꺼져 있거나 장이 닫혀 있으면 '계속 살펴본다'고 쓰지 않는다)
+ */
+export function NoCandidates({ scan, block = false }: { scan: ScanResult; block?: boolean }) {
+  const { server } = useApp();
+  return (
+    <EmptyState
+      title="조건에 맞는 후보가 없어요"
+      action={
+        <Link to="/discover/screener" className={`ui-btn secondary home-linkbtn ${block ? "block home-touch" : "sm"}`}>
+          스크리너에서 조건 보기
+          <ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" />
+        </Link>
+      }
+    >
+      <span className="t-2">
+        {zeroCandidatesText(scan, server?.settings ?? {})}
+        {server && ` ${scheduleSentence(server.status.scheduler, server.settings)}`}
+      </span>
+    </EmptyState>
+  );
+}
+
+/**
+ * 오늘의 후보(지도서 5.1 F): 근거 칸으로 만든 필터 칩, 후보 표(근거 스트립·충족 개수·점수), '후보 모두 보기'.
  * 행을 누르면 종목 분석, '근거 보기'는 근거 시트.
  */
 export function CandidatesBlock({ scan, limit = 8, headingId }: { scan: ScanResult; limit?: number; headingId?: string }) {
@@ -65,7 +92,7 @@ export function CandidatesBlock({ scan, limit = 8, headingId }: { scan: ScanResu
         <div className="row wrap">
           <ScanButton />
           <Link to="/discover" className="home-more">
-            모두 보기
+            후보 모두 보기
             <ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" />
           </Link>
         </div>
@@ -85,11 +112,7 @@ export function CandidatesBlock({ scan, limit = 8, headingId }: { scan: ScanResu
       <CandidateList
         candidates={shown}
         limit={limit}
-        empty={
-          <EmptyState title="조건에 맞는 후보가 없어요" action={<ScanButton />}>
-            <span className="t-2">장이 열린 동안 {fmtInt(scan.scannedCount)}종목을 계속 살펴보고 있어요. 발굴에서 조건을 바꿔 볼 수도 있어요.</span>
-          </EmptyState>
-        }
+        empty={<NoCandidates scan={scan} />}
       />
       {scan.errors.length > 0 && (
         <Notice tone="warn">

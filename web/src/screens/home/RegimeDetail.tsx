@@ -12,7 +12,7 @@ import { MacroSection } from "./MacroSection";
 import { MarketPicker, postureStateOf } from "./RegimeBlock";
 import { useIndexCandles } from "./useHomeData";
 
-/** 점수 한 항목: −범위~+범위 막대에서 0을 가운데 두고 값만큼 칠한다 */
+/** 점수 한 항목: -범위~+범위 막대에서 0을 가운데 두고 값만큼 칠한다 */
 function PartBar({ value, min, max }: { value: number; min: number; max: number }) {
   const span = Math.max(Math.abs(min), Math.abs(max), 1);
   const w = (Math.min(Math.abs(value), span) / span) * 50;
@@ -39,8 +39,9 @@ function Breakdown({ p, compact }: { p: RegimeAssessment; compact: boolean }) {
               <RuleTag rule={x.rule} />
             </div>
             {!compact && <PartBar value={x.value} min={x.min} max={x.max} />}
-            <span className="home-part-v num" aria-label={`${x.label} ${x.value}점`}>
+            <span className="home-part-v num">
               {signed(x.value)}
+              <span className="sr-only">점</span>
             </span>
           </li>
         ))}
@@ -49,7 +50,10 @@ function Breakdown({ p, compact }: { p: RegimeAssessment; compact: boolean }) {
             <span className="t-bold">국면 점수</span>
           </div>
           {!compact && <PartBar value={p.score} min={-7} max={5} />}
-          <span className="home-part-v num t-bold">{signed(p.score)}</span>
+          <span className="home-part-v num t-bold">
+            {signed(p.score)}
+            <span className="sr-only">점</span>
+          </span>
         </li>
       </ul>
       <p className="t-cap">
@@ -125,7 +129,7 @@ function Summary({ p, market, scan, compact }: { p: RegimeAssessment | null; mar
  * 핸드폰은 요약과 근거 문장만(차트는 눌러서 펼친다).
  */
 export function RegimeDetail({ server, markets, market, onMarket, bp }: { server: ServerState; markets: Market[]; market: Market; onMarket: (m: Market) => void; bp: Breakpoint }) {
-  const { now, serverAt } = useApp();
+  const { now } = useApp();
   const compact = bp === "compact";
   const scan = server.latestScan;
   const wide = atLeast(bp, "large");
@@ -139,7 +143,8 @@ export function RegimeDetail({ server, markets, market, onMarket, bp }: { server
       </Link>
       <div className="home-detail-title">
         <h1 className="t-title">시장 국면 상세</h1>
-        <MarketStatus region={region} now={now} asOf={serverAt} />
+        {/* 기준 시각은 이 화면 숫자의 출처인 마지막 스캔 시각(받은 시각이 아니다) */}
+        <MarketStatus region={region} now={now} asOf={scan?.at} />
       </div>
       <MarketPicker market={market} markets={markets} onChange={onMarket} size={compact ? "md" : "sm"} />
     </div>

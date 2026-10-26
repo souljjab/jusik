@@ -1,20 +1,23 @@
-import { ChevronRight } from "lucide-react";
+import { AlertTriangle, ChevronRight } from "lucide-react";
 import type { Currency, ServerState } from "@jusik/shared";
 import { useApp } from "../../app/AppContext";
 import { Link } from "../../app/router";
-import { riskSummary, type CurrencyRisk, type RiskSummary } from "../../features/risk/riskSummary";
+import { riskSummary, stopDistanceText, type CurrencyRisk, type RiskSummary } from "../../features/risk/riskSummary";
 import { arrowOf, fmtPct, fmtPnlByCurrency, fmtRatio, Notice, RiskMeter, toneOf } from "../../ui";
+import { nearStopHead } from "./homeModel";
 
 const CUR_NAME: Record<Currency, string> = { KRW: "원화 계좌", USD: "달러 계좌" };
 
-/** 손익 금액: 색 + 삼각형 + 부호 */
+/** 손익 금액: 색 + 삼각형 + 부호. 화면 낭독은 숨긴 문장('-8만 1천 원 손실')으로 읽는다(일반 span에 aria-label을 달지 않는다) */
 export function Pnl({ value, currency, className = "" }: { value: number | null | undefined; currency: Currency; className?: string }) {
   if (value == null || !Number.isFinite(value)) return <span className={`num flat ${className}`}>-</span>;
   const t = toneOf(value);
+  const text = fmtPnlByCurrency(value, currency);
   return (
-    <span className={`num ${t} ${className}`} aria-label={`${fmtPnlByCurrency(value, currency)}${t === "up" ? " 이익" : t === "down" ? " 손실" : ""}`}>
+    <span className={`num ${t} ${className}`}>
+      <span className="sr-only">{`${text}${t === "up" ? " 이익" : t === "down" ? " 손실" : ""}`}</span>
       <span aria-hidden="true">
-        {arrowOf(value)} {fmtPnlByCurrency(value, currency)}
+        {arrowOf(value)} {text}
       </span>
     </span>
   );
@@ -30,7 +33,7 @@ function CurrencyMeters({ r, title }: { r: CurrencyRisk; title?: string }) {
         value={r.todayPct}
         limit={r.dailyLimitPct}
         format={fmtPct}
-        limitLabel={r.dailyLimitPct != null ? `일일 한도 ${fmtPct(r.dailyLimitPct)}` : "일일 손실 한도 꺼짐"}
+        limitLabel={r.dailyLimitPct != null ? `일일 한도 ${fmtRatio(r.dailyLimitPct)}` : "일일 손실 한도 꺼짐"}
         nearText="한도 근접"
         overText="한도 도달"
       />
@@ -43,27 +46,31 @@ function CurrencyMeters({ r, title }: { r: CurrencyRisk; title?: string }) {
       )}
       {r.blocked && (
         <Notice tone="warn" title="신규 매수가 잠겼어요(모의 자동매매)">
-          {r.blockReason} 다음 거래일에 풀려요.
+          {r.blockReason}
+          {r.releaseText && ` ${r.releaseText}`}
         </Notice>
       )}
     </div>
   );
 }
 
-/** 손절가까지 2% 안쪽으로 다가온 보유 종목 */
+/** 손절가까지 2% 안쪽으로 다가왔거나 이미 손절가 아래인 보유 종목(손절가 아래가 먼저) */
 function NearStopList({ rs }: { rs: RiskSummary }) {
   const { openStock } = useApp();
   const n = rs.nearStop.length;
   return (
     <div className="home-nearstop">
-      <p className={`home-nearstop-head ${n ? "warn-text" : "t-2"}`}>{n ? `손절가 근접 ${n}종목` : "손절가 근접 종목 없음"}</p>
+      <p className={`home-nearstop-head ${n ? "warn-text" : "t-2"}`}>
+        {n > 0 && <AlertTriangle size={14} strokeWidth={1.5} aria-hidden="true" className="home-warn-ic" />}
+        {nearStopHead(rs.nearStop)}
+      </p>
       {n > 0 && (
         <ul className="home-plain-list">
           {rs.nearStop.slice(0, 4).map((x) => (
             <li key={`${x.currency}-${x.position.code}`}>
               <button type="button" className="home-rowbtn" onClick={() => openStock(x.position.code)}>
                 <span className="t-medium ellipsis">{x.position.name}</span>
-                <span className="t-2 num">손절가까지 {fmtRatio(Math.max(0, x.leftPct))}</span>
+                <span className={`num ${x.breached ? "warn-text" : "t-2"}`}>{stopDistanceText(x)}</span>
               </button>
             </li>
           ))}

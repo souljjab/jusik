@@ -15,16 +15,17 @@
 .home-area-cands { grid-area: cands; }
 .home-area-alerts { grid-area: alerts; }
 
-/* 컴퓨터: 국면 · 차트 · (리스크 + 알림) / 후보(그림 4). 오른쪽 기둥은 세로 구분선 하나 */
+/* 컴퓨터: 국면 · 차트와 주요 지수 · (리스크 + 알림) / 후보(그림 4). 오른쪽 기둥은 세로 구분선 하나 */
 .home-grid.large {
   grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.25fr) minmax(300px, 0.85fr);
-  grid-template-areas: "regime chart side" "cands cands side";
-  grid-template-rows: auto 1fr;
+  grid-template-areas: "regime chart side" "regime indices side" "cands cands side";
+  grid-template-rows: auto auto 1fr;
   column-gap: var(--space-6);
 }
 .home-area-side { grid-area: side; display: flex; flex-direction: column; gap: var(--space-5); }
 .home-grid.large > .home-area-regime,
-.home-grid.large > .home-area-chart { padding-bottom: var(--space-5); }
+.home-grid.large > .home-area-indices { padding-bottom: var(--space-5); }
+.home-grid.large > .home-area-chart { padding-bottom: var(--space-3); }
 .home-grid.large > .home-area-side { border-left: 1px solid var(--color-border); padding-left: var(--space-5); }
 .home-area-side > .home-alerts { border-top: 1px solid var(--color-border); padding-top: var(--space-5); }
 .home-grid.large > .home-area-cands { border-top: 1px solid var(--color-border); padding-top: var(--space-5); align-self: start; }
@@ -32,11 +33,13 @@
 /* 태블릿 가로: 국면과 리스크를 위에, 그 아래 후보·알림 */
 .home-grid.expanded {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  grid-template-areas: "regime risk" "chart risk" "cands cands" "alerts alerts";
+  grid-template-areas: "regime risk" "chart risk" "indices risk" "cands cands" "alerts alerts";
+  grid-template-rows: auto auto auto;
   column-gap: var(--space-6);
 }
 .home-grid.expanded > .home-area-regime { padding-bottom: var(--space-5); }
-.home-grid.expanded > .home-area-chart { padding-bottom: var(--space-5); }
+.home-grid.expanded > .home-area-chart { padding-bottom: var(--space-3); }
+.home-grid.expanded > .home-area-indices { padding-bottom: var(--space-5); align-self: start; }
 .home-grid.expanded > .home-area-risk { border-left: 1px solid var(--color-border); padding-left: var(--space-5); padding-bottom: var(--space-5); }
 .home-grid.expanded > .home-area-cands,
 .home-grid.expanded > .home-area-alerts { border-top: 1px solid var(--color-border); padding-top: var(--space-5); padding-bottom: var(--space-5); }
@@ -82,7 +85,9 @@
 .home-legend > span { display: inline-flex; align-items: center; gap: var(--space-1); }
 .home-key { display: inline-block; width: 16px; height: 2px; border-radius: 1px; flex: none; }
 .home-key.close { background: var(--color-text); }
-.home-key.ma { height: 0; border-top: 2px dashed var(--color-accent); }
+/* 기준선(30주선)은 차트 전용 색: 선 색은 차트와 같은 값을 style로 받는다(강조색 아님) */
+.home-key.ma { height: 0; border-top: 2px dashed var(--color-text-2); }
+.home-warn-ic { display: inline-block; vertical-align: -2px; margin-right: 2px; flex: none; }
 
 /* ───────── 리스크(E) ───────── */
 .home-risk { display: flex; flex-direction: column; gap: var(--space-4); }
@@ -121,6 +126,8 @@ a.home-alert-link:hover { background: var(--color-surface-2); }
 .home-index { display: flex; flex-direction: column; gap: 2px; padding: 0 var(--space-3); border-left: 1px solid var(--color-border); min-width: 0; }
 .home-index:first-child { border-left: 0; padding-left: 0; }
 .home-index-v { font-size: var(--font-size-section); font-weight: var(--font-weight-bold); overflow: hidden; text-overflow: ellipsis; }
+.home-index-ch { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); }
+.home-skel { display: flex; flex-direction: column; gap: var(--space-4); }
 .home-pos-head { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); }
 .home-pos-v { display: flex; flex-direction: column; align-items: flex-end; gap: 0; font-size: var(--font-size-section); font-weight: var(--font-weight-bold); }
 .home-pos-v .ui-change { font-size: var(--font-size-secondary); }
@@ -157,7 +164,8 @@ a.home-alert-link:hover { background: var(--color-surface-2); }
 .home-partbar { position: relative; display: block; height: 8px; border-radius: var(--radius-pill); background: var(--color-surface-2); }
 .home-partbar-zero { position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--color-text-2); }
 .home-partbar-fill { position: absolute; top: 0; bottom: 0; border-radius: var(--radius-pill); }
-.home-partbar-fill.pos { background: var(--color-accent); }
+/* 점수 막대는 중립색: 방향은 0 눈금의 왼쪽·오른쪽과 부호로 읽는다(강조색은 선택·근거·국면 게이지에만) */
+.home-partbar-fill.pos { background: var(--color-text); }
 .home-partbar-fill.neg { background: var(--color-text-2); }
 @media (max-width: 599.98px) { .home-parts li { grid-template-columns: minmax(0, 1fr) 3em; } }
 

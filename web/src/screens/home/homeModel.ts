@@ -1,9 +1,11 @@
 import {
   currencyOfRegion, dayTradeEvidence, DAYTRADE_CELLS, macd, MACRO_PARAMS, regionOf, sma, toWeekly,
   type BreadthSummary, type Candle, type Currency, type DayTradeCandidate, type Evidence, type MacroSnapshot, type Market, type PaperPosition,
-  type RegimeAssessment, type Region, type ScanResult, type Settings,
+  type RegimeAssessment, type Region, type ScanResult, type SchedulerStatus, type Settings,
 } from "@jusik/shared";
-import { fmtDate, fmtIndex, MARKET_LABEL } from "../../ui/format";
+import { nearStopSentence, type NearStop } from "../../features/risk/riskSummary";
+import { fmtDate, fmtIndex, fmtInt, MARKET_LABEL } from "../../ui/format";
+import { bindingRejection, nextScanText, rejectionAdvice, scanDraftOf } from "../discover/logic";
 
 /*
  * 홈(UI 지도서 5.1·7.1)과 시장 국면 상세(부록 A)가 쓰는 순수 계산. 화면 없이 시험할 수 있게 여기에 모았다.
@@ -329,4 +331,49 @@ export function unrealized(positions: PaperPosition[]): { pnl: number; pct: numb
     cost += p.cost > 0 ? p.cost : p.entryPrice * p.qty;
   }
   return { pnl: value - cost, pct: cost > 0 ? (value / cost - 1) * 100 : null, value };
+}
+
+/** 리스크 '손절가' 머리 문장: 손절가 아래로 내려간 종목을 따로 센다("손절가 아래 1종목 · 근접 2종목") */
+export function nearStopHead(list: Pick<NearStop, "breached">[]): string {
+  const below = list.filter((x) => x.breached).length;
+  const near = list.length - below;
+  if (!list.length) return "손절가 근접 종목 없음";
+  if (!below) return `손절가 근접 ${near}종목`;
+  return near ? `손절가 아래 ${below}종목 · 근접 ${near}종목` : `손절가 아래 ${below}종목`;
+}
+
+// ───────────────────────── 스캔 안내 문장 ─────────────────────────
+
+/**
+ * 자동 스캔 안내 한 문장. 발굴과 같은 규칙(discover/logic nextScanText): 서버 자동 스캔이 켜져 있고 켠 시장이 열려 있을 때만
+ * 다음 시각을 말하고, 그 밖에는 '꺼져 있어요' / '장이 열리면 N분마다'라고 사실대로 쓴다
+ */
+export function scheduleSentence(sch: Pick<SchedulerStatus, "running" | "nextScanAt" | "marketOpen">, s: Pick<Settings, "markets" | "scanIntervalMin">): string {
+  return `${nextScanText(sch, s)}.`;
+}
+
+/**
+ * 후보 0개일 때의 사실 문장(지도서 9.2 '조건 충족 0개'): 가장 많이 걸러낸 조건과 몇 종목을 걸렀는지.
+ * 조건 이름과 완화 제안은 발굴 스크리너와 같은 계산(bindingRejection·rejectionAdvice)을 쓴다
+ */
+export function zeroCandidatesText(scan: Pick<ScanResult, "rejected" | "scannedCount" | "universeCount">, settings: Partial<Settings>): string {
+  const top = bindingRejection(scan.rejected, scan.scannedCount);
+  if (top) {
+    const cond = rejectionAdvice(top.reason, scanDraftOf(settings)).condition;
+    return `가장 많이 걸러낸 조건은 ${cond}(${fmtInt(top.count)}종목)이에요. 스크리너에서 완화 제안을 볼 수 있어요.`;
+  }
+  return scan.universeCount === 0 ? "후보 목록을 받지 못했어요. 대상 시장과 서버 연결을 확인해 주세요." : "장중에 다시 스캔해 보세요.";
+}
+
+/**
+ * 핸드폰 '내 포지션' 경고 문장: 가장 급한 종목 하나(이미 손절가 아래면 '손절가보다 44.4% 아래예요')와 나머지 수.
+ * 손절가 아래인 종목을 '0% 남았어요'로 줄여 말하지 않는다
+ */
+export function nearStopNotice(list: Pick<NearStop, "position" | "leftPct" | "breached">[]): string {
+  if (!list.length) return "";
+  const [first, ...rest] = list;
+  const head = `${nearStopSentence(first!)}.`;
+  if (!rest.length) return head;
+  const below = rest.filter((x) => x.breached).length;
+  return `${head} 다른 ${rest.length}종목도 ${below ? "손절가 아래이거나 가까이 있어요" : "손절가 가까이 있어요"}.`;
 }
