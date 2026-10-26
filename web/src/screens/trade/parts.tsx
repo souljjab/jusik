@@ -1,18 +1,19 @@
 import { AlertTriangle, RefreshCw } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
-import type { Currency, Region } from "@jusik/shared";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import type { Currency, JournalEntry, Region } from "@jusik/shared";
 import { getOverview, startScan } from "../../api";
 import { useApp } from "../../app/AppContext";
-import { arrowOf, Button, fmtPnlByCurrency, fmtRatio, fmtWhen, MarketStatus, toneOf, useToast } from "../../ui";
-import { CUR_ACCOUNT, NEAR_STOP_PCT, regionOfCur } from "./tradeModel";
+import { arrowOf, Button, errorText, fmtPnlByCurrency, fmtRatio, fmtWhen, MarketStatus, toneOf, useToast } from "../../ui";
+import { CUR_ACCOUNT, manualHoldings, manualNearStopCount, NEAR_STOP_PCT, regionOfCur, type ManualHolding } from "./tradeModel";
 
-/** 손익 금액: 색 + 삼각형 + 부호(만 원 단위) */
+/** 손익 금액: 색 + 삼각형 + 부호(만 원 단위). 화면 낭독은 숨긴 문장('-8만 1천 원 손실')으로 읽는다 */
 export function Pnl({ value, currency, className = "" }: { value: number | null | undefined; currency: Currency; className?: string }) {
   if (value == null || !Number.isFinite(value)) return <span className={`num flat ${className}`}>-</span>;
   const t = toneOf(value);
   const text = fmtPnlByCurrency(value, currency);
   return (
-    <span className={`num ${t} ${className}`} aria-label={`${text}${t === "up" ? " 이익" : t === "down" ? " 손실" : ""}`}>
+    <span className={`num ${t} ${className}`}>
+      <span className="sr-only">{`${text}${t === "up" ? " 이익" : t === "down" ? " 손실" : ""}`}</span>
       <span aria-hidden="true">
         {arrowOf(value)} {text}
       </span>
@@ -76,6 +77,8 @@ export function ScanButton({ variant = "secondary", size = "sm", block = false }
       const r = await startScan();
       toast(r.started ? "스캔을 시작했어요. 끝나면 계획이 바뀌어요." : r.message, r.started ? "info" : "warn");
       await refreshServer();
+    } catch (e) {
+      toast(`스캔을 시작하지 못했어요. ${errorText(e)}`, "warn");
     } finally {
       setPending(false);
     }
@@ -130,6 +133,26 @@ export function useQuotes(codes: string[]): { quotes: Record<string, QuoteInfo>;
     };
   }, [key]);
   return { quotes, at, failed };
+}
+
+export interface ManualBook {
+  holdings: ManualHolding[];
+  /** 보유보다 많이 판 기록이 있는 종목코드 */
+  oversold: string[];
+  quotes: Record<string, QuoteInfo>;
+  /** 현재가를 마지막으로 받은 시각(받은 시각이지 시세 시각이 아니다) */
+  at: string | null;
+  failed: boolean;
+  /** 손절가 근접·아래 종목 수(현재가를 받은 종목만) */
+  nearStop: number;
+}
+
+/** 직접 기록한 보유와 그 현재가. 매매 화면이 한 번만 받아 보유 탭과 탭 이름 옆 경고 개수에 함께 쓴다 */
+export function useManualBook(journal: JournalEntry[]): ManualBook {
+  const { holdings, oversold } = useMemo(() => manualHoldings(journal), [journal]);
+  const { quotes, at, failed } = useQuotes(holdings.map((h) => h.code));
+  const nearStop = useMemo(() => manualNearStopCount(holdings, quotes), [holdings, quotes]);
+  return { holdings, oversold, quotes, at, failed, nearStop };
 }
 
 /** 진행 막대(모의투자 기간·청산 건수). 강조색 대신 보조 글자색으로 채운다 */
