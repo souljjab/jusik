@@ -1,8 +1,8 @@
 import { accountBaseOf } from "../../features/orderMath";
-import { fmtRatio } from "../../ui/format";
+import { fmtBig, fmtRatio } from "../../ui/format";
 import {
   consecutiveLosses, currencyOfRegion, EXPOSURE_CAP_REASON, marketClock, paperEquity, paperTradesFromJournal, regionOfCode, weekdaysBetween,
-  type Currency, type JournalEntry, type PaperAccount, type PaperPosition, type Plan, type Region, type ServerState, type Settings,
+  type Currency, type JournalEntry, type Note, type PaperAccount, type PaperPosition, type Plan, type Region, type ServerState, type Settings,
 } from "@jusik/shared";
 
 /*
@@ -213,6 +213,21 @@ export function paperLossStreak(journal: JournalEntry[], region: Region): number
   return consecutiveLosses(paperTradesFromJournal(mine).map((t) => t.returnPct));
 }
 
+/**
+ * 연속 손실 미터의 상태 문구. 서버가 실제로 쉬게 하는 동안만 '휴식 중'이고,
+ * 쉬는 기간(마지막 손실일과 그다음 거래일)이 지나면 '휴식 끝남'(서버가 '규모를 줄이세요' 노트를 함께 준다)
+ */
+export function streakMeterText(streak: number, max: number, resting: boolean): { nearText: string; overText: string } {
+  const after = resting ? "휴식 중" : "휴식 끝남";
+  return { nearText: max > 0 && streak >= max ? after : "휴식 기준 근접", overText: after };
+}
+
+/** 직접 기록한 매매의 연속 손실: 쉬는 기간이 지났으면 서버의 모의 노트처럼 '규모를 줄이세요'를 메모로 */
+export function manualStreakNotes(m: { streak: number; resting: boolean }, max: number): Note[] {
+  if (!(max > 0) || m.streak < max || m.resting) return [];
+  return [{ tone: "warn", text: `직접 기록한 매매가 최근 ${m.streak}번 연속 손실 뒤 쉬었어요. 다시 들어가되 규모를 줄이세요.` }];
+}
+
 // ───────────────────────── 오늘의 계획 ─────────────────────────
 
 /** 제외 사유별 개수(많은 순) */
@@ -246,6 +261,18 @@ export function accountBase(st: Pick<ServerState, "settings" | "paper">, cur: Cu
 }
 
 export const planKey = (cur: Currency, code: string) => `${cur}:${code}`;
+
+/**
+ * 금액(목록): 국내는 억·만 단위로 줄이고 '원'을 손익 금액처럼 띄어 쓴다('199만 원', 만 아래는 '5,000원'), 미국은 $.
+ */
+export function amountText(n: number, cur: Currency): string {
+  if (cur === "USD") return fmtBig(n, "US");
+  const b = fmtBig(n, "KR");
+  return b === "-" ? b : /[만억조]$/.test(b) ? `${b} 원` : `${b}원`;
+}
+
+/** 손익비(순손익비 등): 소수 첫째 자리 고정(지도서 '2.6') */
+export const payoffText = (x: number | null | undefined) => (x == null || !Number.isFinite(x) ? "-" : x.toFixed(1));
 
 /** 손절가·목표가의 진입가 대비 거리(%) */
 export const distPct = (from: number, to: number) => (from > 0 && to > 0 ? ((to - from) / from) * 100 : null);
