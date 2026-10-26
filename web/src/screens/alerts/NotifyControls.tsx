@@ -124,9 +124,6 @@ export function DndEditor() {
           </span>
           <TimeSelect label="시작" value={d.start} disabled={!d.enabled} invalid={!!problem} onChange={(v) => commit({ start: v })} />
         </div>
-        <span className="glb-times-sep" aria-hidden="true">
-          ~
-        </span>
         <div className="glb-time">
           <span className="t-2" aria-hidden="true">
             끝

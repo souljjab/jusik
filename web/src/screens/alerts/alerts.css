@@ -67,9 +67,10 @@ a.glb-al-link:hover { background: var(--color-surface-2); }
 
 /* 방해 금지 편집 */
 .glb-dnd-editor { display: flex; flex-direction: column; gap: var(--space-3); }
-.glb-times { display: flex; align-items: flex-end; gap: var(--space-2); flex-wrap: wrap; }
-.glb-time { display: flex; flex-direction: column; gap: var(--space-1); }
-.glb-times-sep { padding-bottom: var(--space-2); color: var(--color-text-2); }
+/* 시작·끝을 한 줄씩(좁은 옆 열·핸드폰에서도 같은 모양) */
+.glb-times { display: flex; flex-direction: column; gap: var(--space-2); }
+.glb-time { display: flex; align-items: center; gap: var(--space-3); }
+.glb-time > .t-2 { min-width: 2.5em; }
 
 /* 24시 시각 고르기(시 : 분) */
 .glb-tsel { display: inline-flex; align-items: center; gap: var(--space-1); }
@@ -81,6 +82,8 @@ a.glb-al-link:hover { background: var(--color-surface-2); }
 .glb-digest-times { display: flex; flex-direction: column; gap: var(--space-2); }
 .glb-digest-times ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
 .glb-digest-times li { display: flex; align-items: center; gap: var(--space-2); }
+/* 끈 상태·마지막 한 줄의 '빼기'는 누를 수 없음을 보이게(아이콘 단추에는 공용 비활성 모양이 없다) */
+.glb-digest-times .ui-iconbtn:disabled { color: var(--color-text-2); opacity: 0.5; }
 
 .glb-notify { display: flex; flex-direction: column; gap: var(--space-3); }
 
