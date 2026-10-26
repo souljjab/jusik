@@ -1,22 +1,25 @@
 import { RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
-import { regionOf } from "@jusik/shared";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
+import { currencyOfRegion, regionOf } from "@jusik/shared";
 import type { StockData } from "../../api";
 import { useActions } from "../../app/actions";
 import { useApp } from "../../app/AppContext";
 import { setPrefs, usePrefs } from "../../app/prefs";
 import { navigate, useRoute } from "../../app/router";
-import type { OrderRequest } from "../../features/OrderReviewSheet";
-import { Button, Disclaimer, EmptyState, Notice, Resizer, Skeleton, SkeletonRows, Tabs, useBreakpoint, type Breakpoint } from "../../ui";
+import { accountBaseOf, heldQty, type OrderRequest } from "../../features/OrderReviewSheet";
+import {
+  Button, Disclaimer, EmptyState, Notice, prefersReducedMotion, ProgressLine, Resizer, Skeleton, SkeletonRows, Tabs, useBreakpoint, useSlow, type Breakpoint,
+} from "../../ui";
 import { ChartArea } from "./ChartArea";
 import { DisclosureTab } from "./DisclosureTab";
 import { EvidencePanel, SignalBlock } from "./EvidencePanel";
 import { FinTab } from "./FinTab";
 import { MemoTab } from "./MemoTab";
-import { MobileOrderBar, OrderBox, orderRequest, PositionCalc, previewOf, stopPctOf, tabletRequest, useOrderContext } from "./OrderBox";
+import { MobileOrderBar, OrderBox, orderRequest, PositionCalc, previewOf, stopFromPctCtx, stopPctOf, tabletRequest, useOrderContext } from "./OrderBox";
+import type { ChartLine } from "./PriceChart";
 import { BackLink, StockHeader } from "./StockHeader";
 import {
-  defaultPeriod, DETAIL_TABS, parseStockRoute, stepCode, stockPath, TAB_LABEL, TAB_LABEL_SHORT,
+  defaultPeriod, DETAIL_TABS, fitPanes, PANES, parseStockRoute, stepCode, stockPath, TAB_LABEL, TAB_LABEL_SHORT,
   type DetailTab, type Period,
 } from "./stocksModel";
 import { useStockData } from "./useStockData";
@@ -27,13 +30,12 @@ import "./stocks.css";
 /*
  * 종목(UI 지도서 2장 '종목' 영역: 관심종목 + 종목 상세). 경로 /stocks, /stocks/:code, /stocks/:code/:tab(evidence·fin·disclosure·memo·minute).
  *  - 컴퓨터(1200 이상, 그림 5): 관심종목 | 가격 머리말·차트·신호 | 신호 근거·재무·공시·메모 탭 + 주문 상자. 경계선을 끌어 폭을 바꾸고 다음에도 유지한다
- *  - 태블릿 가로(840~1199, 그림 7): 목록(관심 | 추천) - 상세. 차트 아래 신호 근거(D)와 포지션 계산(E), 오른쪽 아래 떠 있는 주문 버튼(F)
+ *    (차트가 최소 폭 아래로 좁아지지 않게 창 폭에 맞춰 줄여 쓴다)
+ *  - 태블릿 가로(840~1199, 그림 7): 목록(관심 | 추천) - 상세. 차트 아래 신호 근거(D)와 포지션 계산(E), 오른쪽 아래 떠 있는 매도·매수 주문 검토(F)
  *  - 태블릿 세로·핸드폰(그림 8 왼쪽·그림 9 가운데): /stocks는 목록만, /stocks/:code는 별도 화면(뒤로·넓은 차트·탭·아래 고정 매도·매수)
  * 단축키(지도서 5.4): 1·2·3 일·주·월봉, ↑↓ 관심종목 위아래, Ctrl(⌘) Enter 주문 검토 시트 열기(바로 기록하지 않는다).
+ * 제목 구조: 종목을 열면 종목 이름이 h1, 신호·탭 내용이 h2, 그 안의 구역이 h3·h4.
  */
-
-/** 세 영역의 폭(지도서 5.2: 경계선을 끌어 바꾸고 prefs.panes에 남긴다). 기본값은 가운데 차트가 가장 넓게 */
-const PANE = { list: { key: "stocks.list", def: 256, min: 220, max: 420 }, side: { key: "stocks.side", def: 372, min: 340, max: 600 } } as const;
 
 function isTyping(t: EventTarget | null): boolean {
   const el = t as HTMLElement | null;
@@ -56,14 +58,12 @@ function chartHeight(bp: Breakpoint, vh: number): number {
 
 /** 불러오는 중: 실제 배치와 같은 모양. 1초가 넘으면 진행 표시를 더한다(지도서 9.2) */
 function DetailSkeleton({ height, side, back }: { height: number; side?: boolean; back?: boolean }) {
-  const [slow, setSlow] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setSlow(true), 1000);
-    return () => clearTimeout(t);
-  }, []);
+  const slow = useSlow();
   return (
     <div className="stk-skel">
       {back && <BackLink />}
+      <h1 className="sr-only">종목</h1>
+      {slow && <ProgressLine text="종목 자료를 받는 중이에요" />}
       <div className="stack" role="status" aria-label="종목 자료를 불러오는 중">
         <Skeleton w={160} h={24} />
         <Skeleton w={120} h={14} />
@@ -71,47 +71,66 @@ function DetailSkeleton({ height, side, back }: { height: number; side?: boolean
       </div>
       <Skeleton w={220} h={32} />
       <Skeleton h={height} />
-      {slow && <p className="ui-progress">종목 자료를 받는 중이에요</p>}
       {side && <SkeletonRows rows={5} />}
     </div>
   );
 }
 
-function LoadError({ error, onRetry }: { error: string; onRetry: () => void }) {
+function LoadError({ code, error, onRetry }: { code: string; error: string; onRetry: () => void }) {
   return (
-    <Notice
-      tone="warn"
-      title="종목 자료를 불러오지 못했어요"
-      action={
-        <Button size="sm" onClick={onRetry} icon={<RefreshCw size={14} strokeWidth={1.5} aria-hidden="true" />}>
-          다시 불러오기
-        </Button>
-      }
-    >
-      {error.replace(/[.\s]+$/, "")}. 종목 코드가 맞는지, 서버가 켜져 있는지 확인한 뒤 다시 불러오세요.
-    </Notice>
+    <>
+      <h1 className="sr-only">종목 {code}</h1>
+      <Notice
+        tone="warn"
+        title="종목 자료를 불러오지 못했어요"
+        action={
+          <Button size="sm" onClick={onRetry} icon={<RefreshCw size={14} strokeWidth={1.5} aria-hidden="true" />}>
+            다시 불러오기
+          </Button>
+        }
+      >
+        {error.replace(/[.\s]+$/, "")}. 종목 코드가 맞는지 확인한 뒤 다시 불러오세요.
+      </Notice>
+    </>
   );
 }
 
-function TabBody({ tab, data, signals, brief, compact }: { tab: DetailTab; data: StockData; signals: ReturnType<typeof useSignals>; brief: boolean; compact: boolean }) {
+function TabBody({ tab, data, signals, brief, compact, onSelectSignal }: {
+  tab: DetailTab;
+  data: StockData;
+  signals: ReturnType<typeof useSignals>;
+  brief: boolean;
+  compact: boolean;
+  onSelectSignal: (id: string) => void;
+}) {
   const { server, journal, health } = useApp();
   const region = regionOf(data.info.market);
   const sample = !!health?.sample;
   if (tab === "fin") return <FinTab f={data.fundamentals} a={data.analysis} candles={data.candles} region={region} sample={sample} compact={compact} />;
   if (tab === "disclosure") return <DisclosureTab code={data.info.code} region={region} sample={sample} compact={compact} />;
   if (tab === "memo") return <MemoTab code={data.info.code} />;
-  return <EvidencePanel data={data} signals={signals} settings={server?.settings ?? null} journal={journal} brief={brief} />;
+  // 리스크·비중 계산은 주문 상자와 같은 계좌 기준(모의매매면 모의계좌 자산)과 보유 수량을 쓴다
+  const account = { capital: accountBaseOf(server, currencyOfRegion(region)), paper: !!server?.settings.paperEnabled, held: heldQty(journal, data.info.code) };
+  return (
+    <EvidencePanel data={data} signals={signals} settings={server?.settings ?? null} journal={journal} account={account} brief={brief} onSelect={onSelectSignal} />
+  );
+}
+
+interface SidePane {
+  width: number;
+  max: number;
+  onChange: (w: number) => void;
 }
 
 /** 종목 상세(컴퓨터·태블릿·핸드폰 배치) */
-function Detail({ code, tab, minute, bp, reviewRef, sideW, onSideW }: {
+function Detail({ code, tab, minute, bp, reviewRef, side }: {
   code: string;
   tab: DetailTab;
   minute: boolean;
   bp: Breakpoint;
   reviewRef: { current: (() => void) | null };
-  sideW: number;
-  onSideW: (w: number) => void;
+  /** 컴퓨터: 오른쪽 패널 폭과 경계선 */
+  side?: SidePane;
 }) {
   const { server } = useApp();
   const { openOrderReview } = useActions();
@@ -120,19 +139,28 @@ function Detail({ code, tab, minute, bp, reviewRef, sideW, onSideW }: {
   const data = st.data;
   const candidate = useMemo(() => server?.latestScan?.candidates.find((c) => c.code === code) ?? null, [server?.latestScan, code]);
   const signals = useSignals(data, candidate, server?.settings.postureCaps);
-  const [period, setPeriod] = useState<Period>(() => (minute ? "m" : defaultPeriod(!!candidate)));
   const tabRef = useRef<HTMLDivElement>(null);
+  const tabsRef = useRef<HTMLDivElement>(null);
   const large = bp === "large";
   const single = bp === "compact" || bp === "medium";
   const height = chartHeight(bp, vh);
 
-  // 종목이 바뀌면 기본 기간(전략에 따라: 단타 후보 일봉, 그 밖은 주봉)으로
-  useEffect(() => setPeriod(minute ? "m" : defaultPeriod(!!candidate)), [code]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 기본 기간(지도서 5.2 C: 단타 후보 일봉, 그 밖은 주봉). 사용자가 기간을 고르기 전에는 서버 상태가 늦게 와서
+  // 후보인지가 나중에 알려져도 다시 맞춘다(종목이 바뀌면 상세가 새로 만들어져 처음부터 다시 정한다)
+  const [period, setPeriod] = useState<Period>(() => (minute ? "m" : defaultPeriod(!!candidate)));
+  const periodPicked = useRef(minute);
+  const isCandidate = !!candidate;
   useEffect(() => {
-    if (minute) setPeriod("m");
+    if (!periodPicked.current) setPeriod(defaultPeriod(isCandidate));
+  }, [isCandidate]);
+  useEffect(() => {
+    if (!minute) return;
+    periodPicked.current = true;
+    setPeriod("m");
   }, [minute]);
   const changePeriod = useCallback(
     (p: Period) => {
+      periodPicked.current = true;
       setPeriod(p);
       if (minute && p !== "m") navigate(stockPath(code), { replace: true });
     },
@@ -150,12 +178,21 @@ function Detail({ code, tab, minute, bp, reviewRef, sideW, onSideW }: {
     return () => window.removeEventListener("keydown", onKey);
   }, [changePeriod]);
 
-  const setTab = (t: DetailTab) => navigate(stockPath(code, t), { replace: true });
-  const selectSignal = (id: string) => {
-    signals.select(id);
-    if (tab !== "evidence") setTab("evidence");
-    if (!large) requestAnimationFrame(() => tabRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }));
-  };
+  const setTab = useCallback((t: DetailTab) => navigate(stockPath(code, t), { replace: true }), [code]);
+  const select = signals.select;
+  // 신호를 고르면 근거 탭으로 바꾸고 바뀐 신호 근거가 보이게 옮긴다: 컴퓨터는 오른쪽 패널 맨 위, 그 밖은 탭 막대가 상단 바 바로 아래에
+  const selectSignal = useCallback(
+    (id: string) => {
+      select(id);
+      if (tab !== "evidence") setTab("evidence");
+      requestAnimationFrame(() => {
+        const behavior: ScrollBehavior = prefersReducedMotion() ? "auto" : "smooth";
+        if (large) tabRef.current?.closest(".stk-side-body")?.scrollTo({ top: 0, behavior });
+        else (tabsRef.current ?? tabRef.current)?.scrollIntoView({ block: "start", behavior });
+      });
+    },
+    [select, tab, setTab, large],
+  );
 
   const ctx = useOrderContext(
     data ?? ({ info: { code, name: code, market: "KOSPI" }, quote: { code, price: 0, change: 0, changePct: 0 } } as StockData),
@@ -165,6 +202,23 @@ function Detail({ code, tab, minute, bp, reviewRef, sideW, onSideW }: {
   const [stopPct, setStopPct] = useState(() => stopPctOf(ctx));
   const planKey = `${code}|${ctx.plan?.source}|${ctx.plan?.stop}|${ctx.price > 0}`;
   useEffect(() => setStopPct(stopPctOf(ctx)), [planKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 차트의 손절·목표선은 지금 주문 미리 보기 값을 따른다: 컴퓨터는 주문 상자 입력, 태블릿 가로는 손절 슬라이더, 그 밖은 계획 값
+  const [boxLevels, setBoxLevels] = useState<{ stop: number; target: number } | null>(null);
+  const onLevels = useCallback((l: { stop: number; target: number }) => setBoxLevels((p) => (p && p.stop === l.stop && p.target === l.target ? p : l)), []);
+  const lv =
+    large && boxLevels
+      ? boxLevels
+      : bp === "expanded"
+        ? { stop: stopFromPctCtx(ctx, stopPct), target: ctx.plan?.target ?? 0 }
+        : { stop: ctx.plan?.stop ?? 0, target: ctx.plan?.target ?? 0 };
+  const lines = useMemo<ChartLine[]>(
+    () => [
+      ...(lv.stop > 0 ? [{ price: lv.stop, title: "손절", kind: "stop" as const }] : []),
+      ...(lv.target > 0 ? [{ price: lv.target, title: "목표", kind: "target" as const }] : []),
+    ],
+    [lv.stop, lv.target],
+  );
 
   const review = (r: OrderRequest) => openOrderReview(r);
   const tabletReview = () => review(tabletRequest(ctx, stopPct));
@@ -181,11 +235,13 @@ function Detail({ code, tab, minute, bp, reviewRef, sideW, onSideW }: {
     };
   });
 
+  const sideResizer = side && <Resizer value={side.width} onChange={side.onChange} min={PANES.side.min} max={side.max} label="근거·주문 패널 폭 조절" invert />;
+
   if (st.error && !data)
     return (
       <div className={large ? "stk-pane stk-pane-center" : "stk-detail"}>
         {single && <BackLink />}
-        <LoadError error={st.error} onRetry={st.reload} />
+        <LoadError code={code} error={st.error} onRetry={st.reload} />
       </div>
     );
   if (!data)
@@ -196,7 +252,7 @@ function Detail({ code, tab, minute, bp, reviewRef, sideW, onSideW }: {
         </div>
         {large && (
           <>
-            <Resizer value={sideW} onChange={onSideW} min={PANE.side.min} max={PANE.side.max} label="근거·주문 패널 폭 조절" invert />
+            {sideResizer}
             <aside className="stk-pane stk-pane-side stk-skel-side" aria-hidden="true">
               <Skeleton w={240} h={28} />
               <SkeletonRows rows={8} />
@@ -207,23 +263,32 @@ function Detail({ code, tab, minute, bp, reviewRef, sideW, onSideW }: {
       </>
     );
 
-  const lines = signals.plan
-    ? [
-        { price: signals.plan.plan.stop, title: "손절", kind: "stop" as const },
-        ...(signals.plan.plan.target ? [{ price: signals.plan.plan.target, title: "목표", kind: "target" as const }] : []),
-      ]
-    : [];
   // 태블릿 가로: 차트 바로 아래 신호 근거(D)와 포지션 계산(E)
   const de =
     bp === "expanded" ? (
       <div className="stk-de">
-        <section className="stk-de-ev" aria-label="신호 근거 요약">
+        <h2 className="sr-only">신호 근거 요약과 포지션 계산</h2>
+        <section aria-label="신호 근거 요약">
           <SignalBlock view={signals.selected} name={data.info.name} code={code} variant="brief" />
         </section>
         <PositionCalc ctx={ctx} stopPct={stopPct} onStopPct={setStopPct} />
       </div>
     ) : undefined;
-  const chart = <ChartArea data={data} at={st.at} period={period} onPeriod={changePeriod} signals={signals} onSelect={selectSignal} lines={lines} bp={bp} height={height} afterChart={de} />;
+  const chart = (
+    <ChartArea
+      data={data}
+      at={st.at}
+      period={period}
+      onPeriod={changePeriod}
+      signals={signals}
+      onSelect={selectSignal}
+      lines={lines}
+      bp={bp}
+      height={height}
+      afterChart={de}
+      onReload={st.reload}
+    />
+  );
   const tabs = (
     <Tabs
       label="종목 상세"
@@ -236,7 +301,8 @@ function Detail({ code, tab, minute, bp, reviewRef, sideW, onSideW }: {
   );
   const panel = (
     <div ref={tabRef} id={`stk-tab-${tab}`} role="tabpanel" aria-labelledby={`stk-tab-tab-${tab}`} className="stk-tabpanel" tabIndex={-1}>
-      <TabBody tab={tab} data={data} signals={signals} brief={single} compact={bp === "compact" || large} />
+      <h2 className="sr-only">{TAB_LABEL[tab]}</h2>
+      <TabBody tab={tab} data={data} signals={signals} brief={single} compact={bp === "compact" || large} onSelectSignal={selectSignal} />
     </div>
   );
 
@@ -248,28 +314,40 @@ function Detail({ code, tab, minute, bp, reviewRef, sideW, onSideW }: {
           {chart}
           <Disclaimer />
         </div>
-        <Resizer value={sideW} onChange={onSideW} min={PANE.side.min} max={PANE.side.max} label="근거·주문 패널 폭 조절" invert />
+        {sideResizer}
         <aside className="stk-pane stk-pane-side" aria-label="근거와 주문">
           {tabs}
           <div className="stk-side-body">{panel}</div>
           <div className="stk-side-order">
-            <OrderBox ctx={ctx} onReview={review} reviewRef={reviewRef} />
+            <OrderBox ctx={ctx} onReview={review} reviewRef={reviewRef} onLevels={onLevels} />
           </div>
         </aside>
       </>
     );
+
+  const tabsAt = (
+    <div ref={tabsRef} className="stk-tabs-at">
+      {tabs}
+    </div>
+  );
 
   if (bp === "expanded")
     return (
       <div className="stk-detail">
         <StockHeader data={data} at={st.at} />
         {chart}
-        {tabs}
+        {tabsAt}
         {panel}
         <Disclaimer />
-        <Button variant="buy" size="lg" className="stk-fab" onClick={tabletReview} title="매수 주문 검토 시트를 열어요">
-          주문하기
-        </Button>
+        {/* 떠 있는 주문 버튼(F): 이 앱은 주문을 내지 않고 검토 시트만 연다. 매도도 여기서 */}
+        <div className="stk-fab" role="group" aria-label="주문">
+          <Button variant="sell" size="lg" onClick={() => review(orderRequest(ctx, "SELL"))}>
+            매도 주문 검토
+          </Button>
+          <Button variant="buy" size="lg" onClick={tabletReview}>
+            매수 주문 검토
+          </Button>
+        </div>
       </div>
     );
 
@@ -277,13 +355,29 @@ function Detail({ code, tab, minute, bp, reviewRef, sideW, onSideW }: {
     <div className="stk-detail">
       <StockHeader data={data} at={st.at} back />
       {chart}
-      {tabs}
+      {tabsAt}
       {panel}
       <Disclaimer />
       <div className="stk-mbar-space" aria-hidden="true" />
       <MobileOrderBar ctx={ctx} onReview={review} />
     </div>
   );
+}
+
+/** 상자 폭(px)을 따라 읽는다(세 영역 폭 맞추기) */
+function useBoxWidth(ref: { current: HTMLElement | null }, on: boolean): number {
+  const [w, setW] = useState(0);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!on || !el) return;
+    const read = () => setW(Math.round(el.getBoundingClientRect().width));
+    read();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(read);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref, on]);
+  return w;
 }
 
 export default function StocksScreen() {
@@ -294,9 +388,11 @@ export default function StocksScreen() {
   const { watchlist, server } = useApp();
   const [mode, setMode] = useState<ListMode>("watch");
   const reviewRef = useRef<(() => void) | null>(null);
+  const largeRef = useRef<HTMLDivElement>(null);
   const twoPane = bp === "large" || bp === "expanded";
-  const listW = clamp(prefs.panes[PANE.list.key] ?? PANE.list.def, PANE.list.min, PANE.list.max);
-  const sideW = clamp(prefs.panes[PANE.side.key] ?? PANE.side.def, PANE.side.min, PANE.side.max);
+  const box = useBoxWidth(largeRef, bp === "large");
+  const saved = { list: prefs.panes[PANES.list.key], side: prefs.panes[PANES.side.key] };
+  const fit = fitPanes(bp === "large" ? box : 0, saved);
   const setPane = (key: string, w: number) => setPrefs((p) => ({ panes: { ...p.panes, [key]: Math.round(w) } }));
 
   const listCodes = mode === "watch" ? watchlist : (server?.latestScan?.candidates ?? []).map((c) => c.code);
@@ -306,18 +402,24 @@ export default function StocksScreen() {
     if (twoPane && !r.code && watchlist[0]) navigate(stockPath(watchlist[0]), { replace: true });
   }, [twoPane, r.code, watchlist]);
 
-  // ↑↓: 목록 위아래 종목(목록에 포커스가 있거나 아무 데도 없을 때만 — 다른 곳의 화살표 스크롤은 그대로 둔다)
+  // ↑↓: 목록 위아래 종목(목록에 포커스가 있거나 아무 데도 없을 때만 — 다른 곳의 화살표 스크롤은 그대로 둔다).
+  // 목록에 포커스가 있었으면 포커스도 새로 고른 행으로 옮긴다(포커스·선택·Enter가 같은 종목을 가리키게)
   useEffect(() => {
     if (!twoPane) return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.key !== "ArrowUp" && e.key !== "ArrowDown") || e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target) || sheetOpen()) return;
       const a = document.activeElement as HTMLElement | null;
-      if (a && a !== document.body && !a.closest(".stk-list") && a.id !== "main") return;
+      const inList = !!a?.closest(".stk-list");
+      if (a && a !== document.body && !inList && a.id !== "main") return;
       const next = stepCode(listCodes, r.code, e.key === "ArrowDown" ? 1 : -1);
       if (!next || next === r.code) return;
       e.preventDefault();
       navigate(stockPath(next), { replace: true });
-      requestAnimationFrame(() => document.querySelector<HTMLElement>(".stk-row.sel .stk-row-main")?.scrollIntoView({ block: "nearest" }));
+      requestAnimationFrame(() => {
+        const row = document.querySelector<HTMLElement>(".stk-row.sel .stk-row-main");
+        if (inList) row?.focus();
+        else row?.scrollIntoView({ block: "nearest" });
+      });
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -343,15 +445,25 @@ export default function StocksScreen() {
       <span className="t-2">왼쪽 목록에서 고르거나 종목 검색으로 찾아보세요.</span>
     </EmptyState>
   );
+  // 화면 제목(h1)은 하나: 종목을 열면 종목 이름, 열지 않았으면 '종목'
+  const screenH1 = !r.code && <h1 className="sr-only">종목</h1>;
 
   if (bp === "large")
     return (
-      <div className="stk stk-large" style={{ ["--stk-list" as string]: `${listW}px`, ["--stk-side" as string]: `${sideW}px` } as CSSProperties}>
-        <h1 className="sr-only">종목</h1>
+      <div ref={largeRef} className="stk stk-large" style={{ ["--stk-list" as string]: `${fit.list}px`, ["--stk-side" as string]: `${fit.side}px` } as CSSProperties}>
+        {screenH1}
         <div className="stk-pane stk-pane-list">{list}</div>
-        <Resizer value={listW} onChange={(w) => setPane(PANE.list.key, w)} min={PANE.list.min} max={PANE.list.max} label="관심종목 목록 폭 조절" />
+        <Resizer value={fit.list} onChange={(w) => setPane(PANES.list.key, w)} min={PANES.list.min} max={fit.listMax} label="관심종목 목록 폭 조절" />
         {r.code ? (
-          <Detail key={r.code} code={r.code} tab={r.tab} minute={r.minute} bp={bp} reviewRef={reviewRef} sideW={sideW} onSideW={(w) => setPane(PANE.side.key, w)} />
+          <Detail
+            key={r.code}
+            code={r.code}
+            tab={r.tab}
+            minute={r.minute}
+            bp={bp}
+            reviewRef={reviewRef}
+            side={{ width: fit.side, max: fit.sideMax, onChange: (w) => setPane(PANES.side.key, w) }}
+          />
         ) : (
           <div className="stk-pane stk-pane-center stk-nopick">{noPick}</div>
         )}
@@ -360,11 +472,12 @@ export default function StocksScreen() {
 
   if (bp === "expanded")
     return (
-      <div className="stk stk-expanded" style={{ ["--stk-list" as string]: `${clamp(listW, 260, 340)}px` } as CSSProperties}>
-        <h1 className="sr-only">종목</h1>
+      <div className="stk stk-expanded" style={{ ["--stk-list" as string]: `${clamp(fit.list, 260, 340)}px` } as CSSProperties}>
+        {screenH1}
         <div className="stk-pane stk-pane-list">{list}</div>
-        <div className="stk-pane stk-pane-detail">
-          {r.code ? <Detail key={r.code} code={r.code} tab={r.tab} minute={r.minute} bp={bp} reviewRef={reviewRef} sideW={sideW} onSideW={() => {}} /> : noPick}
+        {/* 종목을 바꾸면 상세 스크롤은 맨 위부터(목록 스크롤은 그대로) */}
+        <div key={r.code ?? ""} className="stk-pane stk-pane-detail">
+          {r.code ? <Detail key={r.code} code={r.code} tab={r.tab} minute={r.minute} bp={bp} reviewRef={reviewRef} /> : noPick}
         </div>
       </div>
     );
@@ -379,7 +492,7 @@ export default function StocksScreen() {
     );
   return (
     <div className="stk stk-single">
-      <Detail key={r.code} code={r.code} tab={r.tab} minute={r.minute} bp={bp} reviewRef={reviewRef} sideW={sideW} onSideW={() => {}} />
+      <Detail key={r.code} code={r.code} tab={r.tab} minute={r.minute} bp={bp} reviewRef={reviewRef} />
     </div>
   );
 }

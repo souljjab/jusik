@@ -495,6 +495,19 @@ export function minuteEvidence(a: IntradayAssessment): Pick<Evidence, "cells" | 
   return { cells, met: cells.filter((c) => c.state === "met").length, total: cells.length };
 }
 
+/** 장 시작 후 경과 시간 "45분", "2시간 5분" */
+export const fmtElapsed = (m: number) => (m < 60 ? `${m}분` : `${Math.floor(m / 60)}시간 ${m % 60}분`);
+
+/**
+ * 분봉 판단의 시점(지도서 9.1): 장중이면 '장 시작 후 경과'. 장이 열려 있지 않으면 경과 시간 대신 '장 마감'과
+ * 그 세션의 종가 시각('15:30 종가 기준', 지난 날이면 '10.15(목) 15:30 종가 기준', 거래소 현지 시각)을 쓴다.
+ */
+export function minuteClock(i: { open: boolean; sessionDate: string | null; today: string; close: string; minutesSinceOpen: number }):
+  { closed: false; elapsed: string } | { closed: true; closeText: string } {
+  if (i.open || !i.sessionDate) return { closed: false, elapsed: fmtElapsed(Math.max(0, i.minutesSinceOpen)) };
+  return { closed: true, closeText: `${i.sessionDate === i.today ? "" : `${shortDateKo(i.sessionDate)} `}${i.close} 종가 기준` };
+}
+
 // ───────────────────────── 관심종목 ─────────────────────────
 
 /** index 자리의 항목을 delta만큼 옮긴다(범위를 넘으면 그대로) */
@@ -534,6 +547,56 @@ export function stateLabel(x: { held: boolean; candidate: boolean; analysis: Ana
   if (t.stage === 2 && t.breakout && t.volumeBasis) return "2단계 돌파";
   if (t.stage === 2) return "2단계 상승";
   return `${t.stage}단계 · 관찰`;
+}
+
+// ───────────────────────── 세 영역 폭(컴퓨터) ─────────────────────────
+
+/**
+ * 컴퓨터 세 영역(목록 | 차트 | 근거·주문)의 폭 규칙(지도서 5.2: 경계선을 끌어 바꾸고 다음에도 유지).
+ * 가운데 차트가 화면의 주인공이라 centerMin보다 좁아지지 않게, 저장한 폭도 창 폭에 맞춰 줄여 쓴다(저장 값은 그대로 둔다).
+ * 좁은 창(목록·차트·패널 상자가 narrowBox 미만)은 기본 폭을 줄여 시작한다.
+ */
+export const PANES = {
+  list: { key: "stocks.list", def: 256, narrowDef: 220, min: 220, max: 420 },
+  side: { key: "stocks.side", def: 372, narrowDef: 340, min: 340, max: 600 },
+  /** 차트 영역 최소 폭 */
+  centerMin: 420,
+  /** 경계선 손잡이 두 개의 폭 */
+  handles: 16,
+  narrowBox: 1100,
+} as const;
+
+export interface PaneFit {
+  list: number;
+  side: number;
+  /** 경계선을 끌 수 있는 최대 폭(차트 최소 폭을 남긴다) */
+  listMax: number;
+  sideMax: number;
+}
+
+/** box: 세 영역을 담은 상자 폭(모르면 0). saved: prefs.panes에 저장한 폭 */
+export function fitPanes(box: number, saved: { list?: number | null; side?: number | null }): PaneFit {
+  const L = PANES.list, R = PANES.side;
+  const narrow = box > 0 && box < PANES.narrowBox;
+  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+  let list = clamp(saved.list ?? (narrow ? L.narrowDef : L.def), L.min, L.max);
+  let side = clamp(saved.side ?? (narrow ? R.narrowDef : R.def), R.min, R.max);
+  if (!(box > 0)) return { list, side, listMax: L.max, sideMax: R.max };
+  const room = box - PANES.handles - PANES.centerMin;
+  // 차트 자리가 모자라면 오른쪽 패널부터, 그다음 목록을 최소 폭까지 줄인다
+  let over = list + side - room;
+  if (over > 0) {
+    const s = Math.min(over, side - R.min);
+    side -= s;
+    over -= s;
+  }
+  if (over > 0) list -= Math.min(over, list - L.min);
+  return {
+    list,
+    side,
+    listMax: clamp(room - side, L.min, L.max),
+    sideMax: clamp(room - list, R.min, R.max),
+  };
 }
 
 /** 기본 차트 기간(지도서 5.2 C): 단타 후보면 일봉, 그 밖(와인스타인)은 주봉 */

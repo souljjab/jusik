@@ -1,4 +1,4 @@
-import { Check, Minus, X } from "lucide-react";
+import { AlertTriangle, Check, Minus, X } from "lucide-react";
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { ColorType, CrosshairMode, LineStyle, createChart, type LineData, type LineWidth, type Time, type WhitespaceData } from "lightweight-charts";
 import {
@@ -7,8 +7,12 @@ import {
   type PerBand, type PeriodFinancials, type PsrResult, type Region, type ScreeningResult, type ValuationBasis,
 } from "@jusik/shared";
 import { CHART_FONT, CHART_LOCALE, useChartColors, type ChartColors } from "../../theme";
-import { fmtNum, fmtPct, fmtPrice, NoteList, RuleTag, Section, Stat, Stats } from "../../ui";
+import { fmtNum, fmtPct, fmtPrice, kstDate, NoteList, RuleTag, Section, Stat, Stats } from "../../ui";
 import { ScreeningTags } from "./AnalysisDetails";
+import { markDate } from "./stocksModel";
+
+/** 날짜(지도서 3.2 '10.12(월)', 해가 다르면 '25.3.14(금)'). 날짜 꼴이 아니면 그대로 */
+const dateKo = (d: string | null | undefined) => (!d ? "-" : /^\d{4}-\d{2}-\d{2}/.test(d) ? markDate(d.slice(0, 10), kstDate(new Date())) : d);
 
 /*
  * 재무 탭(예전 「재무·스크리닝」 탭 + 밸류에이션 패널 + PER 밴드 차트): 재무 체크리스트와 제외 기준,
@@ -27,11 +31,12 @@ function CheckRows({ checks, exclude = false }: { checks: ScreenCheck[]; exclude
         const Icon = STATUS_ICON[c.status];
         return (
           <li key={c.id} className={c.status}>
-            <Icon size={16} strokeWidth={2} className="mk" aria-label={(exclude ? EXCLUDE_WORD : STATUS_WORD)[c.status]} />
+            <Icon size={16} strokeWidth={1.5} className="mk" role="img" aria-label={(exclude ? EXCLUDE_WORD : STATUS_WORD)[c.status]} />
             <span className="stack" style={{ gap: 0, minWidth: 0 }}>
-              <span className="row between top">
+              {/* 값이 '영업이익·순이익 감소·정체(B그룹)'처럼 문장일 수 있어 줄바꿈을 막지 않는다(글자 200%에서도 가로로 밀리지 않게) */}
+              <span className="row between top wrap">
                 <span className="t-medium">{c.label}</span>
-                <span className="num">{c.value}</span>
+                <span className="stk-check-val">{c.value}</span>
               </span>
               <span className="t-cap">
                 {exclude ? "제외 기준" : "기준"} {c.rule}
@@ -50,7 +55,10 @@ function Screening({ s }: { s: ScreeningResult }) {
   return (
     <Section title="재무 체크리스트" sub={`등급 ${s.grade}`} as="h3">
       {s.excluded && (
-        <p className="warn-text t-2">제외 기준에 걸려 추천 후보에서 빼요. 아래 제외 기준을 확인하세요.</p>
+        <p className="warn-text t-2 stk-warnline">
+          <AlertTriangle size={14} strokeWidth={1.5} aria-hidden="true" />
+          <span>제외 기준에 걸려 추천 후보에서 빼요. 아래 제외 기준을 확인하세요.</span>
+        </p>
       )}
       <p className="t-2">
         {s.known}개 확인 중 {s.passed}개 통과. 확인 못 한 항목은 감점하지 않고 등급 계산에서 빼요.
@@ -110,7 +118,7 @@ function PeriodTable({ title, rows, region, unit, compact }: { title: string; ro
                   {p.estimate && " (추정)"}
                   {p.derived && <span className="t-cap"> (계산)</span>}
                 </span>
-                <span className="t-cap num">제출 {p.filed ?? "-"}</span>
+                <span className="t-cap num">제출 {dateKo(p.filed)}</span>
               </span>
               <dl className="stk-fingrid">
                 <div>
@@ -156,13 +164,13 @@ function PeriodTable({ title, rows, region, unit, compact }: { title: string; ro
                 <td className="nowrap">
                   {p.period}
                   {p.estimate && " (추정)"}
-                  {p.derived && <span className="t-cap" title="연간 − 1~3분기로 계산한 4분기"> (계산)</span>}
+                  {p.derived && <span className="t-cap" title="연간에서 1~3분기를 빼서 계산한 4분기"> (계산)</span>}
                 </td>
                 <td className="r num">{amt(p.revenue)}</td>
                 <td className={`r num ${neg(p.opIncome, p.estimate)}`}>{amt(p.opIncome)}</td>
                 <td className={`r num ${neg(p.netIncome, p.estimate)}`}>{amt(p.netIncome)}</td>
                 <td className={`r num ${neg(p.eps, p.estimate)}`}>{p.eps == null ? "-" : fmtNum(p.eps, region === "US" ? 2 : 0)}</td>
-                <td className="r num t-2">{p.filed ?? "-"}</td>
+                <td className="r num t-2">{dateKo(p.filed)}</td>
               </tr>
             ))}
           </tbody>
@@ -289,8 +297,9 @@ export const BAND_LEVELS: readonly BandLevel[] = ["max", "p80", "median", "p20",
 function bandLevelLabel(level: BandLevel): string {
   return { min: "최저", p20: `하단 ${P.lowPct}%`, median: "중앙", p80: `상단 ${P.highPct}%`, max: "최고" }[level];
 }
+/** 밴드선 색: 상승·하락 색이 아니라 차트 계열 색(바깥 최고·최저, 안쪽 상·하단, 중앙). 위아래는 자리와 선 모양으로 구분한다 */
 function bandColor(c: ChartColors, level: BandLevel): string {
-  return { min: c.down, p20: c.ma20, median: c.ma60, p80: c.ma5, max: c.up }[level];
+  return { min: c.line3, p20: c.line2, median: c.line1, p80: c.line2, max: c.line3 }[level];
 }
 type Dash = "solid" | "dashed" | "dotted";
 const BAND_LINE: Record<BandLevel, { dash: Dash; width: LineWidth }> = {
@@ -357,7 +366,7 @@ function BandStats({ band, region }: { band: PerBand; region: Region }) {
         })}
       </div>
       <p className="t-cap">
-        {band.from} ~ {band.to}(최근 {fmtNum(band.years, 1)}년) 중 PER을 계산한 {fmtNum(band.n, 0)}거래일의 분포예요.
+        {dateKo(band.from)} ~ {dateKo(band.to)}(최근 {fmtNum(band.years, 1)}년) 중 PER을 계산한 {fmtNum(band.n, 0)}거래일의 분포예요.
         {shortWindow(band) && " 주가 기록이 짧아 실제 기간이 더 짧아요."} 하단 {P.lowPct}%·상단 {P.highPct}%는 PER을 낮은 순으로 세웠을 때의 위치예요. 날마다 그날까지 공시된 확정 실적만 쓰고 적자인 날은 빼요.
         {eps != null && eps > 0 && " ≈ 가격은 지금 EPS에 차트 선 배수(유효숫자 두 자리)를 곱한 값이에요."}
       </p>
@@ -396,6 +405,9 @@ function PerBandChart({ candles, band, region }: { candles: Candle[]; band: PerB
     }
     chart.addLineSeries({ color: colors.text, lineWidth: 2, priceLineVisible: false }).setData(win.map((c) => ({ time: c.date as Time, value: c.close })));
     chart.timeScale().fitContent();
+    // 출처 링크(TradingView)는 그림 밖 보통 링크로 두고, 캔버스 표는 낭독에서 뺀다(요약은 숨긴 문장으로)
+    node.querySelectorAll("table").forEach((t) => t.setAttribute("aria-hidden", "true"));
+    node.querySelectorAll("a").forEach((a) => a.getAttribute("aria-label") || a.setAttribute("aria-label", "차트 라이브러리 TradingView 사이트(새 탭)"));
     return () => chart.remove();
   }, [win, lines, colors, region]);
 
@@ -414,7 +426,8 @@ function PerBandChart({ candles, band, region }: { candles: Candle[]; band: PerB
           </span>
         ))}
       </figcaption>
-      <div ref={el} style={{ height: 240 }} role="img" aria-label={`PER 밴드 차트, ${band.from}부터 ${band.to}까지 종가와 밴드선 ${lines.length}개`} />
+      <p className="sr-only">PER 밴드 차트, {dateKo(band.from)}부터 {dateKo(band.to)}까지 종가와 밴드선 {lines.length}개</p>
+      <div ref={el} style={{ height: 240 }} />
       <p className="t-cap">밴드선은 그날까지 공시된 최근 12개월 EPS에 기간 PER 배수를 곱한 가격이에요. 배수는 유효숫자 두 자리로 반올림했고, EPS가 0 이하인 날은 선을 끊어요.</p>
     </figure>
   );

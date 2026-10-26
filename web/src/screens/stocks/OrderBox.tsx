@@ -1,5 +1,5 @@
 import { AlertTriangle } from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { currencyOfRegion, josa, journalStrategyOf, regionOf, type Evidence, type Region, type Settings } from "@jusik/shared";
 import type { StockData } from "../../api";
 import { useApp } from "../../app/AppContext";
@@ -365,8 +365,23 @@ export function MobileOrderBar({ ctx, onReview }: { ctx: OrderContext; onReview:
   const stop = ctx.plan?.stop ?? 0;
   const pv = previewOf(ctx, "BUY", ctx.price, stop);
   const warn = pv.stopOk && (pv.overRisk || pv.overWeight || meterState(pv.weightAfter, ctx.settings?.maxWeightPct) === "over");
+  // 막대 높이를 알린다(글자 크기에 따라 위험 줄이 두 줄이 되어도 포커스 스크롤 여백·알림 띠·아래 빈칸이 맞게)
+  const bar = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = bar.current;
+    if (!el) return;
+    const root = document.documentElement;
+    const set = () => root.style.setProperty("--stk-mbar-h", `${Math.ceil(el.getBoundingClientRect().height)}px`);
+    set();
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(set);
+    ro?.observe(el);
+    return () => {
+      ro?.disconnect();
+      root.style.removeProperty("--stk-mbar-h");
+    };
+  }, []);
   return (
-    <div className="stk-mbar" role="region" aria-label="주문">
+    <div ref={bar} className="stk-mbar" role="region" aria-label="주문">
       <p className="t-cap stk-mbar-risk">
         {pv.stopOk ? (
           <>

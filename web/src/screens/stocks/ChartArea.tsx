@@ -1,8 +1,9 @@
+import { RefreshCw } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { marketSession, regionOf } from "@jusik/shared";
 import type { StockData } from "../../api";
 import { useApp } from "../../app/AppContext";
-import { Chip, fmtAsOf, fmtDate, kstDate, Segmented, type Breakpoint } from "../../ui";
+import { Button, Chip, EmptyState, fmtAsOf, fmtDate, kstDate, Segmented, type Breakpoint } from "../../ui";
 import { MinuteView } from "./MinuteView";
 import { PriceChart, type ChartLine, type ChartToggles } from "./PriceChart";
 import { SignalList } from "./SignalList";
@@ -13,6 +14,7 @@ import type { Signals } from "./useSignals";
  * 기간과 지표(지도서 5.2 C) + 차트 + 신호 표식(D) + 신호 목록 + 시세 기준 시각.
  * 기간: 분·일·주·월(키 1·2·3 = 일·주·월은 화면이 단다). 지표: 이동평균·거래량·RSI·MACD 켜고 끄기.
  * 보조 지표 패널 2개 이상은 컴퓨터에서만 — 그보다 좁으면 거래량은 가격 패널에 겹치고 RSI·MACD는 하나만 연다.
+ * 그릴 봉이 2개 미만이면(상장 직후·시세 제공처에 자료 없음) 빈 차트 대신 '데이터 없음' 상태와 다시 불러오기를 둔다(지도서 8장 차트 상태).
  */
 
 const TOGGLE_KEY = "jusik.stocks.chart.v1";
@@ -35,7 +37,7 @@ function saveToggles(t: Toggles) {
   }
 }
 
-export function ChartArea({ data, at, period, onPeriod, signals, onSelect, lines, bp, height, afterChart }: {
+export function ChartArea({ data, at, period, onPeriod, signals, onSelect, lines, bp, height, afterChart, onReload }: {
   data: StockData;
   at: number | null;
   period: Period;
@@ -48,6 +50,8 @@ export function ChartArea({ data, at, period, onPeriod, signals, onSelect, lines
   height: number;
   /** 차트 바로 아래에 둘 내용(태블릿 가로: 신호 근거 D와 포지션 계산 E) */
   afterChart?: ReactNode;
+  /** 시세를 다시 받기(차트로 그릴 봉이 없을 때) */
+  onReload?: () => void;
 }) {
   const large = bp === "large";
   const region = regionOf(data.info.market);
@@ -74,6 +78,7 @@ export function ChartArea({ data, at, period, onPeriod, signals, onSelect, lines
   const today = kstDate(now);
   const open = marketSession(region, now).state === "open";
   const last = data.candles.at(-1);
+  const empty = period !== "m" && bars.length < 2;
 
   return (
     <section className="stk-chartarea" aria-label="차트">
@@ -85,7 +90,7 @@ export function ChartArea({ data, at, period, onPeriod, signals, onSelect, lines
           onChange={onPeriod}
           options={(["m", "D", "W", "M"] as const).map((v) => ({ value: v, label: PERIOD_LABEL[v] }))}
         />
-        {period !== "m" && (
+        {period !== "m" && !empty && (
           <div className="stk-toggles" role="group" aria-label="지표 켜고 끄기">
             <Chip pressed={toggles.ma} onClick={() => set("ma")}>이동평균</Chip>
             <Chip pressed={toggles.volume} onClick={() => set("volume")}>거래량</Chip>
@@ -104,6 +109,25 @@ export function ChartArea({ data, at, period, onPeriod, signals, onSelect, lines
         <>
           <MinuteView code={data.info.code} region={region} height={height} />
           {afterChart}
+        </>
+      ) : empty ? (
+        <>
+          <div className="stk-chart-empty" style={{ minHeight: Math.min(height, 240) }}>
+            <EmptyState
+              title="차트로 그릴 시세가 아직 없어요"
+              action={
+                onReload && (
+                  <Button size="sm" onClick={onReload} icon={<RefreshCw size={14} strokeWidth={1.5} aria-hidden="true" />}>
+                    다시 불러오기
+                  </Button>
+                )
+              }
+            >
+              <span className="t-2">상장한 지 얼마 안 됐거나 시세 제공처에 일봉 자료가 없어요. 잠시 뒤 다시 불러오세요.</span>
+            </EmptyState>
+          </div>
+          {afterChart}
+          <SignalList signals={signals} marks={marks} today={today} wide={bp === "large" || bp === "expanded"} onSelect={onSelect} />
         </>
       ) : (
         <>

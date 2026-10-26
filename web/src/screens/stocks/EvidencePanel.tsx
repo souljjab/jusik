@@ -5,7 +5,7 @@ import type { StockData } from "../../api";
 import { useActions } from "../../app/actions";
 import { SignalStatsView } from "../../features/EvidenceSheet";
 import { Button, EvidenceList, EvidenceStrip, EvidenceStripFull, evidenceSummary, fmtNum, NoteList, Stat, Stats } from "../../ui";
-import { AnalysisDetails, DailySignalList } from "./AnalysisDetails";
+import { AnalysisDetails, DailySignalList, type AccountBase } from "./AnalysisDetails";
 import type { Signals, SignalView } from "./useSignals";
 
 /*
@@ -28,7 +28,7 @@ export function CompactEvidence({ cells, onlyUnmet = false }: { cells: EvidenceC
         const Icon = MARK[c.state];
         return (
           <li key={c.id} className={c.state} title={c.detail}>
-            <Icon size={14} strokeWidth={2} aria-hidden="true" className="mk" />
+            <Icon size={14} strokeWidth={1.5} aria-hidden="true" className="mk" />
             <span>
               {c.label}
               <span className="sr-only">
@@ -52,7 +52,7 @@ export function SignalBlock({ view, name, code, variant, headingLevel = "h3", on
   name: string;
   code: string;
   variant: "full" | "brief" | "mini";
-  headingLevel?: "h2" | "h3";
+  headingLevel?: "h2" | "h3" | "h4";
   onlyUnmet?: boolean;
 }) {
   const { openEvidence } = useActions();
@@ -122,24 +122,40 @@ export function KeyFigures({ data }: { data: StockData }) {
   );
 }
 
+/** '같은 신호의 과거 성과'를 보여 주지 않는 까닭(진입 신호가 아닐 때) */
+function noStatsReason(v: SignalView): string {
+  if (v.daily) return "일봉 보조 신호는 의견을 바꾸지 않는 참고 신호라 같은 신호의 과거 성과를 계산하지 않아요.";
+  if (v.mark?.side === "sell") return "매도 쪽 신호는 전략의 진입 신호가 아니라 같은 신호의 과거 성과를 계산하지 않아요.";
+  return "지금은 이 전략의 매수 신호가 아니라 같은 신호의 과거 성과를 보여 주지 않아요.";
+}
+
 /** 신호 근거 탭 전체(컴퓨터 오른쪽 패널·태블릿·핸드폰 근거 탭) */
-export function EvidencePanel({ data, signals, settings, journal, brief = false }: {
+export function EvidencePanel({ data, signals, settings, journal, account, brief = false, onSelect }: {
   data: StockData;
   signals: Signals;
   settings: Settings | null;
   journal: JournalEntry[];
+  /** 주문 상자와 같은 계좌 기준 금액·모의계좌 여부·직접 기록한 보유 수량(리스크·비중 계산) */
+  account: AccountBase;
   /** 핸드폰: 짧은 신호 블록 + 핵심 숫자 */
   brief?: boolean;
+  /** 다른 신호를 고를 때(근거가 바뀐 곳으로 화면을 옮기는 일은 부모가) */
+  onSelect?: (id: string) => void;
 }) {
   const { info, analysis } = data;
   const sel = signals.selected;
   const others = signals.current.filter((v) => v.id !== sel.id);
+  const pick = onSelect ?? signals.select;
   return (
     <div className="stk-evpanel">
       <SignalBlock view={sel} name={info.name} code={info.code} variant={brief ? "brief" : "full"} onlyUnmet={brief} />
       {brief && <KeyFigures data={data} />}
       <div className="stk-stats">
-        <SignalStatsView code={info.code} strategy={sel.strategy} />
+        {sel.entry ? (
+          <SignalStatsView code={info.code} strategy={sel.strategy} />
+        ) : (
+          <p className="t-cap">{noStatsReason(sel)}</p>
+        )}
       </div>
       {others.length > 0 && (
         <section className="stk-others" aria-labelledby="stk-others-h">
@@ -148,9 +164,9 @@ export function EvidencePanel({ data, signals, settings, journal, brief = false 
           </h3>
           {others.map((v) => (
             <div key={v.id} className="stk-other">
-              <SignalBlock view={v} name={info.name} code={info.code} variant="mini" headingLevel="h3" />
+              <SignalBlock view={v} name={info.name} code={info.code} variant="mini" headingLevel="h4" />
               {!v.quiet && (
-                <Button variant="secondary" size="sm" onClick={() => signals.select(v.id)}>
+                <Button variant="secondary" size="sm" onClick={() => pick(v.id)}>
                   이 신호로 근거 보기
                 </Button>
               )}
@@ -159,7 +175,7 @@ export function EvidencePanel({ data, signals, settings, journal, brief = false 
         </section>
       )}
       {analysis ? (
-        <AnalysisDetails a={analysis} journal={journal} region={regionOf(info.market)} settings={settings} breadth={data.breadth} />
+        <AnalysisDetails a={analysis} journal={journal} region={regionOf(info.market)} settings={settings} breadth={data.breadth} account={account} />
       ) : (
         <p className="t-2">분석에 필요한 데이터(주봉 약 34주 이상)가 부족해요.</p>
       )}

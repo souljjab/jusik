@@ -1,12 +1,13 @@
 import { AlertTriangle } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 import {
-  ACTION_LABEL, BUY_ACTIONS, expectancy, positionSize, POSTURE_LABEL, REGIME_LABEL, regionOfCode, screeningNotes, STAGE_LABEL, summarizeJournal,
+  ACTION_LABEL, BUY_ACTIONS, expectancy, josa, POSTURE_LABEL, REGIME_LABEL, regionOfCode, screeningNotes, STAGE_LABEL, summarizeJournal,
   VALUATION_RULES, type Action, type Analysis, type BandPosition, type BreadthResponse, type DailySignal, type JournalEntry, type RegimeAssessment,
   type Region, type ScreeningResult, type Settings,
 } from "@jusik/shared";
 import { Link } from "../../app/router";
-import { fmtDate, fmtInt, fmtMoney, fmtNum, fmtPct, fmtPrice, fmtRatio, NoteList, RegimeGauge, RuleTag } from "../../ui";
+import { defaultBuyQty } from "../../features/orderMath";
+import { fmtDate, fmtInt, fmtMoney, fmtNum, fmtPct, fmtPnl, fmtPrice, fmtRatio, NoteList, RegimeGauge, RuleTag } from "../../ui";
 import { CandleMasterDetail, candleStatus } from "./CandleMasterDetail";
 
 /*
@@ -29,6 +30,15 @@ const ira = (word: string) => {
   return c >= 0 && c < 11172 && c % 28 !== 0 ? "이라" : "라";
 };
 const tone = (n: number) => (n > 0 ? "up" : n < 0 ? "down" : "flat");
+
+/** 리스크·비중 계산의 계좌 기준(주문 상자·주문 검토 시트와 같은 기준) */
+export interface AccountBase {
+  /** 계좌 기준 금액(그 시장 통화): 모의매매를 켰으면 모의계좌 자산, 아니면 예수금 */
+  capital: number;
+  paper: boolean;
+  /** 직접 기록한 보유 수량 */
+  held: number;
+}
 
 function Step({ n, title, summary, children, open = false }: { n?: number; title: string; summary: ReactNode; children: ReactNode; open?: boolean }) {
   return (
@@ -58,11 +68,11 @@ function PostureView({ p }: { p: RegimeAssessment }) {
       <RegimeGauge posture={p.posture} />
       <dl className="stk-kv">
         <dt>국면 점수</dt>
-        <dd className={`num t-medium ${tone(p.score)}`}>{signed(p.score)}</dd>
+        <dd className="num t-medium">{signed(p.score)}</dd>
         {BREAKDOWN.map(([k, label]) => (
           <div key={k} className="stk-kv-pair">
             <dt>{label}</dt>
-            <dd className={`num ${tone(p.breakdown[k] ?? 0)}`}>{signed(p.breakdown[k] ?? 0)}</dd>
+            <dd className="num">{signed(p.breakdown[k] ?? 0)}</dd>
           </div>
         ))}
         <dt>주식 투자 상한</dt>
@@ -70,7 +80,7 @@ function PostureView({ p }: { p: RegimeAssessment }) {
       </dl>
       {p.choppy && (
         <p className="warn-text t-2 row">
-          <AlertTriangle size={14} aria-hidden="true" /> 최근 MACD 교차가 잦아 횡보장일 수 있어요
+          <AlertTriangle size={14} strokeWidth={1.5} aria-hidden="true" /> 최근 MACD 교차가 잦아 횡보장일 수 있어요
         </p>
       )}
       <NoteList notes={p.notes} dense />
@@ -132,7 +142,7 @@ function ExcludedNotice({ s }: { s: ScreeningResult }) {
   if (!s.excluded || !failed.length) return null;
   return (
     <div className="ui-notice warn" role="note">
-      <AlertTriangle className="ico" size={16} aria-hidden="true" />
+      <AlertTriangle className="ico" size={16} strokeWidth={1.5} aria-hidden="true" />
       <div className="stack" style={{ gap: 2 }}>
         <span className="ttl">제외 기준에 걸려 추천 후보에서 빼요</span>
         <ul className="stk-bullets">
@@ -191,20 +201,37 @@ export function DailySignalList({ signals }: { signals: DailySignal[] }) {
   );
 }
 
-export function AnalysisDetails({ a, journal, region, settings, breadth }: {
+export function AnalysisDetails({ a, journal, region, settings, breadth, account }: {
   a: Analysis;
   journal: JournalEntry[];
   region: Region;
   settings: Settings | null;
   breadth: BreadthResponse | null;
+  account: AccountBase;
 }) {
-  const capital = settings ? (region === "US" ? settings.depositUSD : settings.depositKRW) : 0;
+  // 리스크·비중은 주문 상자와 같은 계좌 기준·같은 식(defaultBuyQty: 1회 손실 한도 ÷ 손절폭, 보유 수량을 더해 비중 상한 이내)으로 계산한다
+  const capital = account.capital;
+  const baseWord = account.paper ? "모의계좌 자산" : "예수금";
+  const deposit = settings ? (region === "US" ? settings.depositUSD : settings.depositKRW) : 0;
   const money = (n: number) => fmtMoney(n, region);
   const px = (n: number) => fmtPrice(n, region, { unit: true });
-  const size = useMemo(
-    () => (settings && capital > 0 ? positionSize({ capital, entry: a.price, stop: a.timing.stopLoss, riskPct: settings.riskPct, maxWeightPct: settings.maxWeightPct, feeRate: region === "US" ? 0.0025 : 0.00015 }) : null),
-    [a, settings, capital, region],
-  );
+  const size = useMemo(() => {
+    const stop = a.timing.stopLoss;
+    const per = a.price - stop;
+    if (!settings || !(capital > 0) || !(stop > 0) || !(per > 0)) return null;
+    const d = defaultBuyQty({ capital, riskPct: settings.riskPct, maxWeightPct: settings.maxWeightPct, price: a.price, stop, held: account.held });
+    const byRisk = Math.floor((capital * settings.riskPct) / 100 / per);
+    return {
+      qty: d.qty,
+      overRisk: d.overRisk,
+      overWeight: !!d.overWeight,
+      amount: d.qty * a.price,
+      weightAfter: (((account.held + d.qty) * a.price) / capital) * 100,
+      loss: d.qty * per,
+      cappedByWeight: !d.overRisk && !d.overWeight && d.qty < byRisk,
+      riskPerSharePct: (per / a.price) * 100,
+    };
+  }, [a, settings, capital, account.held]);
   const mine = useMemo(() => summarizeJournal(journal.filter((e) => regionOfCode(e.code) === region)), [journal, region]);
   const myEv = useMemo(
     () => (mine.closed.length >= 5 && mine.winRate != null && mine.avgWinPct != null && mine.avgLossPct != null ? expectancy({ winRate: mine.winRate, avgWinPct: mine.avgWinPct, avgLossPct: mine.avgLossPct }) : null),
@@ -239,12 +266,12 @@ export function AnalysisDetails({ a, journal, region, settings, breadth }: {
       <Step
         n={1}
         title="시장 국면"
-        summary={[a.regime ? `지수 ${REGIME_LABEL[a.regime.regime]}` : null, p ? `${POSTURE_LABEL[p.posture]} 국면 · 상한 ${p.exposureCapPct}%` : "지수 자료 없음"].filter(Boolean).join(" · ")}
+        summary={[a.regime ? `지수 ${REGIME_LABEL[a.regime.regime]}` : null, p ? `${POSTURE_LABEL[p.posture]} 국면 · 상한 ${fmtRatio(p.exposureCapPct, 0)}` : "지수 자료 없음"].filter(Boolean).join(" · ")}
       >
         {p ? <PostureView p={p} /> : a.regime ? <NoteList notes={a.regime.notes} dense /> : <p className="t-2">지수 자료가 없어요.</p>}
         <BreadthLine b={breadth} />
         <Link to="/?view=regime" className="stk-link">
-          시장 국면 근거 자세히(매크로·시장 폭)
+          국면 근거 보기
         </Link>
       </Step>
 
@@ -314,7 +341,7 @@ export function AnalysisDetails({ a, journal, region, settings, breadth }: {
         </dl>
         {a.candlePatterns.length > 0 && (
           <div className="stack">
-            <h5 className="stk-layer">캔들 보조 신호(일봉)</h5>
+            <h4 className="stk-layer">캔들 보조 신호(일봉)</h4>
             <NoteList
               dense
               notes={a.candlePatterns.map((cp) => ({ tone: cp.direction === "bullish" ? "good" : "warn", text: `${cp.direction === "bullish" ? "▲" : "▼"} ${cp.name} — ${cp.note} (기준가 ${px(cp.invalidation)})` }))}
@@ -322,7 +349,7 @@ export function AnalysisDetails({ a, journal, region, settings, breadth }: {
           </div>
         )}
         <div className="stack">
-          <h5 className="stk-layer">일봉 보조 신호</h5>
+          <h4 className="stk-layer">일봉 보조 신호</h4>
           <p className="t-cap">참고 신호예요. 주봉 의견을 바꾸지 않아요.</p>
           <DailySignalList signals={a.dailySignals} />
         </div>
@@ -331,30 +358,45 @@ export function AnalysisDetails({ a, journal, region, settings, breadth }: {
         </p>
       </Step>
 
-      <Step n={4} title="리스크·비중" summary={settings ? `1회 손절 ${settings.riskPct}% · 종목당 최대 ${settings.maxWeightPct}%` : "설정을 불러오는 중"}>
+      <Step
+        n={4}
+        title="리스크·비중"
+        summary={settings ? `1회 손절 ${fmtRatio(settings.riskPct)} · 종목당 최대 ${fmtRatio(settings.maxWeightPct, 0)}` : "설정을 불러오는 중"}
+      >
         <p className="t-2">
-          예수금 {money(capital)} · 1회 손절 허용 {settings?.riskPct ?? "-"}% · 종목당 최대 {settings?.maxWeightPct ?? "-"}%(<Link to="/settings" className="stk-link">설정</Link>에서 바꿔요)
+          {baseWord} {money(capital)} · 1회 손절 허용 {settings ? fmtRatio(settings.riskPct) : "-"} · 종목당 최대 {settings ? fmtRatio(settings.maxWeightPct, 0) : "-"}(
+          <Link to="/settings" className="stk-link">설정</Link>에서 바꿔요)
         </p>
         {p && (
           <p className={p.posture === "DEFENSE" ? "warn-text t-2" : "t-2"}>
             국면이 {POSTURE_LABEL[p.posture]}
-            {ira(POSTURE_LABEL[p.posture])} 주식 투자 상한이 {p.exposureCapPct}%예요
-            {capital > 0 && <> — 예수금 {money(capital)} 중 최대 {money((capital * p.exposureCapPct) / 100)}까지</>}
+            {ira(POSTURE_LABEL[p.posture])} 주식 투자 상한이 {fmtRatio(p.exposureCapPct, 0)}예요
+            {capital > 0 && <> — {baseWord} {money(capital)} 중 최대 {money((capital * p.exposureCapPct) / 100)}까지</>}
           </p>
         )}
-        {size && size.shares > 0 ? (
+        {size && settings ? (
           <NoteList
             dense
             notes={[
               ...(BUY_ACTIONS.includes(a.action) ? [] : [{ tone: "warn" as const, text: "지금은 매수 신호가 아니에요. 아래는 매수한다고 가정한 계산이에요" }]),
-              { tone: "info" as const, text: `참고 매수 수량 ${fmtInt(size.shares)}주(${money(size.amount)}, 비중 ${fmtNum(size.weightPct, 1)}%)` },
-              { tone: "info" as const, text: `손절가(${px(t.stopLoss)})까지 가면 약 ${money(size.riskAmount)} 손실(자본의 ${fmtNum((size.riskAmount / capital) * 100, 2)}%)` },
+              ...(size.overWeight
+                ? [{ tone: "warn" as const, text: `이미 가진 ${fmtInt(account.held)}주로 종목 비중 상한 ${fmtRatio(settings.maxWeightPct, 0)}에 닿아 더 살 수 없어요` }]
+                : [
+                    {
+                      tone: "info" as const,
+                      text: `참고 매수 수량 ${fmtInt(size.qty)}주(${money(size.amount)}, 주문 후 비중 ${fmtRatio(size.weightAfter, 1)}) · 주문 상자와 같은 계산(${baseWord} 기준${account.held > 0 ? `, 보유 ${fmtInt(account.held)}주 포함` : ""})이에요`,
+                    },
+                    { tone: "info" as const, text: `손절가(${px(t.stopLoss)})까지 가면 손실 ${fmtPnl(-size.loss, region)}(${baseWord}의 ${fmtRatio((size.loss / capital) * 100, 1)})` },
+                  ]),
+              ...(size.overRisk ? [{ tone: "warn" as const, text: `1주만 사도 1회 손실 한도 ${fmtRatio(settings.riskPct)}를 넘어요` }] : []),
               ...(size.cappedByWeight ? [{ tone: "warn" as const, text: "손절폭으로는 더 살 수 있지만 비중 상한 때문에 수량을 줄였어요" }] : []),
-              ...(size.riskPerSharePct > 15 ? [{ tone: "warn" as const, text: `손절폭이 ${fmtNum(size.riskPerSharePct, 0)}%로 커요. 손절가를 더 가깝게 잡을 수 있는지 보세요` }] : []),
+              ...(size.riskPerSharePct > 15 ? [{ tone: "warn" as const, text: `손절폭이 ${fmtRatio(size.riskPerSharePct, 0)}로 커요. 손절가를 더 가깝게 잡을 수 있는지 보세요` }] : []),
             ]}
           />
         ) : (
-          <p className="t-2">{capital > 0 ? "현재가가 손절가보다 낮거나 같아서 수량을 계산할 수 없어요." : "예수금이 0이라 수량을 계산할 수 없어요. 설정에서 예수금을 넣어 주세요."}</p>
+          <p className="t-2">
+            {capital > 0 ? "현재가가 손절가보다 낮거나 같아서 수량을 계산할 수 없어요." : `${josa(baseWord, "이/가")} 0이라 수량을 계산할 수 없어요. ${account.paper ? "설정의 모의매매에서 모의계좌를 확인해 주세요." : "설정에서 예수금을 넣어 주세요."}`}
+          </p>
         )}
         {myEv ? (
           <p className="t-2">
@@ -367,7 +409,7 @@ export function AnalysisDetails({ a, journal, region, settings, breadth }: {
       </Step>
 
       <Step title="캔들마스터 주봉(별도 매매법)" summary={cm ? candleStatus(cm).label : "주봉 부족"}>
-        <CandleMasterDetail r={cm} capital={capital} region={region} />
+        <CandleMasterDetail r={cm} capital={deposit} region={region} />
       </Step>
     </section>
   );

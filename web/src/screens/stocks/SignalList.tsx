@@ -59,9 +59,9 @@ export function SignalList({ signals, marks, today, wide, onSelect }: {
     return (
       <section className="stk-sigarea" aria-labelledby="stk-sig-h">
         <div className="stk-sigarea-head">
-          <h3 id="stk-sig-h" className="t-body t-bold">
+          <h2 id="stk-sig-h" className="t-body t-bold">
             신호 {marks.length + current.length > 0 && <span className="t-cap">{current.length + marks.length}개</span>}
-          </h3>
+          </h2>
           <span className="t-cap">누르면 아래 근거가 바뀌어요</span>
         </div>
         <ul className="stk-sigchips" aria-label="신호 목록">
@@ -83,9 +83,9 @@ export function SignalList({ signals, marks, today, wide, onSelect }: {
   return (
     <section className="stk-sigarea" aria-labelledby="stk-sig-h">
       <div className="stk-sigarea-head">
-        <h3 id="stk-sig-h" className="t-body t-bold">
+        <h2 id="stk-sig-h" className="t-body t-bold">
           신호
-        </h3>
+        </h2>
         <span className="t-cap">차트 표식이나 목록을 누르면 신호 근거가 그 신호로 바뀌어요</span>
       </div>
       <ul className="stk-siglist">

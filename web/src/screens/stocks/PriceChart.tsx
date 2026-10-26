@@ -5,7 +5,7 @@ import {
 } from "lightweight-charts";
 import type { Region } from "@jusik/shared";
 import { CHART_FONT, CHART_LOCALE, useChartColors, type ChartColors } from "../../theme";
-import { fmtBig, fmtPrice, kstDate } from "../../ui";
+import { Change, fmtBig, fmtNum, fmtPrice, kstDate } from "../../ui";
 import {
   barLabel, chartSummary, crosshairTime, declutterLabels, INITIAL_BARS, MA_SETS, macdPoints, maPoints, PERIOD_NAME, rsiPoints,
   type Bar, type BarPeriod, type ChartMarker,
@@ -16,6 +16,9 @@ import {
  * 크로스헤어(마우스 위치의 날짜·가격), 휠 확대, 끌어서 이동은 lightweight-charts 기본 동작을 쓴다.
  * 신호가 난 봉 아래(매도 쪽은 위)에 표식을 달고, 표식을 누르면 onMarker로 그 신호를 알려 준다.
  * 보조 지표 패널 2개 이상은 컴퓨터에서만(지도서 8장) — 패널 구성은 부모가 정한다.
+ * 색: 이동평균·RSI·MACD는 차트 전용 계열 색(line1~3·ma*), 강조색은 고른 신호 표식에만. 상승·하락 색은 캔들·거래량에만.
+ * 화면 낭독: 가격 차트 요약 문장과 보조 지표 패널마다 지금 값 문장을 숨긴 글로 둔다. 차트 라이브러리의 출처 링크(TradingView)는
+ * 그림(role=img) 안에 두지 않는다(그림 안의 링크는 낭독기가 읽지 못하는 탭 정지가 된다).
  */
 
 export interface ChartLine {
@@ -136,7 +139,7 @@ export function PriceChart({
     let rsi: ISeriesApi<"Line"> | null = null;
     if (toggles.rsi && rsiEl.current) {
       const c = make(rsiEl.current, (p) => p.toFixed(0));
-      rsi = c.addLineSeries({ color: colors.accent, lineWidth: 1, priceLineVisible: false, lastValueVisible: true, crosshairMarkerRadius: 3 });
+      rsi = c.addLineSeries({ color: colors.line1, lineWidth: 1, priceLineVisible: false, lastValueVisible: true, crosshairMarkerRadius: 3 });
       rsi.createPriceLine({ price: 70, color: colors.muted, lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: false });
       rsi.createPriceLine({ price: 30, color: colors.muted, lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: false });
       c.priceScale("right").applyOptions({ scaleMargins: { top: 0.1, bottom: 0.1 } });
@@ -146,8 +149,8 @@ export function PriceChart({
     if (toggles.macd && macdEl.current) {
       const c = make(macdEl.current);
       const hist = c.addHistogramSeries({ priceLineVisible: false, lastValueVisible: false });
-      const line = c.addLineSeries({ color: colors.ma20, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-      const signal = c.addLineSeries({ color: colors.ma5, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+      const line = c.addLineSeries({ color: colors.line1, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+      const signal = c.addLineSeries({ color: colors.line2, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
       macd = { hist, line, signal };
       panes.push({ chart: c, series: line, values: new Map() });
     }
@@ -250,7 +253,8 @@ export function PriceChart({
       id: m.id,
       position: m.side === "buy" ? "belowBar" : "aboveBar",
       shape: m.side === "buy" ? "arrowUp" : "arrowDown",
-      color: m.side === "buy" ? colors.accent : colors.muted,
+      // 강조색은 고른 신호 표식에만. 나머지 매수 쪽은 차트 계열 색, 매도 쪽은 옅은 글자색(모양·위치로도 구분된다)
+      color: m.id === selectedId ? colors.accent : m.side === "buy" ? colors.line1 : colors.muted,
       text: m.text,
       size: m.id === selectedId ? 2 : 1,
     }));
@@ -276,6 +280,17 @@ export function PriceChart({
   const shown = hover ?? bars.at(-1) ?? null;
   const prev = shown ? bars[bars.indexOf(shown) - 1] : undefined;
   const px = (n: number) => fmtPrice(n, region);
+  const sub = useMemo(() => subSummaries(bars), [bars]);
+
+  // 출처 링크(라이브러리가 차트 상자 안에 넣는다)는 그림 밖 보통 링크로 두고, 캔버스 표는 낭독에서 뺀다
+  useEffect(() => {
+    const el = mainEl.current;
+    if (!el) return;
+    el.querySelectorAll("table").forEach((t) => t.setAttribute("aria-hidden", "true"));
+    el.querySelectorAll("a").forEach((a) => {
+      if (!a.getAttribute("aria-label")) a.setAttribute("aria-label", "차트 라이브러리 TradingView 사이트(새 탭)");
+    });
+  }, [colors, paneKey]);
 
   return (
     <figure className="stk-chart">
@@ -286,12 +301,18 @@ export function PriceChart({
             <span><span className="k">시</span>{px(shown.open)}</span>
             <span><span className="k">고</span>{px(shown.high)}</span>
             <span><span className="k">저</span>{px(shown.low)}</span>
-            <span><span className="k">종</span><span className={prev ? (shown.close > prev.close ? "up" : shown.close < prev.close ? "down" : "") : ""}>{px(shown.close)}</span></span>
+            <span>
+              <span className="k">종</span>
+              <span className={prev ? (shown.close > prev.close ? "up" : shown.close < prev.close ? "down" : "") : ""}>{px(shown.close)}</span>
+              {/* 등락은 색만이 아니라 삼각형·부호로도(지도서 10장) */}
+              {prev && prev.close > 0 && <Change pct={(shown.close / prev.close - 1) * 100} showAbs={false} className="stk-ohlc-chg" />}
+            </span>
             <span><span className="k">거래량</span>{fmtBig(shown.volume)}</span>
           </span>
         )}
         {toggles.ma && (
-          <span className="stk-keys" aria-label="이동평균">
+          <span className="stk-keys">
+            <span className="sr-only">이동평균: </span>
             {mas.map((m) => (
               <span key={m.n}>
                 <i className="stk-key" style={{ background: colors[m.color] }} aria-hidden="true" />
@@ -301,26 +322,47 @@ export function PriceChart({
           </span>
         )}
       </figcaption>
-      <div ref={mainEl} className="stk-chart-main" role="img" aria-label={`${summary}. 차트 아래 신호 목록에서 신호를 고를 수 있어요`} style={{ height }} />
+      <p className="sr-only">{summary}. 차트 아래 신호 목록에서 신호를 고를 수 있어요.</p>
+      <div ref={mainEl} className="stk-chart-main" style={{ height }} />
       {volPane && (
         <div className="stk-subpane">
-          <span className="stk-subpane-lbl t-cap">거래량</span>
+          <span className="stk-subpane-lbl t-cap">
+            거래량{sub.volume && <span className="sr-only">, {sub.volume}</span>}
+          </span>
           <div ref={volEl} className="stk-subpane-box" style={{ height: 72 }} aria-hidden="true" />
         </div>
       )}
       {toggles.rsi && (
         <div className="stk-subpane">
-          <span className="stk-subpane-lbl t-cap">RSI 14 · 70 과매수 · 30 과매도</span>
+          <span className="stk-subpane-lbl t-cap">
+            RSI 14 · 70 과매수 · 30 과매도{sub.rsi && <span className="sr-only">, {sub.rsi}</span>}
+          </span>
           <div ref={rsiEl} className="stk-subpane-box" style={{ height: 96 }} aria-hidden="true" />
         </div>
       )}
       {toggles.macd && (
         <div className="stk-subpane">
-          <span className="stk-subpane-lbl t-cap">MACD 12·26·9</span>
+          <span className="stk-subpane-lbl t-cap">
+            MACD 12·26·9{sub.macd && <span className="sr-only">, {sub.macd}</span>}
+          </span>
           <div ref={macdEl} className="stk-subpane-box" style={{ height: 96 }} aria-hidden="true" />
         </div>
       )}
       <span className="sr-only">{PERIOD_NAME[period]}</span>
     </figure>
   );
+}
+
+/** 보조 지표 패널의 지금 값 문장(화면 낭독): 거래량은 20봉 평균 대비, RSI는 과매수·과매도·중립, MACD는 신호선 위·아래 */
+function subSummaries(bars: Bar[]): { volume: string | null; rsi: string | null; macd: string | null } {
+  const last = bars.at(-1);
+  const recent = bars.slice(-21, -1);
+  const avg = recent.length ? recent.reduce((t, b) => t + b.volume, 0) / recent.length : 0;
+  const volume = last ? `마지막 봉 ${fmtBig(last.volume)}${avg > 0 ? `, 앞선 ${recent.length}봉 평균의 ${fmtNum(last.volume / avg, 1)}배` : ""}` : null;
+  const r = rsiPoints(bars).at(-1)?.value;
+  const rsi = r == null ? null : `지금 ${Math.round(r)}, ${r >= 70 ? "과매수 구간" : r <= 30 ? "과매도 구간" : "중립 구간"}`;
+  const m = macdPoints(bars);
+  const ml = m.macd.at(-1)?.value, sl = m.signal.at(-1)?.value;
+  const macd = ml == null || sl == null ? null : `MACD 선이 신호선 ${ml > sl ? "위" : ml < sl ? "아래" : "과 같은 자리"}, 0선 ${ml >= 0 ? "위" : "아래"}`;
+  return { volume, rsi, macd };
 }

@@ -1,3 +1,4 @@
+import { AlertTriangle } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { followedRules, regionOfCode } from "@jusik/shared";
 import { useApp } from "../../app/AppContext";
@@ -52,6 +53,7 @@ function StockMemo({ code }: { code: string }) {
         aria-describedby={`${id}-hint`}
       />
       <span id={`${id}-hint`} className={state === "failed" ? "err" : "hint"} role={state === "failed" ? "alert" : undefined}>
+        {state === "failed" && <AlertTriangle size={14} strokeWidth={1.5} aria-hidden="true" />}
         {state === "failed" ? "이 브라우저에서는 저장할 수 없어요(사생활 보호 창 등). 창을 닫으면 사라져요." : state === "saved" ? "이 기기에 저장했어요. 다른 기기와 공유되지 않아요." : "쓰면 이 기기에 자동으로 저장돼요."}
       </span>
     </div>
@@ -67,7 +69,7 @@ export function MemoTab({ code }: { code: string }) {
       <Section as="h3" title="종목 메모">
         <StockMemo code={code} />
       </Section>
-      <Section as="h3" title="매매일지" sub={entries.length ? `${entries.length}건` : undefined} actions={<Link to="/records" className="stk-link">기록에서 보기</Link>}>
+      <Section as="h3" title="매매일지" sub={entries.length ? `${entries.length}건` : undefined} actions={<Link to="/records" className="stk-link">매매일지 열기</Link>}>
         {entries.length === 0 ? (
           <EmptyState title="이 종목의 일지가 아직 없어요">
             <span className="t-2">주문 검토에서 확인하면 일지에 남고, 모의 자동매매 기록도 여기에 보여요.</span>
@@ -91,14 +93,19 @@ export function MemoTab({ code }: { code: string }) {
                   {e.reason && <p className="t-2">{e.reason}</p>}
                   {(e.stop != null || e.target != null) && (
                     <p className="t-cap num">
-                      {e.stop != null && `손절 ${fmtPrice(e.stop, region)}`}
+                      {e.stop != null && `손절 ${fmtPrice(e.stop, region, { unit: true })}`}
                       {e.stop != null && e.target != null && " · "}
-                      {e.target != null && `목표 ${fmtPrice(e.target, region)}`}
+                      {e.target != null && `목표 ${fmtPrice(e.target, region, { unit: true })}`}
                       {e.strategy && ` · ${e.strategy}`}
                     </p>
                   )}
                   {e.review && <p className="t-2">복기: {e.review}</p>}
-                  {ok === false && <p className="warn-text t-cap">규칙 위반{e.violations?.length ? `: ${e.violations.join(", ")}` : ""}</p>}
+                  {ok === false && (
+                    <p className="warn-text t-cap stk-warnline">
+                      <AlertTriangle size={14} strokeWidth={1.5} aria-hidden="true" />
+                      <span>규칙 위반{e.violations?.length ? `: ${e.violations.join(", ")}` : ""}</span>
+                    </p>
+                  )}
                 </li>
               );
             })}
