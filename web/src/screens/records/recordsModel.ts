@@ -1,12 +1,16 @@
 import { currencyOfRegion, followedRules, netOf, regionOfCode, rMultiple, type Currency, type JournalEntry } from "@jusik/shared";
+import { fmtRatio } from "../../ui/format";
 
 /*
  * 기록 화면 계산 도우미(순수 함수). 화면은 여기서 만든 값만 그린다.
  *  - 감정 태그: 지도서 7.2 F(차분·조급·확신·불안) + 자료집 5.5 위험 감정(욕심·두려움·희망 보유·복수 매매)
  *  - 기간: 일·주(월~일)·월. 날짜는 일지의 날짜 문자열(YYYY-MM-DD, 그 시장 현지 날짜)로 자른다
  *  - 거래 결과: 매도 기록마다 같은 출처(직접·자동)·같은 종목의 매수분을 선입선출로 짝지어 손익·수익률·R을 낸다.
- *    자동(모의) 매도는 비용을 뺀 순손익(netOf)을 먼저 쓴다
- *  - 규칙 준수율: followedRules가 판단한 기록 중 지킨 기록의 비율(판단할 수 없는 기록은 빼고 센다)
+ *    자동(모의) 매도만 비용을 뺀 순손익(netOf)을 쓰고, 직접 쓴 매도는 선입선출 결과(수수료 제외)를 쓴다
+ *  - 손절 지연: 직접 쓴 매도가 계획한 손절가보다 1% 넘게 아래면 그 매도 기록의 위반으로 센다.
+ *    자동(모의) 손절이 갭 하락으로 손절가 아래에서 체결된 것은 위반이 아니라 사실로만 보여 준다
+ *  - 규칙 준수율: 직접 쓴 기록 중 판단할 수 있는 기록에서 지킨 기록의 비율(모의매매 자동 기록과 판단할 수 없는 기록은 빼고 센다)
+ *  - '거래' 수는 결과를 아는 청산(매도) 수 = 승률의 바탕(지도서 7.2 E '4건 · 50%')
  */
 
 // ───────────────────────── 감정 ─────────────────────────
@@ -49,24 +53,42 @@ export const SELF_CHECK_LABEL: Record<keyof SelfCheck, string> = {
   unplanned: "계획에 없던 매수다",
 };
 
-/** 기록 하나가 어긴 것(서버가 찾은 위반 + 스스로 표시한 체크에서 어긴 것) */
-export function breaches(e: Pick<JournalEntry, "violations" | "selfCheck">): string[] {
-  const out = [...(e.violations ?? [])];
+/** 손절 지연 문장(직접 쓴 매도) */
+export const stopLateText = (r: Pick<SellResult, "belowStopPct">) => `계획한 손절가보다 ${fmtRatio(r.belowStopPct)} 아래에서 팔았어요.`;
+
+/** 서버 위반 중 스스로 표시한 체크와 같은 규칙(손절가·비중)인 것 */
+const SAME_RULE: Partial<Record<keyof SelfCheck, RegExp>> = { stopSet: /손절가/, weightOk: /비중/ };
+
+/**
+ * 기록 하나가 어긴 것: 서버가 찾은 위반 + 스스로 표시한 체크에서 어긴 것 + 손절 지연(직접 쓴 매도, r을 줄 때).
+ * 같은 규칙은 한 번만 센다: 서버가 이미 손절가·비중 위반을 남겼으면 같은 체크 항목은 더하지 않는다.
+ */
+export function breaches(e: Pick<JournalEntry, "violations" | "selfCheck">, r?: Pick<SellResult, "stopLate" | "belowStopPct">): string[] {
+  const v = e.violations ?? [];
+  const out = [...v];
   const c = e.selfCheck;
+  const dup = (k: keyof SelfCheck) => v.some((x) => SAME_RULE[k]?.test(x));
   if (c) {
-    if (!c.stopSet) out.push("손절가를 미리 정하지 않았어요.");
-    if (!c.weightOk) out.push("비중 상한을 넘었어요.");
+    if (!c.stopSet && !dup("stopSet")) out.push("손절가를 미리 정하지 않았어요.");
+    if (!c.weightOk && !dup("weightOk")) out.push("비중 상한을 넘었어요.");
     if (c.unplanned) out.push("계획에 없던 매수예요.");
   }
+  if (r?.stopLate) out.push(stopLateText(r));
   return out;
 }
 
-/** 규칙 판정 문구: '규칙 지킴' / '위반 n건' / null(판단할 근거 없음) */
-export function ruleVerdict(e: Pick<JournalEntry, "violations" | "selfCheck" | "source">): { ok: boolean; text: string } | null {
-  const f = followedRules(e);
+/** 규칙을 지킨 기록인가: 손절 지연 매도는 어긴 기록, 그 밖은 followedRules. 판단할 근거가 없으면 null */
+export function entryFollowed(e: Pick<JournalEntry, "violations" | "selfCheck" | "source">, r?: Pick<SellResult, "stopLate">): boolean | null {
+  if (r?.stopLate) return false;
+  return followedRules(e);
+}
+
+/** 규칙 판정 문구: '규칙 지킴' / '위반 n건' / null(판단할 근거 없음). 매도는 r(거래 결과)을 주면 손절 지연도 본다 */
+export function ruleVerdict(e: Pick<JournalEntry, "violations" | "selfCheck" | "source">, r?: Pick<SellResult, "stopLate" | "belowStopPct">): { ok: boolean; text: string } | null {
+  const f = entryFollowed(e, r);
   if (f == null) return null;
   if (f) return { ok: true, text: "규칙 지킴" };
-  return { ok: false, text: `위반 ${Math.max(1, breaches(e).length)}건` };
+  return { ok: false, text: `위반 ${Math.max(1, breaches(e, r).length)}건` };
 }
 
 // ───────────────────────── 날짜·기간 ─────────────────────────
@@ -123,8 +145,10 @@ export interface SellResult {
   rDerived: boolean;
   /** 짝지은 매수 기록 */
   buyIds: string[];
-  /** 계획한 손절가보다 1% 넘게 아래에서 팔았는지(손절 지연) */
+  /** 직접 쓴 매도가 계획한 손절가보다 1% 넘게 아래에서 팔았는지(손절 지연, 규칙 위반) */
   stopLate: boolean;
+  /** 계획한 손절가보다 1% 넘게 아래에서 팔았으면 얼마나 아래였는지(%). 자동(모의)도 채운다(갭 하락 체결 안내용) */
+  belowStopPct: number | null;
   currency: Currency;
 }
 
@@ -144,6 +168,7 @@ export const STOP_LATE_TOL = 0.01;
 
 /**
  * 매도 기록마다 결과를 낸다. 출처(직접·자동)가 다르면 다른 계좌라 섞어 짝짓지 않는다.
+ * 자동(모의) 매도는 비용을 뺀 순손익(netOf)을 먼저 쓰고, 직접 쓴 매도는 선입선출 결과만 쓴다(복기 메모의 글이 결과로 읽히지 않게).
  * 짝지을 매수분이 없고 순손익 숫자도 없으면 손익·수익률은 null.
  */
 export function sellResults(entries: JournalEntry[]): Map<string, SellResult> {
@@ -157,7 +182,7 @@ export function sellResults(entries: JournalEntry[]): Map<string, SellResult> {
       q.push({ id: e.id, price: e.price, qty: e.qty, stop: e.stop });
       continue;
     }
-    let remain = e.qty, cost = 0, matched = 0, rSum = 0, rW = 0, stopLate = false;
+    let remain = e.qty, cost = 0, matched = 0, rSum = 0, rW = 0, below: number | null = null;
     const buyIds: string[] = [];
     while (remain > 0 && q.length) {
       const lot = q[0]!;
@@ -167,12 +192,13 @@ export function sellResults(entries: JournalEntry[]): Map<string, SellResult> {
       if (!buyIds.includes(lot.id)) buyIds.push(lot.id);
       const r = rMultiple(lot.price, e.price, lot.stop);
       if (r != null) (rSum += r * take), (rW += take);
-      if (lot.stop != null && lot.stop > 0 && e.price < lot.stop * (1 - STOP_LATE_TOL)) stopLate = true;
+      if (lot.stop != null && lot.stop > 0 && e.price < lot.stop * (1 - STOP_LATE_TOL)) below = Math.max(below ?? 0, (1 - e.price / lot.stop) * 100);
       lot.qty -= take;
       remain -= take;
       if (lot.qty === 0) q.shift();
     }
-    const n = netOf(e);
+    const auto = sourceOf(e) === "자동(모의)";
+    const n = auto ? netOf(e) : { pnl: null, pct: null };
     const gross = matched > 0 ? { pnl: (e.price - cost / matched) * matched, pct: (e.price / (cost / matched) - 1) * 100 } : null;
     const net = n.pnl != null || n.pct != null;
     const stored = e.rMultiple != null && Number.isFinite(e.rMultiple) ? e.rMultiple : null;
@@ -183,7 +209,8 @@ export function sellResults(entries: JournalEntry[]): Map<string, SellResult> {
       r: stored ?? (rW > 0 ? rSum / rW : null),
       rDerived: stored == null && rW > 0,
       buyIds,
-      stopLate,
+      stopLate: !auto && below != null,
+      belowStopPct: below,
       currency: currencyOfCode(e.code),
     });
   }
@@ -201,15 +228,14 @@ export function isWin(r: Pick<SellResult, "pnl" | "pct"> | undefined): boolean |
 // ───────────────────────── 기간 요약 ─────────────────────────
 
 export interface PeriodStats {
-  /** 기록한 거래(매수·매도) 수 */
-  trades: number;
+  /** 매수·매도 기록 수(직접·자동 모두) */
   buys: number;
   sells: number;
-  /** 결과를 아는 청산(매도) 수 */
+  /** 결과를 아는 청산(매도) 수. 화면의 '거래' 수이자 승률의 바탕 */
   closed: number;
   wins: number;
   winRate: number | null;
-  /** 규칙 준수를 판단할 수 있었던 기록 수 */
+  /** 규칙 준수를 판단할 수 있었던 직접 쓴 기록 수(모의매매 자동 기록은 빼고 센다) */
   judged: number;
   followed: number;
   /** 0~1. 판단할 기록이 없으면 null */
@@ -222,10 +248,10 @@ export function periodStats(entries: JournalEntry[], results: Map<string, SellRe
   let buys = 0, sells = 0, closed = 0, wins = 0, judged = 0, followed = 0;
   const pnl: Record<Currency, number> = { KRW: 0, USD: 0 };
   for (const e of entries) {
+    const r = e.side === "SELL" ? results.get(e.id) : undefined;
     if (e.side === "BUY") buys++;
     else {
       sells++;
-      const r = results.get(e.id);
       const w = isWin(r);
       if (w != null) {
         closed++;
@@ -233,16 +259,15 @@ export function periodStats(entries: JournalEntry[], results: Map<string, SellRe
       }
       if (r?.pnl != null) pnl[r.currency] += r.pnl;
     }
-    const f = followedRules(e);
+    // 규칙 준수율은 내가 직접 한 매매의 과정만 본다(지도서 6.2 D·7.2 G). 모의매매 엔진이 남긴 기록은 빼고 센다
+    if (sourceOf(e) !== "수동") continue;
+    const f = entryFollowed(e, r);
     if (f != null) {
       judged++;
       if (f) followed++;
     }
   }
-  return {
-    trades: entries.length, buys, sells, closed, wins, winRate: closed ? wins / closed : null,
-    judged, followed, compliance: judged ? followed / judged : null, pnl,
-  };
+  return { buys, sells, closed, wins, winRate: closed ? wins / closed : null, judged, followed, compliance: judged ? followed / judged : null, pnl };
 }
 
 /** 0~1 비율 → "92%"(없으면 "-") */
@@ -286,6 +311,8 @@ export function tradeRows(periodEntries: JournalEntry[], all: JournalEntry[], re
     const tags: Tag[] = [];
     if (followed === true && !r?.stopLate) tags.push({ label: "계획대로", tone: "ok" });
     if (r?.stopLate) tags.push({ label: "손절 지연", tone: "warn" });
+    // 자동(모의) 손절이 갭 하락 등으로 손절가 아래에서 체결됨: 위반이 아니라 사실만
+    else if (r?.belowStopPct != null) tags.push({ label: "손절가 아래 체결", tone: "plain" });
     if (unplanned) tags.push({ label: "계획 외 매수", tone: "warn" });
     if (otherBreaches > 0) tags.push({ label: `위반 ${otherBreaches}건`, tone: "warn" });
     const emotions = [...new Set([...buys.flatMap((b) => emotionTags(b.emotion)), ...emotionTags(e.emotion)])];
@@ -333,10 +360,10 @@ export interface ViolationItem {
   items: string[];
 }
 
-/** 기간 안의 위반 기록(최신 먼저) */
-export function violationItems(entries: JournalEntry[]): ViolationItem[] {
+/** 기간 안의 위반 기록(최신 먼저). results를 주면 손절 지연 매도도 넣는다(복기 탭 표시 숫자와 같은 규칙) */
+export function violationItems(entries: JournalEntry[], results?: Map<string, SellResult>): ViolationItem[] {
   return entries
-    .map((e, i) => ({ e, i, items: breaches(e) }))
+    .map((e, i) => ({ e, i, items: breaches(e, e.side === "SELL" ? results?.get(e.id) : undefined) }))
     .filter((x) => x.items.length > 0)
     .sort((a, b) => b.e.date.localeCompare(a.e.date) || b.i - a.i)
     .map(({ e, items }) => ({ id: e.id, date: e.date, code: e.code, name: e.name, side: e.side, items }));
@@ -368,7 +395,10 @@ export function cumulativePnl(rows: TradeRow[], cur: Currency): number[] {
 /** 빈칸은 undefined, 숫자가 아니면 NaN(체크리스트가 '미입력'으로 본다) */
 export const optNum = (s: string): number | undefined => (s.trim() === "" ? undefined : Number(s.replace(/,/g, "")));
 
-/** 계좌 대비 비중(%) = 가격 × 수량 ÷ 계좌 기준 금액. 계산할 수 없으면 null(소수 첫째 자리) */
+/**
+ * 계좌 대비 비중(%) = 가격 × 수량 ÷ 계좌 기준 금액. 계산할 수 없으면 null(소수 첫째 자리).
+ * 일지의 비중은 '이 주문 뒤 그 종목 전체 비중'이라 수량에 이미 가진 수량을 더해서 넘긴다(JournalEntry.weightPct)
+ */
 export function weightOf(price: number | undefined, qty: number | undefined, base: number): number | null {
   if (!(price != null && price > 0 && qty != null && qty > 0 && base > 0)) return null;
   return Math.round(((price * qty) / base) * 1000) / 10;
@@ -398,18 +428,26 @@ function csvEscape(v: string | number | undefined | null): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-/** 매매일지 CSV(엑셀에서 한글이 깨지지 않게 BOM을 붙이는 건 호출하는 쪽) */
+/** 규칙 체크 칸 값: 예·아니요, 표시하지 않았으면 빈칸(엑셀·구글 시트 내보내기와 같다) */
+const yn = (v: boolean | undefined) => (v == null ? "" : v ? "예" : "아니요");
+
+/**
+ * 매매일지 CSV(엑셀에서 한글이 깨지지 않게 BOM을 붙이는 건 호출하는 쪽).
+ * 규칙 체크 세 칸·계획한 분할 매수·어긴 규칙은 서버의 엑셀·구글 시트 '매매일지' 표와 같은 이름과 값으로 쓴다.
+ */
 export function journalCsv(entries: JournalEntry[], results: Map<string, SellResult>): string {
-  const head = ["날짜", "종목코드", "종목명", "구분", "가격", "수량", "손절가", "목표가", "비중(%)", "전략", "청산 사유", "손익", "수익률(%)", "R 배수", "이유", "복기", "감정", "규칙 체크", "위반", "출처"];
+  const head = [
+    "날짜", "종목코드", "종목명", "구분", "가격", "수량", "손절가", "목표가", "비중(%)", "전략", "청산 사유", "손익", "수익률(%)", "R 배수", "이유", "복기", "감정", "어긴 규칙",
+    "손절가 미리 정함", "비중 상한 지킴", "계획에 없던 매수", "계획한 분할 매수", "손절 지연", "출처",
+  ];
   const rows = entries.map((e) => {
     const r = results.get(e.id);
     const sc = e.selfCheck;
     return [
       e.date, e.code, e.name, e.side === "BUY" ? "매수" : "매도", e.price, e.qty, e.stop, e.target, e.weightPct, e.strategy, e.exitReason,
       r?.pnl != null ? Math.round(r.pnl * 100) / 100 : "", r?.pct != null ? r.pct.toFixed(2) : "", r?.r != null ? r.r.toFixed(2) : e.rMultiple,
-      e.reason, e.review, e.emotion,
-      sc ? [sc.stopSet ? "손절가 정함" : "손절가 안 정함", sc.weightOk ? "비중 지킴" : "비중 초과", sc.unplanned ? "계획 외" : "계획대로"].join(" / ") : "",
-      (e.violations ?? []).join(" / "), sourceOf(e),
+      e.reason, e.review, e.emotion, (e.violations ?? []).join(" / "),
+      yn(sc?.stopSet), yn(sc?.weightOk), yn(sc?.unplanned), e.plannedAdd ? "예" : "", r?.stopLate ? "예" : "", sourceOf(e),
     ];
   });
   return [head, ...rows].map((r) => r.map(csvEscape).join(",")).join("\n");
