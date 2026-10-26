@@ -1,12 +1,15 @@
-import { Download, RefreshCw, X } from "lucide-react";
+import { AlertTriangle, Download, RefreshCw, X } from "lucide-react";
 import { useState } from "react";
 import { MACRO_PARAMS, type ServerState } from "@jusik/shared";
 import { excelUrl, saveSettings, syncExport } from "../../api";
 import { useApp } from "../../app/AppContext";
 import { Link } from "../../app/router";
 import { Button, MarketStatus, Notice, RuleTag, Section, fmtInt, fmtNum, fmtWhen, useToast } from "../../ui";
-import { ActionBar, NumField } from "./parts";
-import { ISM_MAX, ISM_MIN, ismDraftOf, ismNotes, parseIsm, prevMonth, providerLabel, sameIsm, thisMonthUtc, type IsmDraft } from "./settingsModel";
+import { nextScanText } from "../discover/logic";
+import { ActionBar, NumField, WarnLine } from "./parts";
+import {
+  ISM_MAX, ISM_MIN, failText, ismDraftOf, ismNotes, monthText, parseIsm, prevMonth, providerLabel, sameIsm, thisMonthUtc, type IsmDraft,
+} from "./settingsModel";
 import { SectionLoading, ServerMissing } from "./status";
 import type { DraftProps, SecProps } from "./types";
 
@@ -41,7 +44,7 @@ function Source() {
 }
 
 function Scheduler({ server }: { server: ServerState }) {
-  const { now, serverAt } = useApp();
+  const { now } = useApp();
   const sch = server.status.scheduler;
   const state = sch.scanning ? "스캔 중이에요" : sch.running ? "켜져 있어요" : "꺼져 있어요";
   return (
@@ -57,13 +60,15 @@ function Scheduler({ server }: { server: ServerState }) {
         </div>
         <div>
           <dt>다음 스캔</dt>
-          <dd className="num">{sch.running ? fmtWhen(sch.nextScanAt, now) : "-"}</dd>
+          <dd className={sch.running && sch.nextScanAt ? "num" : undefined}>
+            {!sch.running ? "-" : sch.nextScanAt ? fmtWhen(sch.nextScanAt, now) : nextScanText(sch, server.settings)}
+          </dd>
         </div>
         <div>
           <dt>장 상태</dt>
           <dd className="row wrap">
-            <MarketStatus region="KR" now={now} asOf={serverAt} />
-            <MarketStatus region="US" now={now} asOf={serverAt} />
+            <MarketStatus region="KR" now={now} />
+            <MarketStatus region="US" now={now} />
           </dd>
         </div>
       </dl>
@@ -112,7 +117,7 @@ function Ism({ server, compact, drafts, setDraft }: { server: ServerState; compa
       setTried(false);
       toast(parsed.value ? "ISM 값을 저장했어요. 다음 스캔부터 적용돼요." : "직접 입력을 지웠어요. 다음 스캔부터 사이트 값을 써요.", "ok");
     } catch (e) {
-      setError(`ISM 값을 저장하지 못했어요: ${e instanceof Error ? e.message : String(e)}. 서버 연결을 확인하고 다시 저장하세요.`);
+      setError(failText("ISM 값을 저장하지 못했어요", e, "값을 확인하고 다시 저장하세요."));
     } finally {
       setSaving(false);
     }
@@ -151,7 +156,8 @@ function Ism({ server, compact, drafts, setDraft }: { server: ServerState; compa
           />
           {errs.month ? (
             <span className="err" id="glb-ism-month-desc">
-              {errs.month}
+              <AlertTriangle size={14} strokeWidth={1.5} aria-hidden="true" />
+              <span>{errs.month}</span>
             </span>
           ) : (
             <span className="hint" id="glb-ism-month-desc">
@@ -166,7 +172,7 @@ function Ism({ server, compact, drafts, setDraft }: { server: ServerState; compa
           <dd>
             {savedIsm ? (
               <span className="num">
-                {savedIsm.value.toFixed(1)} ({savedIsm.month})
+                {savedIsm.value.toFixed(1)} ({monthText(savedIsm.month)})
               </span>
             ) : (
               "없음 · 사이트 값이나 대용 지표를 써요"
@@ -180,7 +186,7 @@ function Ism({ server, compact, drafts, setDraft }: { server: ServerState; compa
               <>
                 <span className="num t-medium">{fmtNum(used.value, 1)}</span>{" "}
                 <span className="t-2">
-                  ({used.month} · {used.source === "수동" ? "직접 입력" : "ISM 사이트"} · {used.value >= MACRO_PARAMS.ismLine ? "확장" : "수축"})
+                  ({monthText(used.month)} · {used.source === "수동" ? "직접 입력" : "ISM 사이트"} · {used.value >= MACRO_PARAMS.ismLine ? "확장" : "수축"})
                 </span>
               </>
             ) : server.latestScan ? (
@@ -233,7 +239,7 @@ function Export({ server }: { server: ServerState }) {
       await refreshServer();
       toast("기록을 내보냈어요", "ok");
     } catch (e) {
-      setError(`내보내지 못했어요: ${e instanceof Error ? e.message : String(e)}. 서버 연결을 확인하고 다시 시도하세요.`);
+      setError(failText("기록을 내보내지 못했어요", e, "잠시 뒤 다시 해 주세요."));
     } finally {
       setBusy(false);
     }
@@ -246,7 +252,10 @@ function Export({ server }: { server: ServerState }) {
           <dt>로컬 엑셀</dt>
           <dd>
             {ex.excel.ok === false ? (
-              <span className="warn-text">저장하지 못했어요{ex.excel.error ? `: ${ex.excel.error}` : ""}</span>
+              <>
+                <WarnLine>엑셀 파일을 저장하지 못했어요. 엑셀에서 이 파일을 열어 두었다면 닫고 다시 내보내 주세요.</WarnLine>
+                {ex.excel.error && <span className="t-cap glb-path">서버 기록: {ex.excel.error}</span>}
+              </>
             ) : ex.excel.at ? (
               <span className="num">{fmtWhen(ex.excel.at, now)} 저장</span>
             ) : (
@@ -261,7 +270,10 @@ function Export({ server }: { server: ServerState }) {
             {!ex.sheets.configured ? (
               <span className="t-2">연결하지 않았어요. 서버 설정(server/.env.example)의 구글 항목을 채우면 함께 보내요.</span>
             ) : ex.sheets.ok === false ? (
-              <span className="warn-text">동기화하지 못했어요{ex.sheets.error ? `: ${ex.sheets.error}` : ""}</span>
+              <>
+                <WarnLine>스프레드시트에 보내지 못했어요. 서버 설정의 구글 항목과 시트 공유 권한을 확인한 뒤 다시 내보내 주세요.</WarnLine>
+                {ex.sheets.error && <span className="t-cap glb-path">서버 기록: {ex.sheets.error}</span>}
+              </>
             ) : ex.sheets.at ? (
               <span className="num">
                 {fmtWhen(ex.sheets.at, now)} 동기화{ex.sheets.rows != null ? ` · ${fmtInt(ex.sheets.rows)}행` : ""}

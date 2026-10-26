@@ -9,7 +9,7 @@
 /* 넓은 화면: 구역 목록 | 구역 */
 .glb-set-cols { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: var(--space-6); align-items: start; }
 .glb-set.is-expanded .glb-set-cols { grid-template-columns: 208px minmax(0, 1fr); gap: var(--space-5); }
-.glb-set-nav { position: sticky; top: calc(var(--topbar-h) + var(--space-4)); }
+.glb-set-nav { position: sticky; top: var(--sticky-top); }
 .glb-set-nav ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .glb-set-navitem {
   display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-2) var(--space-3); min-height: var(--touch-min);
@@ -31,7 +31,7 @@
 .glb-set-body { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; margin-top: var(--space-3); }
 
 /* 저장하지 않은 변경 표시(점 + 화면 낭독 문장) */
-.glb-dirty { width: 8px; height: 8px; border-radius: 50%; background: var(--color-accent); flex: none; display: inline-block; margin-left: var(--space-2); vertical-align: middle; }
+.glb-dirty { width: 8px; height: 8px; border-radius: 50%; background: var(--color-text); flex: none; display: inline-block; margin-left: var(--space-2); vertical-align: middle; }
 
 /* 좁은 화면: 구역 목록(한 열) */
 .glb-set-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--color-border); }
@@ -60,6 +60,10 @@
 .glb-num-box .ui-input { padding-right: calc(var(--space-3) + 3.5em); }
 .glb-num-unit { position: absolute; right: var(--space-3); font-size: var(--font-size-secondary); color: var(--color-text-2); pointer-events: none; }
 .glb-num .hint, .glb-num .err { line-height: 1.4; }
+.glb-num .err svg, .glb-month .err svg { flex: none; }
+/* 경고 한 줄(아이콘 + 문장) */
+.glb-warnline { display: inline-flex; align-items: flex-start; gap: var(--space-1); color: var(--color-warn-text); }
+.glb-warnline svg { flex: none; margin-top: 0.2em; }
 
 /* 버튼 줄: 넓은 화면은 구역 끝, 핸드폰은 하단 탭 바로 위에 붙는다 */
 .glb-actions { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; padding-top: var(--space-3); border-top: 1px solid var(--color-border); }
@@ -110,6 +114,8 @@
 .glb-fixed li:first-child { border-top: 1px solid var(--color-border); }
 .glb-warn-list { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: var(--space-1); }
 .glb-a-btn { text-decoration: none; }
+/* 되돌릴 수 없는 확인(모의계좌 초기화): 보조 버튼에 경고색 글자·아이콘 */
+.ui-btn.secondary.glb-destructive { color: var(--color-warn-text); }
 
 /* 모의계좌 요약 */
 .glb-accts { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--space-3) var(--space-6); }

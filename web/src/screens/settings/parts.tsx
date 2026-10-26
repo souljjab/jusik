@@ -1,3 +1,4 @@
+import { AlertTriangle } from "lucide-react";
 import { useId, type ReactNode } from "react";
 import { setPrefs, usePrefs } from "../../app/prefs";
 import { Link } from "../../app/router";
@@ -99,7 +100,7 @@ export function StyleChoice({ showStart = true, onPick }: { showStart?: boolean;
                 <span className="t-bold">{o.label}</span>
                 <span className="t-2">{o.period}</span>
               </span>
-              <span className="t-2 glb-opt-desc">{o.desc}</span>
+              <span className="t-2">{o.desc}</span>
             </span>
           </label>
         ))}
@@ -174,7 +175,8 @@ export function NumField({
       </div>
       {error ? (
         <span className="err" id={descId}>
-          {error}
+          <AlertTriangle size={14} strokeWidth={1.5} aria-hidden="true" />
+          <span>{error}</span>
         </span>
       ) : (
         <span className="hint" id={descId}>
@@ -183,6 +185,16 @@ export function NumField({
         </span>
       )}
     </div>
+  );
+}
+
+/** 경고 한 줄(경고색 + 아이콘 + 문장, 지도서 3.1). 표 칸·목록 안처럼 Notice가 너무 큰 곳에 쓴다 */
+export function WarnLine({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return (
+    <span className={`glb-warnline ${className}`}>
+      <AlertTriangle size={14} strokeWidth={1.5} aria-hidden="true" />
+      <span>{children}</span>
+    </span>
   );
 }
 

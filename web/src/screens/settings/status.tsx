@@ -37,7 +37,7 @@ export function ServerMissing() {
             void refreshServer().finally(() => setBusy(false));
           }}
         >
-          다시 받기
+          다시 불러오기
         </Button>
       }
     >

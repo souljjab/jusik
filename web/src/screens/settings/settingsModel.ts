@@ -1,4 +1,6 @@
-import { DEFAULT_SETTINGS, GUARD_DEFAULTS, MACRO_PARAMS, POSTURE_LABEL, type Posture, type Settings } from "@jusik/shared";
+import { DEFAULT_SETTINGS, GUARD_DEFAULTS, MACRO_PARAMS, POSTURE_LABEL, josa, type Posture, type Settings } from "@jusik/shared";
+import { dndSummary } from "../alerts/alertsModel";
+import { errorText } from "../../ui/format";
 
 /*
  * 설정 화면 계산(UI 지도서 2장 전역·3.1·9.3). 입력 칸은 덜 친 값도 들고 있어야 해서 글자로 두고,
@@ -15,6 +17,18 @@ export const SECTION_LABEL: Record<SectionId, string> = {
 };
 export function sectionOf(seg: string | undefined): SectionId | null {
   return seg && (SECTION_IDS as string[]).includes(seg) ? (seg as SectionId) : null;
+}
+
+// ───────────────────────── 실패 문장 ─────────────────────────
+
+/**
+ * 저장·실행이 실패했을 때 한 문장 더: "{무엇}하지 못했어요. {까닭} {고칠 방법}" (지도서 9.2).
+ * 까닭은 errorText(서버 연결 실패·서버 오류는 고칠 방법까지 담겨 있어 remedy를 붙이지 않는다). 브라우저의 영어 오류는 쓰지 않는다.
+ */
+export function failText(what: string, e: unknown, remedy: string): string {
+  const raw = errorText(e).trim();
+  const why = /[.!?]$/.test(raw) ? raw : `${raw}.`;
+  return /주세요\.$/.test(why) ? `${what}. ${why}` : `${what}. ${why} ${remedy}`;
 }
 
 // ───────────────────────── 매매 한도 ─────────────────────────
@@ -94,7 +108,7 @@ export function limitsErrors(d: LimitsDraft): Partial<Record<LimitKey, string>> 
   for (const k of LIMIT_KEYS) {
     const spec = LIMIT_SPEC[k];
     const n = parseNum(d[k]);
-    if (n == null) out[k] = `${spec.label}을(를) 숫자로 넣어 주세요.`;
+    if (n == null) out[k] = `${josa(spec.label, "을/를")} 숫자로 넣어 주세요.`;
     else if (n < spec.min || n > spec.max) out[k] = `${fmtRange(spec.min)}~${fmtRange(spec.max)}${spec.unit === "원" || spec.unit === "달러" ? ` ${spec.unit}` : spec.unit} 사이로 넣어 주세요.`;
     else if (spec.integer && !Number.isInteger(n)) out[k] = "소수점 없이 정수로 넣어 주세요.";
   }
@@ -182,6 +196,9 @@ export function parseIsm(d: IsmDraft): IsmParse {
   return { ok: true, value: { value: Math.round(n! * 10) / 10, month: m } };
 }
 
+/** 달 표시: "2026-09" → "2026.09"(화면에는 날짜 원문 대신 이 형식으로) */
+export const monthText = (ym: string) => (MONTH_RE.test(ym) ? ym.replace("-", ".") : ym);
+
 /** 이번 달(서버와 같이 UTC 날짜 기준) "YYYY-MM" */
 export const thisMonthUtc = (now: Date) => now.toISOString().slice(0, 7);
 export function prevMonth(month: string): string {
@@ -192,12 +209,12 @@ export function prevMonth(month: string): string {
 /** 저장은 되지만 쓰이지 않을 값 안내(막지 않는다) */
 export function ismNotes(v: Settings["ismManual"], now: Date): string[] {
   if (!v) return [];
-  if (v.month >= thisMonthUtc(now)) return [`${v.month}은(는) 아직 끝나지 않은 달이라 쓰이지 않아요. ISM은 다음 달 첫 영업일에 지난달 값을 발표해요.`];
+  if (v.month >= thisMonthUtc(now)) return [`${josa(monthText(v.month), "은/는")} 아직 끝나지 않은 달이라 쓰이지 않아요. ISM은 다음 달 첫 영업일에 지난달 값을 발표해요.`];
   const [y, m] = v.month.split("-").map(Number) as [number, number];
   // 발표일 ≈ 다음 달 1일(실제는 첫 영업일)
   const age = (now.getTime() - Date.UTC(y, m, 1)) / 86_400_000;
   if (age > MACRO_PARAMS.ismMaxAgeDays)
-    return [`${v.month} 값은 발표된 지 ${MACRO_PARAMS.ismMaxAgeDays}일이 넘어 쓰이지 않고, 지역 연준 제조업 지수(대용)로 판단해요.`];
+    return [`${monthText(v.month)} 값은 발표된 지 ${MACRO_PARAMS.ismMaxAgeDays}일이 넘어 쓰이지 않고, 지역 연준 제조업 지수(대용)로 판단해요.`];
   return [];
 }
 
@@ -241,7 +258,6 @@ export const STYLE_OPTIONS: StyleOption[] = [
     start: [{ path: "/discover/strategy", label: "발굴 · 적립식 시뮬레이션" }, { path: "/", label: "홈 · 시장 국면" }],
   },
 ];
-export const styleLabel = (s: InvestStyle | null | undefined) => STYLE_OPTIONS.find((o) => o.id === s)?.label ?? "고르지 않음";
 
 // ───────────────────────── 구역 요약(설정 목록의 둘째 줄) ─────────────────────────
 
@@ -251,8 +267,11 @@ export function displaySummary(p: { theme: ThemePref; convention: ConventionPref
   return `${THEME_LABEL[p.theme]} · ${CONVENTION_LABEL[p.convention]} 색`;
 }
 
-export function alertsSummary(dnd: { enabled: boolean; start: string; end: string }, browserOn: boolean): string {
-  return `${dnd.enabled ? `방해 금지 ${dnd.start}~${dnd.end}` : "방해 금지 꺼짐"} · 브라우저 알림 ${browserOn ? "켜짐" : "꺼짐"}`;
+/** "방해 금지 22:00~07:00 · 브라우저 알림 켜짐 · 신호 요약 12:00·15:40" (요약은 켰을 때만) */
+export function alertsSummary(dnd: { enabled: boolean; start: string; end: string }, browserOn: boolean, digest?: { enabled: boolean; times: string[] }): string {
+  const parts = [dndSummary(dnd), `브라우저 알림 ${browserOn ? "켜짐" : "꺼짐"}`];
+  if (digest?.enabled && digest.times.length) parts.push(`신호 요약 ${digest.times.join("·")}`);
+  return parts.join(" · ");
 }
 
 export function limitsSummary(s: Pick<Settings, "riskPct" | "maxWeightPct" | "dailyLossLimitPct">): string {

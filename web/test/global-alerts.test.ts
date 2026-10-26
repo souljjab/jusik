@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AlertItem } from "@jusik/shared";
 import {
-  alertHeadline, countByFilter, dayLabel, dndProblem, dndSummary, filterAlerts, fixJosa, groupByDay, isAlertFilter, isUnread, notifyState, srAlert,
+  alertHeadline, countByFilter, dayLabel, dndProblem, dndSummary, filterAlerts, groupByDay, isAlertFilter, isUnread, notifyState, srAlert,
 } from "../src/screens/alerts/alertsModel";
 
 let seq = 0;
@@ -67,8 +67,8 @@ describe("alertHeadline", () => {
   it("국면 알림: 시장 이름을 제목으로, 조사를 고친다", () => {
     const h = alertHeadline(al({ at: NOW.toISOString(), category: "regime", text: "코스피 국면이 공격에서 중립(으)로 바뀌었어요. 주식 비중 상한 50%" }));
     expect(h).toEqual({ title: "코스피 시장", body: "국면이 공격에서 중립으로 바뀌었어요. 주식 비중 상한 50%" });
-    expect(fixJosa("중립에서 방어(으)로")).toBe("중립에서 방어로");
-    expect(fixJosa("방어에서 공격(으)로")).toBe("방어에서 공격으로");
+    expect(alertHeadline(al({ at: NOW.toISOString(), category: "regime", text: "코스닥 국면이 중립에서 방어(으)로 바뀌었어요" })).body).toBe("국면이 중립에서 방어로 바뀌었어요");
+    expect(alertHeadline(al({ at: NOW.toISOString(), category: "regime", text: "미국 국면이 방어에서 공격(으)로 바뀌었어요" })).body).toBe("국면이 방어에서 공격으로 바뀌었어요");
   });
   it("계좌(가드) 알림", () => {
     const h = alertHeadline(al({ at: NOW.toISOString(), category: "risk", text: "국내 신규 매수를 멈췄어요. 오늘 손실이 한도에 닿았어요" }));
