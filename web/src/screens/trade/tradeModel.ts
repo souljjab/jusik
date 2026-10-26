@@ -1,7 +1,8 @@
+import type { OrderRequest } from "../../features/OrderReviewSheet";
 import { accountBaseOf } from "../../features/orderMath";
 import { fmtBig, fmtRatio } from "../../ui/format";
 import {
-  consecutiveLosses, currencyOfRegion, EXPOSURE_CAP_REASON, marketClock, paperEquity, paperTradesFromJournal, regionOfCode, weekdaysBetween,
+  consecutiveLosses, currencyOfRegion, EXPOSURE_CAP_REASON, MANUAL_STRATEGY, marketClock, paperEquity, paperTradesFromJournal, regionOfCode, weekdaysBetween,
   type Currency, type JournalEntry, type Note, type PaperAccount, type PaperPosition, type Plan, type Region, type ServerState, type Settings,
 } from "@jusik/shared";
 
@@ -182,6 +183,23 @@ export function manualHoldings(journal: JournalEntry[]): { holdings: ManualHoldi
   }
   holdings.sort((a, b) => b.since.localeCompare(a.since) || a.name.localeCompare(b.name, "ko"));
   return { holdings, oversold: [...oversold] };
+}
+
+/** 매도 주문 검토: 지금 가격(모르면 평균 단가). 전략은 그 종목을 산 기록의 전략(없으면 '직접 판단') */
+export function sellRequest({ h, q }: { h: ManualHolding; q?: { price: number } }): OrderRequest {
+  return { code: h.code, name: h.name, side: "SELL", price: q?.price ?? h.avgPrice, strategy: h.strategy ?? MANUAL_STRATEGY };
+}
+
+/**
+ * 추가 매수 주문 검토. 예전에 적은 손절가는 지금 가격보다 낮을 때만 넘긴다
+ * (이미 손절가 아래인 종목에 그 값을 넣으면 시트가 잘못된 손절가와 수량 0으로 열린다). 목표가는 지금 가격보다 높을 때만.
+ */
+export function buyMoreRequest({ h, q }: { h: ManualHolding; q?: { price: number } }): OrderRequest {
+  const price = q?.price ?? h.avgPrice;
+  return {
+    code: h.code, name: h.name, side: "BUY", price,
+    ...(h.stop && h.stop < price ? { stop: h.stop } : {}), ...(h.target && h.target > price ? { target: h.target } : {}), strategy: h.strategy ?? MANUAL_STRATEGY,
+  };
 }
 
 /** 직접 보유분 중 손절가 근접(2% 안쪽)이거나 이미 손절가 아래인 종목 수(현재가를 받은 종목만) */

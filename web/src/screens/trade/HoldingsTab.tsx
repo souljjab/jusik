@@ -1,15 +1,17 @@
-import { CheckCircle2, ChevronRight, MoreHorizontal } from "lucide-react";
-import { useMemo, useState, type KeyboardEvent } from "react";
+import { AlertTriangle, CheckCircle2, ChevronRight, MoreHorizontal } from "lucide-react";
+import { useState, type KeyboardEvent } from "react";
 import { DEFAULT_PAPER_TRACKING, type Currency, type Region, type ServerState } from "@jusik/shared";
 import { useActions } from "../../app/actions";
 import { useApp } from "../../app/AppContext";
 import { Link, navigate } from "../../app/router";
 import {
-  atLeast, Button, Change, EmptyState, fmtDate, fmtInt, fmtMoneyByCurrency, fmtPct, fmtPrice, fmtRatio, IconButton, MarketStatus, Notice, NoteList, RuleTag, Section,
+  atLeast, Button, Change, EmptyState, fmtDate, fmtInt, fmtMoneyByCurrency, fmtPct, fmtPrice, fmtRatio, fmtWhen, IconButton, MarketStatus, Notice, NoteList, RuleTag, Section,
   Sheet, srQuote, useBreakpoint, type Breakpoint,
 } from "../../ui";
-import { AccountTitle, asOfText, Pnl, Progress, REGION_NAME, StopDistance, useQuotes, type QuoteInfo } from "./parts";
-import { accountView, CUR_NAME, currenciesShown, holdingPnl, manualHoldings, regionOfCur, todayOf, type AccountView, type ManualHolding, type PositionView } from "./tradeModel";
+import { AccountTitle, Pnl, Progress, REGION_NAME, StopDistance, type ManualBook, type QuoteInfo } from "./parts";
+import {
+  accountView, buyMoreRequest, CUR_NAME, currenciesShown, holdingPnl, NEAR_STOP_PCT, paperAsOf, regionOfCur, sellRequest, todayOf, type AccountView, type ManualHolding, type PositionView,
+} from "./tradeModel";
 
 /*
  * 보유(지도서 2장 매매 · 부록 A '보유 종목과 리스크').
@@ -52,15 +54,17 @@ function AccountSummary({ v, today, big }: { v: AccountView; today: { pnl: numbe
           <dt>실현 손익</dt>
           <dd>
             <Pnl value={v.realized} currency={c} />
+            <span className="t-cap">수수료·세금 반영</span>
           </dd>
-          <span className="t-cap">수수료·세금 반영</span>
         </div>
         <div>
           <dt>청산 · 이익</dt>
-          <dd className="num">
-            {fmtInt(v.closed)}건 · {fmtInt(v.wins)}건
+          <dd>
+            <span className="num">
+              {fmtInt(v.closed)}건 · {fmtInt(v.wins)}건
+            </span>
+            {v.winRate != null && <span className="t-cap num">승률 {fmtRatio(v.winRate * 100, 0)}</span>}
           </dd>
-          {v.winRate != null && <span className="t-cap num">승률 {fmtRatio(v.winRate * 100, 0)}</span>}
         </div>
       </dl>
     </div>
@@ -86,9 +90,9 @@ function PositionsTable({ v }: { v: AccountView }) {
   const { openStock } = useApp();
   const region = regionOfCur(v.currency);
   return (
-    <div className="ui-table-wrap">
+    <div className="ui-table-wrap tall">
       <table className="ui-table trd-table">
-        <caption className="sr-only">{CUR_NAME[v.currency]} 모의계좌 보유 종목. 행을 누르면 종목 상세로 가요</caption>
+        <caption className="sr-only">{CUR_NAME[v.currency]} 모의계좌 보유 종목. 행을 누르면 종목 분석을 열어요</caption>
         <thead>
           <tr>
             <th>종목</th>
@@ -107,8 +111,10 @@ function PositionsTable({ v }: { v: AccountView }) {
             return (
               <tr key={p.code} className={`click ${x.nearStop ? "trd-warnrow" : ""}`} tabIndex={0} onClick={() => openStock(p.code)} onKeyDown={(e) => e.key === "Enter" && !isCtrlEnter(e) && openStock(p.code)}>
                 <td>
-                  <span className="stack" style={{ gap: 0 }}>
-                    <span className="t-medium">{p.name}</span>
+                  <span className="trd-namecell">
+                    <span className="t-medium" title={p.name}>
+                      {p.name}
+                    </span>
                     <span className="t-cap">{p.code}</span>
                   </span>
                 </td>
@@ -188,12 +194,11 @@ function PositionRows({ v }: { v: AccountView }) {
   );
 }
 
-function PaperAccountBlock({ v, today, big, bp }: { v: AccountView; today: { pnl: number; pct: number } | null; big: boolean; bp: Breakpoint }) {
-  const { serverAt } = useApp();
+function PaperAccountBlock({ v, today, big, bp, asOf }: { v: AccountView; today: { pnl: number; pct: number } | null; big: boolean; bp: Breakpoint; asOf: string | null }) {
   const near = v.positions.filter((x) => x.nearStop).length;
   return (
     <div className="trd-acct">
-      <AccountTitle currency={v.currency} asOf={serverAt} />
+      <AccountTitle currency={v.currency} asOf={asOf} />
       <AccountSummary v={v} today={today} big={big} />
       {v.positions.length === 0 ? (
         // 모든 계좌가 비었으면 아래에 빈 화면 안내를 한 번만 둔다
@@ -202,7 +207,13 @@ function PaperAccountBlock({ v, today, big, bp }: { v: AccountView; today: { pnl
         <>
           <p className="t-2">
             {v.positions.length}종목 보유 · 보유 평가 <span className="num">{fmtMoneyByCurrency(v.heldValue, v.currency)}</span>
-            {near > 0 && <span className="warn-text"> · 손절가 근접 {near}종목</span>}
+            {near > 0 && (
+              <span className="warn-text">
+                {" "}
+                · <AlertTriangle size={14} strokeWidth={1.5} aria-hidden="true" className="trd-inline-ico" />
+                손절가 근접 {near}종목
+              </span>
+            )}
           </p>
           {atLeast(bp, "expanded") ? <PositionsTable v={v} /> : <PositionRows v={v} />}
         </>
@@ -234,7 +245,7 @@ function HoldingMenu({ row, onClose }: { row: HoldingRow | null; onClose: () => 
         <ul className="trd-menu" aria-label={`${h.name} 동작`}>
           <li>
             <button type="button" className="trd-menu-item" onClick={go(() => openStock(h.code))}>
-              종목 상세 보기
+              종목 분석 열기
             </button>
           </li>
           <li>
@@ -251,7 +262,7 @@ function HoldingMenu({ row, onClose }: { row: HoldingRow | null; onClose: () => 
           </li>
           <li>
             <button type="button" className="trd-menu-item" onClick={go(() => navigate("/records"))}>
-              매매일지 보기
+              매매일지 열기
             </button>
           </li>
         </ul>
@@ -260,23 +271,13 @@ function HoldingMenu({ row, onClose }: { row: HoldingRow | null; onClose: () => 
   );
 }
 
-function sellRequest({ h, q }: HoldingRow) {
-  return { code: h.code, name: h.name, side: "SELL" as const, price: q?.price ?? h.avgPrice, ...(h.strategy ? { strategy: h.strategy } : {}) };
-}
-function buyMoreRequest({ h, q }: HoldingRow) {
-  return {
-    code: h.code, name: h.name, side: "BUY" as const, price: q?.price ?? h.avgPrice,
-    ...(h.stop ? { stop: h.stop } : {}), ...(h.target ? { target: h.target } : {}), strategy: h.strategy ?? "직접 매매",
-  };
-}
-
 function ManualTable({ rows, onMenu, bp }: { rows: HoldingRow[]; onMenu: (r: HoldingRow) => void; bp: Breakpoint }) {
   const { openStock } = useApp();
   const { openOrderReview } = useActions();
   // 태블릿은 손가락으로 누르니 버튼을 터치 크기로(컴퓨터는 표 밀도를 지키려고 작게)
   const small = bp === "large";
   return (
-    <div className="ui-table-wrap">
+    <div className="ui-table-wrap tall">
       <table className="ui-table trd-table">
         <caption className="sr-only">직접 기록한 보유 종목. Ctrl+Enter(맥은 Cmd+Enter)로 매도 주문 검토를 열어요</caption>
         <thead>
@@ -296,10 +297,11 @@ function ManualTable({ rows, onMenu, bp }: { rows: HoldingRow[]; onMenu: (r: Hol
         <tbody>
           {rows.map((row) => {
             const { h, q, r } = row;
+            const near = r.leftToStopPct != null && r.leftToStopPct <= NEAR_STOP_PCT;
             return (
               <tr
                 key={h.code}
-                className="click"
+                className={`click ${near ? "trd-warnrow" : ""}`}
                 tabIndex={0}
                 onClick={() => openStock(h.code)}
                 onKeyDown={(e) => {
@@ -308,9 +310,11 @@ function ManualTable({ rows, onMenu, bp }: { rows: HoldingRow[]; onMenu: (r: Hol
                 }}
               >
                 <td>
-                  <span className="stack" style={{ gap: 0 }}>
-                    <span className="t-medium">{h.name}</span>
-                    <span className="t-cap">
+                  <span className="trd-namecell">
+                    <span className="t-medium" title={h.name}>
+                      {h.name}
+                    </span>
+                    <span className="t-cap" title={h.strategy ? `${h.code} · ${h.strategy}` : undefined}>
                       {h.code}
                       {h.strategy ? ` · ${h.strategy}` : ""}
                     </span>
@@ -371,7 +375,7 @@ function ManualRows({ rows, onMenu }: { rows: HoldingRow[]; onMenu: (r: HoldingR
       {rows.map((row) => {
         const { h, q, r } = row;
         return (
-          <li key={h.code} className="trd-row-wrap">
+          <li key={h.code}>
             <button type="button" className="trd-row" onClick={() => openStock(h.code)}>
               <span className="sr-only">
                 {q ? srQuote(h.name, q.price, q.changePct, h.region) : h.name}, {h.qty}주, 평균 단가 {fmtPrice(h.avgPrice, h.region)}
@@ -407,10 +411,9 @@ function ManualRows({ rows, onMenu }: { rows: HoldingRow[]; onMenu: (r: HoldingR
   );
 }
 
-function ManualSection({ bp }: { bp: Breakpoint }) {
+function ManualSection({ bp, book }: { bp: Breakpoint; book: ManualBook }) {
   const { journal, now } = useApp();
-  const { holdings, oversold } = useMemo(() => manualHoldings(journal), [journal]);
-  const { quotes, at, failed } = useQuotes(holdings.map((h) => h.code));
+  const { holdings, oversold, quotes, at, failed } = book;
   const [menu, setMenu] = useState<HoldingRow | null>(null);
   const rows: HoldingRow[] = holdings.map((h) => ({ h, q: quotes[h.code], r: holdingPnl(h, quotes[h.code]?.price) }));
   const oversoldNames = oversold.map((c) => journal.find((e) => e.code === c)?.name ?? c);
@@ -428,10 +431,11 @@ function ManualSection({ bp }: { bp: Breakpoint }) {
       )}
       {holdings.length > 0 && (
         <div className="row wrap trd-status-row">
+          {/* 시세 자료에 시각이 없어 받은 시각을 '받음'으로 적는다(데이터 기준 시각처럼 쓰지 않는다) */}
           {regions.map((r) => (
-            <MarketStatus key={r} region={r} now={now} asOf={at} />
+            <MarketStatus key={r} region={r} now={now} receivedAt={at} />
           ))}
-          {at && <span className="t-cap">현재가 {asOfText(at, now)} · 1분마다 다시 받아요</span>}
+          {at && <span className="t-cap">현재가 {fmtWhen(at, now)} 받음 · 1분마다 다시 받아요</span>}
         </div>
       )}
       {failed && holdings.length > 0 && <Notice tone="warn">현재가를 받지 못했어요. 평가 손익은 비워 두고 1분 뒤에 다시 받아요. 계속되면 서버 연결을 확인하세요.</Notice>}
@@ -439,8 +443,8 @@ function ManualSection({ bp }: { bp: Breakpoint }) {
         <EmptyState
           title="직접 기록한 보유 종목이 없어요"
           action={
-            <Button variant="secondary" onClick={() => navigate("/records")}>
-              매매일지 쓰기
+            <Button variant="secondary" className="trd-touch-btn" onClick={() => navigate("/records")}>
+              매매일지 열기
             </Button>
           }
         >
@@ -523,7 +527,7 @@ function AccountLinks() {
 
 // ───────────────────────── 탭 ─────────────────────────
 
-export function HoldingsTab({ server }: { server: ServerState }) {
+export function HoldingsTab({ server, book }: { server: ServerState; book: ManualBook }) {
   const { now } = useApp();
   const bp = useBreakpoint();
   const currencies = currenciesShown(server);
@@ -550,7 +554,7 @@ export function HoldingsTab({ server }: { server: ServerState }) {
           <div className={`trd-accts n${views.length}`}>
             {views.map((v) => {
               const t = server.todayPnl?.[v.currency];
-              return <PaperAccountBlock key={v.currency} v={v} today={t ? { pnl: t.pnl, pct: t.pct } : null} big={views.length === 1} bp={bp} />;
+              return <PaperAccountBlock key={v.currency} v={v} today={t ? { pnl: t.pnl, pct: t.pct } : null} big={views.length === 1} bp={bp} asOf={paperAsOf(server, v.currency)} />;
             })}
           </div>
           {allEmpty && (
@@ -576,7 +580,7 @@ export function HoldingsTab({ server }: { server: ServerState }) {
             </EmptyState>
           )}
         </Section>
-        <ManualSection bp={bp} />
+        <ManualSection bp={bp} book={book} />
         {!large && side}
       </div>
       {large && <aside className="trd-split-side" aria-label="모의계좌 보조 정보">{side}</aside>}
