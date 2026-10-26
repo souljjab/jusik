@@ -4,7 +4,8 @@ import { INDEX_TREND_DAYS, REVIEW_RULE, type DailyReview, type MarketRowLike, ty
 import { buildReview, getReviews, saveReviewComment } from "../../api";
 import { useApp } from "../../app/AppContext";
 import { Button, Change, EmptyState, fmtBig, fmtDate, fmtInt, fmtNum, fmtWhen, Notice, RuleTag, Section, Segmented, SkeletonRows, useBreakpoint, useToast } from "../../ui";
-import { Pnl, sentence } from "./parts";
+import { Pnl } from "./parts";
+import { failText } from "./recordsModel";
 
 /*
  * 일일 복기(M5-01 김연수 6항목: 지수·섹터·신고가·특징주·실적·코멘트).
@@ -32,7 +33,7 @@ export function DailyReviews() {
       setReviews(await getReviews());
       setLoadErr("");
     } catch (e) {
-      setLoadErr(e instanceof Error ? e.message : String(e));
+      setLoadErr(failText(e, "잠시 뒤 '다시 불러오기'를 눌러 주세요."));
     }
   }, []);
   useEffect(() => {
@@ -47,7 +48,7 @@ export function DailyReviews() {
       setBuilt(await buildReview(region));
       await reload();
     } catch (e) {
-      setBuildErr(`${REGION_LABEL[region]} 복기를 만들지 못했어요. ${sentence(e instanceof Error ? e.message : String(e))}`);
+      setBuildErr(`${REGION_LABEL[region]} 복기를 만들지 못했어요. ${failText(e, "잠시 뒤 다시 눌러 주세요.")}`);
     } finally {
       setBusy(null);
     }
@@ -85,7 +86,7 @@ export function DailyReviews() {
           { value: "US", label: "미국" },
         ]}
       />
-      {buildErr && <Notice tone="warn">{buildErr} 잠시 뒤 다시 눌러 보세요.</Notice>}
+      {buildErr && <Notice tone="warn">{buildErr}</Notice>}
       {built && (
         <Notice tone="info" title={`${REGION_LABEL[built.review.region]} ${fmtDate(built.review.date)} 복기를 만들었어요`}>
           {built.errors.length > 0 ? (
@@ -121,7 +122,7 @@ export function DailyReviews() {
             </Button>
           }
         >
-          {sentence(loadErr)} 서버가 켜져 있는지 확인한 뒤 다시 불러오세요.
+          {loadErr}
         </Notice>
       ) : reviews == null ? (
         <SkeletonRows rows={5} h={22} />
@@ -150,7 +151,7 @@ export function DailyReviews() {
 function StockName({ code, name }: { code: string; name: string }) {
   const { openStock } = useApp();
   return (
-    <button type="button" className="rec-namebtn" title={`${code} 종목 화면 열기`} onClick={() => openStock(code)}>
+    <button type="button" className="rec-namebtn" title={`${name}(${code}) 종목 분석 열기`} onClick={() => openStock(code)}>
       {name}
     </button>
   );
@@ -198,7 +199,7 @@ function ReviewItem({ r }: { r: DailyReview }) {
       </div>
       {r.comment && <p className="rec-prose">{r.comment}</p>}
 
-      <button type="button" className="ui-btn link rec-touchlink rec-expand" aria-expanded={open} aria-controls={dataId} onClick={() => setOpen((x) => !x)}>
+      <button type="button" className="ui-btn link rec-touchlink" aria-expanded={open} aria-controls={dataId} onClick={() => setOpen((x) => !x)}>
         {open ? "자료 접기" : "자료 펼치기"}
         <ChevronDown size={14} strokeWidth={1.5} className={open ? "rec-rot" : ""} aria-hidden="true" />
       </button>
@@ -343,7 +344,7 @@ function ReviewItem({ r }: { r: DailyReview }) {
             <div className="row wrap rec-missing">
               <span className="t-2">직접 확인할 항목</span>
               {r.missing.map((m) => (
-                <span key={m} className="rec-tag is-plain">
+                <span key={m} className="rec-tag">
                   {m}
                 </span>
               ))}
@@ -385,7 +386,7 @@ function Memo({ r }: { r: DailyReview }) {
       setText(v);
       toast("복기 메모를 저장했어요", "ok");
     } catch (e) {
-      setErr(`메모를 저장하지 못했어요. ${e instanceof Error ? e.message : String(e)}`);
+      setErr(`메모를 저장하지 못했어요. ${failText(e, "쓴 메모는 그대로 있어요. 잠시 뒤 다시 저장해 주세요.")}`);
     } finally {
       setBusy(false);
     }

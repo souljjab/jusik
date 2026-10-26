@@ -1,5 +1,5 @@
-import { currencyOfRegion, followedRules, netOf, regionOfCode, rMultiple, type Currency, type JournalEntry } from "@jusik/shared";
-import { fmtRatio } from "../../ui/format";
+import { currencyOfRegion, followedRules, JOURNAL_STRATEGIES, netOf, PAPER_STRATEGY, regionOfCode, rMultiple, STRATEGIES, type Currency, type JournalEntry } from "@jusik/shared";
+import { errorText, fmtPnlKrw, fmtRatio, toneOf } from "../../ui/format";
 
 /*
  * 기록 화면 계산 도우미(순수 함수). 화면은 여기서 만든 값만 그린다.
@@ -451,4 +451,43 @@ export function journalCsv(entries: JournalEntry[], results: Map<string, SellRes
     ];
   });
   return [head, ...rows].map((r) => r.map(csvEscape).join(",")).join("\n");
+}
+
+// ───────────────────────── 전략 이름 ─────────────────────────
+
+const STRATEGY_SOURCE = new Map(STRATEGIES.map((s) => [s.name, s.source]));
+/**
+ * 전략 고르기 목록 [값, 보이는 이름]: 일지 전략 이름(JOURNAL_STRATEGIES — 주문 검토 시트·모의매매가 남기는 이름과 같다)만.
+ * 보이는 이름에는 출처를 붙인다. 목록 밖의 이름은 '직접 적기'로 연다
+ */
+export const STRATEGY_OPTIONS: [string, string][] = JOURNAL_STRATEGIES.map((n): [string, string] => {
+  const src = STRATEGY_SOURCE.get(n) ?? (n === PAPER_STRATEGY ? "모의매매 규칙" : null);
+  return [n, src ? `${n} · ${src}` : n];
+});
+
+// ───────────────────────── 문장 ─────────────────────────
+
+/** 화면 낭독용 손익 문장: "8만 1천 원 손실", "18.50달러 이익"(부호 대신 말로) */
+export function srPnl(value: number, currency: Currency): string {
+  const t = toneOf(value);
+  const amount = currency === "USD" ? `${Math.abs(value).toFixed(2)}달러` : fmtPnlKrw(Math.abs(value), { sign: false });
+  return t === "flat" ? `손익 ${amount}` : `${amount} ${t === "up" ? "이익" : "손실"}`;
+}
+
+/** 화면 낭독용 수익률 문장: "3.10% 손실" */
+export const srRet = (pct: number) => `${Math.abs(pct).toFixed(2)}% ${toneOf(pct) === "up" ? "이익" : toneOf(pct) === "down" ? "손실" : "보합"}`;
+
+/** 서버 오류 문구 끝에 마침표가 없으면 붙인다(다음 문장과 붙어 읽히지 않게) */
+export const sentence = (msg: string) => {
+  const t = msg.trim();
+  return !t || /[.!?]$/.test(t) ? t : `${t}.`;
+};
+
+/**
+ * 실패 문장: 무엇이 잘못됐는지(errorText — 브라우저의 영어 메시지는 쓰지 않는다) + 어떻게 하면 되는지(remedy).
+ * 연결 실패·서버 오류 문장처럼 errorText가 이미 방법('…해 주세요.')을 말하면 덧붙이지 않는다
+ */
+export function failText(e: unknown, remedy: string): string {
+  const msg = sentence(errorText(e));
+  return /주세요\.$/.test(msg) ? msg : `${msg} ${remedy}`;
 }

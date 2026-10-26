@@ -1,31 +1,33 @@
 import { AlertTriangle, Check, Search } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { isValidCode, PAPER_STRATEGY, STRATEGIES, type Currency, type JournalEntry, type StockInfo } from "@jusik/shared";
+import { isValidCode, type Currency, type JournalEntry, type StockInfo } from "@jusik/shared";
 import { searchStocks } from "../../api";
 import { useApp } from "../../app/AppContext";
-import { arrowOf, Chip, fmtPct, fmtPnlByCurrency, toneOf } from "../../ui";
-import { EMOTIONS_MAIN, EMOTIONS_MORE, sourceOf, type Tag } from "./recordsModel";
+import { arrowOf, Chip, fmtPct, fmtPnlByCurrency, MARKET_LABEL, toneOf } from "../../ui";
+import { EMOTIONS_MAIN, EMOTIONS_MORE, sourceOf, srPnl, srRet, STRATEGY_OPTIONS, type Tag } from "./recordsModel";
 
-/** 손익 금액: 색 + 삼각형 + 부호(국내 만 원 단위, 미국 달러) */
+/**
+ * 손익 금액: 색 + 삼각형 + 부호(국내 만 원 단위, 미국 달러).
+ * 화면 낭독은 숨긴 문장으로 읽는다(이름 없는 span에 aria-label을 붙이면 ARIA 규칙상 읽히지 않는다)
+ */
 export function Pnl({ value, currency, className = "" }: { value: number | null | undefined; currency: Currency; className?: string }) {
   if (value == null || !Number.isFinite(value)) return <span className={`num flat ${className}`}>-</span>;
-  const t = toneOf(value);
-  const text = fmtPnlByCurrency(value, currency);
   return (
-    <span className={`num ${t} ${className}`} aria-label={`${text}${t === "up" ? " 이익" : t === "down" ? " 손실" : ""}`}>
+    <span className={`num ${toneOf(value)} ${className}`}>
+      <span className="sr-only">{srPnl(value, currency)}</span>
       <span aria-hidden="true">
-        {arrowOf(value)} {text}
+        {arrowOf(value)} {fmtPnlByCurrency(value, currency)}
       </span>
     </span>
   );
 }
 
-/** 수익률: 색 + 삼각형 + 부호 + 소수 둘째 자리 */
+/** 수익률: 색 + 삼각형 + 부호 + 소수 둘째 자리(화면 낭독은 숨긴 문장) */
 export function Ret({ pct, className = "" }: { pct: number | null | undefined; className?: string }) {
   if (pct == null || !Number.isFinite(pct)) return <span className={`num flat ${className}`}>-</span>;
-  const t = toneOf(pct);
   return (
-    <span className={`num ${t} ${className}`} aria-label={`${Math.abs(pct).toFixed(2)}% ${t === "up" ? "이익" : t === "down" ? "손실" : "보합"}`}>
+    <span className={`num ${toneOf(pct)} ${className}`}>
+      <span className="sr-only">{srRet(pct)}</span>
       <span aria-hidden="true">
         {arrowOf(pct)} {fmtPct(pct)}
       </span>
@@ -47,7 +49,7 @@ export function TagList({ tags, emotions = [], label }: { tags: Tag[]; emotions?
   return (
     <ul className="rec-tags" aria-label={label}>
       {tags.map((t) => (
-        <li key={t.label} className={`rec-tag is-${t.tone}`}>
+        <li key={t.label} className={t.tone === "plain" ? "rec-tag" : `rec-tag is-${t.tone}`}>
           {t.tone === "warn" ? <AlertTriangle size={12} strokeWidth={1.5} aria-hidden="true" /> : t.tone === "ok" ? <Check size={12} strokeWidth={1.5} aria-hidden="true" /> : null}
           {t.label}
         </li>
@@ -107,10 +109,6 @@ export function EmotionPicker({ chips, text, onChips, onText, idBase }: { chips:
 // ───────────────────────── 전략 고르기 ─────────────────────────
 
 const CUSTOM = "__custom";
-export const STRATEGY_OPTIONS: [string, string][] = [
-  ...STRATEGIES.map((s): [string, string] => [s.name, `${s.name} · ${s.source}`]),
-  ...(STRATEGIES.some((s) => s.name === PAPER_STRATEGY) ? [] : [[PAPER_STRATEGY, `${PAPER_STRATEGY} · 모의매매 규칙`] as [string, string]]),
-];
 const KNOWN = new Set(STRATEGY_OPTIONS.map(([v]) => v));
 
 /** 전략: 목록에서 고르거나 직접 적기(값은 전략 이름 문자열) */
@@ -250,7 +248,7 @@ export function StockSearch({ code, name, onPick, id, invalid }: { code: string;
               <li key={s.code} id={`${listId}-${i}`} role="option" aria-selected={i === active} onMouseDown={(e) => (e.preventDefault(), pick(s.code, s.name))} onMouseEnter={() => setActive(i)}>
                 <span className="t-medium">{s.name}</span>
                 <span className="t-cap">
-                  {s.code} · {s.market}
+                  {s.code} · {MARKET_LABEL[s.market]}
                 </span>
               </li>
             ))}
@@ -269,12 +267,6 @@ export function StockSearch({ code, name, onPick, id, invalid }: { code: string;
     </div>
   );
 }
-
-/** 서버 오류 문구 끝에 마침표가 없으면 붙인다(다음 문장과 붙어 읽히지 않게) */
-export const sentence = (msg: string) => {
-  const t = msg.trim();
-  return !t || /[.!?]$/.test(t) ? t : `${t}.`;
-};
 
 /** CSV 내려받기(엑셀에서 한글이 깨지지 않게 BOM) */
 export function downloadText(filename: string, text: string) {

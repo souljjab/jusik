@@ -33,6 +33,11 @@
 }
 .rec-issues { margin: var(--space-1) 0 0; padding-left: var(--space-4); }
 .rec-issues li + li { margin-top: 2px; }
+.rec-note { margin: var(--space-2) 0 0; }
+/* 경고 문장 한 줄: 경고색 + 아이콘 + 문장(지도서 3.1) */
+.rec-warnline { display: flex; align-items: flex-start; gap: 6px; color: var(--color-warn-text); }
+.rec-warnline > svg { flex: none; margin-top: 0.2em; }
+.rec-warnlist { list-style: none; margin: var(--space-1) 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; font-size: var(--font-size-secondary); }
 
 /* ───────── 꼬리표·판정·매수매도 ───────── */
 .rec-side { font-size: var(--font-size-secondary); font-weight: var(--font-weight-bold); white-space: nowrap; }
@@ -56,8 +61,9 @@
 .rec-journal-main { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
 .rec-journal.is-wide { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 320px); column-gap: var(--space-5); align-items: start; }
 @media (min-width: 1200px) { .rec-journal.is-wide { grid-template-columns: minmax(0, 1fr) minmax(320px, 380px); column-gap: var(--space-6); } }
+/* 붙어 있는 옆 패널: 화면 끝까지 내려도 머리('새 일지')가 상단 바 밑으로 들어가지 않게 공용 높이 토큰을 쓴다 */
 .rec-journal-side {
-  position: sticky; top: calc(var(--topbar-h) + var(--space-4)); max-height: calc(100dvh - var(--topbar-h) - var(--space-6)); overflow-y: auto;
+  position: sticky; top: var(--sticky-top); max-height: var(--sticky-max-h); overflow-y: auto;
   border-left: 1px solid var(--color-border); padding: 0 var(--space-1) var(--space-4) var(--space-5); min-width: 0; overscroll-behavior: contain;
 }
 
@@ -135,6 +141,10 @@
 .rec-fields .ui-seg { align-self: flex-start; }
 .rec-saved { padding-bottom: var(--space-4); border-bottom: 1px solid var(--color-border); }
 .rec-picked { display: flex; align-items: baseline; gap: var(--space-2); }
+/* 가격 입력칸: 오른쪽에 단위(원·달러). 주문 검토 시트와 같은 모양 */
+.rec-input { position: relative; display: flex; align-items: center; }
+.rec-input .ui-input { width: 100%; padding-right: calc(var(--space-3) + 2.6em); }
+.rec-unit { position: absolute; right: var(--space-3); font-size: var(--font-size-secondary); color: var(--color-text-2); pointer-events: none; }
 .rec-search { position: relative; }
 .rec-search .ui-input { padding-left: 34px; }
 .rec-search-ico { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--color-text-2); pointer-events: none; }
@@ -159,6 +169,8 @@
   background: var(--color-surface); border-top: 1px solid var(--color-border);
 }
 .rec-actionbar.is-medium { bottom: 0; padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom)); }
+/* 막대 높이(위아래 여백 12 + 버튼 48 + 선 1)를 알려 키보드 포커스·토스트가 막대 밑에 숨지 않게 한다 */
+html:has(.rec-actionbar) { --actionbar-h: 73px; }
 
 /* ───────── 복기 ───────── */
 .rec-review { min-width: 0; }
@@ -180,9 +192,11 @@
 .rec-trade-top { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
 .rec-trade-res { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 0; text-align: right; }
 .rec-trade-sub { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); }
+/* 종목 이름 버튼: 좁은 칸에서는 줄을 바꾸지 않고 말줄임(전체 이름은 title) */
 .rec-namebtn {
   background: none; border: 0; padding: 0; color: var(--color-text); font-weight: var(--font-weight-medium); text-align: left; min-height: 28px;
-  text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; min-width: 0; overflow-wrap: anywhere;
+  text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; min-width: 0; max-width: 100%;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .rec-namebtn:hover { text-decoration-color: currentColor; }
 @media (max-width: 1199.98px) { .rec-namebtn { min-height: var(--touch-min); } }

@@ -105,22 +105,21 @@ describe("규칙 판정과 기간 요약", () => {
     expect(ruleVerdict(autoSell)).toEqual({ ok: true, text: "규칙 지킴" });
   });
 
-  it("periodStats: 거래 수·승률·규칙 준수율(판단 가능한 기록만)", () => {
+  it("periodStats: 거래 수·승률·규칙 준수율(직접 쓴 기록 중 판단 가능한 기록만)", () => {
     const st = periodStats(all, res);
-    expect(st.trades).toBe(7);
     expect(st.buys).toBe(3);
     expect(st.sells).toBe(4);
     // 결과를 아는 매도: sellWin(+), sellLoss(-), sellUnk(-5), autoSell(-) → 4건 중 1승
     expect(st.closed).toBe(4);
     expect(st.wins).toBe(1);
     expect(st.winRate).toBeCloseTo(0.25, 6);
-    // 판단 가능: buyOk(지킴) buyBad(위반) buyUnplanned(위반) autoSell(지킴) → 2/4
-    expect(st.judged).toBe(4);
-    expect(st.followed).toBe(2);
-    expect(st.compliance).toBeCloseTo(0.5, 6);
+    // 판단 가능(직접 쓴 기록만): buyOk(지킴) buyBad(위반) buyUnplanned(위반) → 1/3. 자동(모의) autoSell은 빼고 센다
+    expect(st.judged).toBe(3);
+    expect(st.followed).toBe(1);
+    expect(st.compliance).toBeCloseTo(1 / 3, 6);
     expect(st.pnl.KRW).toBeCloseTo(10 - 10 - 5, 6);
     expect(st.pnl.USD).toBeCloseTo(-3, 6);
-    expect(pct0(st.compliance)).toBe("50%");
+    expect(pct0(st.compliance)).toBe("33%");
     expect(pct0(null)).toBe("-");
   });
 
@@ -200,6 +199,8 @@ describe("일지 목록·입력", () => {
     const [head, row] = csv.split("\n");
     expect(head!.startsWith("날짜,종목코드,종목명,구분")).toBe(true);
     expect(row).toContain('"돌파, 거래량"');
-    expect(row).toContain("손절가 정함 / 비중 초과 / 계획대로");
+    // 규칙 체크는 엑셀 내보내기와 같은 세 칸(예·아니요)
+    expect(head).toContain("어긴 규칙,손절가 미리 정함,비중 상한 지킴,계획에 없던 매수,계획한 분할 매수");
+    expect(row).toContain(",예,아니요,아니요,,");
   });
 });
