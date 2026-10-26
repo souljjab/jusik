@@ -71,6 +71,8 @@ export const priceToInput = (n: number | undefined, region: Region) =>
 const SHOWN_IN_SHEET = new Set<string>([GUARD_RULE.stopFirst, GUARD_RULE.weight, GUARD_RULE.perTrade, GUARD_RULE.lossAdd, GUARD_RULE.averagingDown, GUARD_RULE.pyramid]);
 export const extraCheckNotes = (notes: Note[]): Note[] => notes.filter((n) => (n.tone === "bad" || n.tone === "warn") && !(n.rule && SHOWN_IN_SHEET.has(n.rule)));
 
+const CHECKING = "규칙을 점검하고 있어요";
+
 function CheckRow({ ok, label, detail }: { ok: boolean | null; label: string; detail?: string }) {
   return (
     <li className="row top" style={{ gap: 8, padding: "6px 0" }}>
@@ -266,7 +268,7 @@ export function OrderReviewSheet({ req, onClose }: { req: OrderRequest | null; o
             : needsPlanAnswer && planned == null
               ? "추가 매수가 계획이었는지 골라 주세요"
               : checkPending
-                ? "규칙을 점검하고 있어요"
+                ? CHECKING
                 : ""
     : !canConfirm && !buy && !busy
       ? !(price > 0) ? "가격을 넣어 주세요" : !(qty > 0) ? "수량을 넣어 주세요" : ""
@@ -299,8 +301,10 @@ export function OrderReviewSheet({ req, onClose }: { req: OrderRequest | null; o
             </p>
           )}
           {why && (
-            <span className="t-cap" id={whyId}>
-              {why}
+            // 점검 중 안내만 아이콘 없이, 확인을 막는 까닭은 경고 아이콘과 함께
+            <span className={`t-cap row top ${why === CHECKING ? "" : "warn-text"}`} style={{ gap: 4 }} id={whyId}>
+              {why !== CHECKING && <AlertTriangle size={14} strokeWidth={1.5} aria-hidden="true" style={{ flex: "none", marginTop: 1 }} />}
+              <span>{why}</span>
             </span>
           )}
           <Button variant={buy ? "buy" : "sell"} size="lg" block disabled={!canConfirm} busy={busy} onClick={confirm} aria-describedby={why ? whyId : undefined}>
