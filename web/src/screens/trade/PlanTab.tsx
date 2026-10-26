@@ -72,6 +72,7 @@ function PlanRow({ x, selected, onSelect, onKey }: { x: PlanEntry; selected: boo
           {x.executed && <span className="trd-tag">모의 진입함</span>}
           {!x.executed && x.minuteHeld && (
             <span className="trd-tag is-warn" title="분봉 확인으로 이번 스캔에서는 모의 진입을 미뤘어요">
+              <AlertTriangle size={12} strokeWidth={1.5} aria-hidden="true" />
               분봉 보류
             </span>
           )}
