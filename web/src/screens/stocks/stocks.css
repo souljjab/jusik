@@ -159,7 +159,9 @@
 
 /* ───────── 신호 근거(E·F) ───────── */
 .stk-tabs { flex: none; }
+/* 탭 패널은 키보드로 초점을 받아 스크롤할 수 있다(포커스 링은 안쪽에) */
 .stk-tabpanel:focus { outline: none; }
+.stk-tabpanel:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
 .stk-evpanel { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
 .stk-sigblock { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
 /* 근거 칸 이름은 낱말 중간에서 끊지 않는다(좁은 패널에서 "단기 정배/열"처럼 깨지지 않게) */

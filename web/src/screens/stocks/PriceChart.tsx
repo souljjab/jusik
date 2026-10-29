@@ -282,11 +282,10 @@ export function PriceChart({
   const px = (n: number) => fmtPrice(n, region);
   const sub = useMemo(() => subSummaries(bars), [bars]);
 
-  // 출처 링크(라이브러리가 차트 상자 안에 넣는다)는 그림 밖 보통 링크로 두고, 캔버스 표는 낭독에서 뺀다
+  // 출처 링크(라이브러리가 차트 상자 안에 넣는다)는 그림(role=img) 밖 보통 링크로 두고 이름을 붙인다. 캔버스는 낭독할 내용이 없다
   useEffect(() => {
     const el = mainEl.current;
     if (!el) return;
-    el.querySelectorAll("table").forEach((t) => t.setAttribute("aria-hidden", "true"));
     el.querySelectorAll("a").forEach((a) => {
       if (!a.getAttribute("aria-label")) a.setAttribute("aria-label", "차트 라이브러리 TradingView 사이트(새 탭)");
     });

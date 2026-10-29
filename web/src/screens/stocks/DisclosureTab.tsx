@@ -1,4 +1,4 @@
-import { ExternalLink, RefreshCw } from "lucide-react";
+import { AlertTriangle, ExternalLink, RefreshCw } from "lucide-react";
 import {
   classifyDisclosure, classifySecFiling, FLOW_RULES, josa, secItemsOfTitle, US_FLOW_RULES,
   type Disclosure, type InvestorFlow, type Region, type StockExtras, type UsHolders,
@@ -61,7 +61,7 @@ function FlowRows({ flows, compact }: { flows: InvestorFlow[]; compact: boolean 
       </ul>
     );
   return (
-    <div className="ui-table-wrap tall">
+    <div className="ui-table-wrap tall" tabIndex={0} role="region" aria-label="외국인·기관 순매매 표">
       <table className="ui-table on-surface">
         <thead>
           <tr>
@@ -133,7 +133,7 @@ function Reports({ reports }: { reports: NonNullable<StockExtras["reports"]> }) 
   return (
     <div className="stack">
       <h4 className="stk-sub">정기보고서 제출 현황(DART)</h4>
-      <div className="ui-table-wrap">
+      <div className="ui-table-wrap" tabIndex={0} role="region" aria-label="정기보고서 제출 현황 표">
         <table className="ui-table on-surface">
           <thead>
             <tr>
@@ -151,7 +151,14 @@ function Reports({ reports }: { reports: NonNullable<StockExtras["reports"]> }) 
                 <td className="nowrap">{r.kind}</td>
                 <td className="r num">{dateKo(r.filed)}</td>
                 <td className="r num">{dateKo(r.deadline)}</td>
-                <td className="nowrap">{r.late ? <span className="warn-text t-medium">기한 초과</span> : <span className="t-2">기한 내</span>}{r.amended ? <span className="t-cap"> · 정정본만 확인</span> : null}</td>
+                <td className="nowrap">{r.late ? (
+                    <span className="warn-text t-medium stk-warnline">
+                      <AlertTriangle size={12} strokeWidth={1.5} aria-hidden="true" />
+                      기한 초과
+                    </span>
+                  ) : (
+                    <span className="t-2">기한 내</span>
+                  )}{r.amended ? <span className="t-cap"> · 정정본만 확인</span> : null}</td>
               </tr>
             ))}
           </tbody>
@@ -229,7 +236,7 @@ function Holders({ h, compact }: { h: UsHolders | null | undefined; compact: boo
               ))}
             </ul>
           ) : (
-          <div className="ui-table-wrap tall">
+          <div className="ui-table-wrap tall" tabIndex={0} role="region" aria-label="상위 보유 기관 표">
             <table className="ui-table on-surface">
               <thead>
                 <tr>
@@ -275,7 +282,7 @@ function Holders({ h, compact }: { h: UsHolders | null | undefined; compact: boo
               ))}
             </ul>
           ) : (
-          <div className="ui-table-wrap">
+          <div className="ui-table-wrap" tabIndex={0} role="region" aria-label="최근 내부자 거래 표">
             <table className="ui-table on-surface">
               <thead>
                 <tr>

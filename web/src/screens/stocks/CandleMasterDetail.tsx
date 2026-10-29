@@ -63,7 +63,7 @@ function WaveMetrics({ r }: { r: CandleMasterResult }) {
   return (
     <details className="stk-details">
       <summary>파동 수치 보기</summary>
-      <div className="ui-table-wrap">
+      <div className="ui-table-wrap" tabIndex={0} role="region" aria-label="파동 수치 표">
         <table className="ui-table on-surface">
           <thead>
             <tr>

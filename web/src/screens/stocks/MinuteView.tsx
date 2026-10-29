@@ -92,6 +92,8 @@ function MinuteChart({ bars, region, levels, height }: { bars: IntradayBar[]; re
     const vol = chart.addHistogramSeries({ priceFormat: { type: "volume" }, priceScaleId: "vol", lastValueVisible: false, priceLineVisible: false });
     chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
     api.current = { chart, candle, vol, mas, lines: [], count: 0, first: null };
+    // 출처 링크(TradingView)는 그림(role=img) 밖 보통 링크로 두고 이름을 붙인다(요약은 숨긴 문장으로)
+    box.querySelectorAll("a").forEach((a) => a.getAttribute("aria-label") || a.setAttribute("aria-label", "차트 라이브러리 TradingView 사이트(새 탭)"));
     return () => {
       api.current = null;
       chart.remove();
@@ -169,7 +171,10 @@ function MinuteChart({ bars, region, levels, height }: { bars: IntradayBar[]; re
         </span>
       </div>
       {has ? (
-        <div ref={el} className="stk-chart-main" style={{ height }} role="img" aria-label={`${frame}분봉 차트, 봉 ${shown.length}개, 마지막 종가 ${priceText(region)(shown.at(-1)!.close)}`} />
+        <>
+          <p className="sr-only">{`${frame}분봉 차트, 봉 ${shown.length}개, 마지막 종가 ${priceText(region)(shown.at(-1)!.close)}`}</p>
+          <div ref={el} className="stk-chart-main" style={{ height }} />
+        </>
       ) : (
         <div className="stk-chart-empty" style={{ height: Math.min(height, 200) }}>
           <span className="t-2">표시할 분봉이 없어요.</span>

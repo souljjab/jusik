@@ -300,7 +300,7 @@ function Detail({ code, tab, minute, bp, reviewRef, side }: {
     />
   );
   const panel = (
-    <div ref={tabRef} id={`stk-tab-${tab}`} role="tabpanel" aria-labelledby={`stk-tab-tab-${tab}`} className="stk-tabpanel" tabIndex={-1}>
+    <div ref={tabRef} id={`stk-tab-${tab}`} role="tabpanel" aria-labelledby={`stk-tab-tab-${tab}`} className="stk-tabpanel" tabIndex={0}>
       <h2 className="sr-only">{TAB_LABEL[tab]}</h2>
       <TabBody tab={tab} data={data} signals={signals} brief={single} compact={bp === "compact" || large} onSelectSignal={selectSignal} />
     </div>

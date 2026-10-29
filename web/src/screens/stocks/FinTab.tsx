@@ -146,7 +146,7 @@ function PeriodTable({ title, rows, region, unit, compact }: { title: string; ro
   return (
     <div className="stack">
       <h4 className="stk-sub">{title}</h4>
-      <div className="ui-table-wrap">
+      <div className="ui-table-wrap" tabIndex={0} role="region" aria-label={`${title} 실적 표`}>
         <table className="ui-table on-surface">
           <thead>
             <tr>
@@ -405,8 +405,7 @@ function PerBandChart({ candles, band, region }: { candles: Candle[]; band: PerB
     }
     chart.addLineSeries({ color: colors.text, lineWidth: 2, priceLineVisible: false }).setData(win.map((c) => ({ time: c.date as Time, value: c.close })));
     chart.timeScale().fitContent();
-    // 출처 링크(TradingView)는 그림 밖 보통 링크로 두고, 캔버스 표는 낭독에서 뺀다(요약은 숨긴 문장으로)
-    node.querySelectorAll("table").forEach((t) => t.setAttribute("aria-hidden", "true"));
+    // 출처 링크(TradingView)는 그림(role=img) 밖 보통 링크로 두고 이름을 붙인다(요약은 숨긴 문장으로)
     node.querySelectorAll("a").forEach((a) => a.getAttribute("aria-label") || a.setAttribute("aria-label", "차트 라이브러리 TradingView 사이트(새 탭)"));
     return () => chart.remove();
   }, [win, lines, colors, region]);

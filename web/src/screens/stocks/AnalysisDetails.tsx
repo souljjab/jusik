@@ -368,7 +368,8 @@ export function AnalysisDetails({ a, journal, region, settings, breadth, account
           <Link to="/settings" className="stk-link">설정</Link>에서 바꿔요)
         </p>
         {p && (
-          <p className={p.posture === "DEFENSE" ? "warn-text t-2" : "t-2"}>
+          <p className={p.posture === "DEFENSE" ? "warn-text t-2 stk-warnline" : "t-2"}>
+            {p.posture === "DEFENSE" && <AlertTriangle size={14} strokeWidth={1.5} aria-hidden="true" />}
             국면이 {POSTURE_LABEL[p.posture]}
             {ira(POSTURE_LABEL[p.posture])} 주식 투자 상한이 {fmtRatio(p.exposureCapPct, 0)}예요
             {capital > 0 && <> — {baseWord} {money(capital)} 중 최대 {money((capital * p.exposureCapPct) / 100)}까지</>}
@@ -384,7 +385,7 @@ export function AnalysisDetails({ a, journal, region, settings, breadth, account
                 : [
                     {
                       tone: "info" as const,
-                      text: `참고 매수 수량 ${fmtInt(size.qty)}주(${money(size.amount)}, 주문 후 비중 ${fmtRatio(size.weightAfter, 1)}) · 주문 상자와 같은 계산(${baseWord} 기준${account.held > 0 ? `, 보유 ${fmtInt(account.held)}주 포함` : ""})이에요`,
+                      text: `참고 매수 수량 ${fmtInt(size.qty)}주(${money(size.amount)}, 주문 후 비중 ${fmtRatio(size.weightAfter, 1)}) · 참고 손절가로 주문 상자와 같은 계산을 했어요(${baseWord} 기준${account.held > 0 ? `, 보유 ${fmtInt(account.held)}주 포함` : ""})`,
                     },
                     { tone: "info" as const, text: `손절가(${px(t.stopLoss)})까지 가면 손실 ${fmtPnl(-size.loss, region)}(${baseWord}의 ${fmtRatio((size.loss / capital) * 100, 1)})` },
                   ]),
