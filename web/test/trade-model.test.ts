@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { EXPOSURE_CAP_REASON, newPaperAccount, type DayTradeCandidate, type JournalEntry, type PaperPosition, type Plan, type ServerState, type Settings } from "@jusik/shared";
 import {
-  accountBase, accountView, capHit, currenciesShown, distPct, holdingPnl, manualHoldings, manualLossStreak, paperLossStreak, planCashBase, planRisk,
+  accountBase, accountView, capHit, currenciesShown, distPct, holdingPnl, manualHoldings, paperLossStreak, planCashBase, planRisk,
   positionView, reasonCounts, ruleLines,
 } from "../src/screens/trade/tradeModel";
 
@@ -124,18 +124,6 @@ describe("연속 손실", () => {
     expect(paperLossStreak(journal, "KR")).toBe(2);
     expect(paperLossStreak(journal, "US")).toBe(0);
   });
-  it("직접 쓴 기록: 청산 순서대로", () => {
-    const journal = [
-      je({ code: "005930", side: "BUY", price: 100, qty: 1, date: "2026-10-01" }),
-      je({ code: "005930", side: "SELL", price: 90, qty: 1, date: "2026-10-02" }),
-      je({ code: "000660", side: "BUY", price: 100, qty: 1, date: "2026-10-02" }),
-      je({ code: "000660", side: "SELL", price: 95, qty: 1, date: "2026-10-03" }),
-      je({ code: "035420", side: "BUY", price: 100, qty: 1, date: "2026-10-03" }),
-      je({ code: "035420", side: "SELL", price: 100, qty: 1, date: "2026-10-06" }),
-    ];
-    expect(manualLossStreak(journal, "KR")).toBe(3);
-    expect(manualLossStreak([...journal, je({ code: "005930", side: "BUY", price: 1, qty: 1, date: "2026-10-07" }), je({ code: "005930", side: "SELL", price: 2, qty: 1, date: "2026-10-08" })], "KR")).toBe(0);
-  });
 });
 
 describe("계획", () => {
@@ -162,10 +150,10 @@ describe("계획", () => {
   });
   it("기준 현금: 모의매매를 켜면 모의계좌, 끄면 예수금", () => {
     const st = { settings, paper: { KRW: { ...newPaperAccount(3_000_000), positions: [pos()] }, USD: newPaperAccount(7_000) } };
-    expect(planCashBase(st, "KRW")).toEqual({ cash: 3_000_000, label: "모의계좌 현금" });
+    expect(planCashBase(st, "KRW")).toEqual({ cash: 3_000_000, label: "모의계좌 현금", snapshot: false });
     expect(accountBase(st, "KRW")).toBe(3_000_000 + 105_000);
     const off = { ...st, settings: { ...settings, paperEnabled: false } };
-    expect(planCashBase(off, "USD")).toEqual({ cash: 7_000, label: "예수금" });
+    expect(planCashBase(off, "USD")).toEqual({ cash: 7_000, label: "예수금", snapshot: false });
     expect(accountBase(off, "KRW")).toBe(10_000_000);
   });
 });

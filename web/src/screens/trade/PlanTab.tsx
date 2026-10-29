@@ -1,25 +1,27 @@
 import { AlertTriangle, ChevronDown, ChevronRight, Lock } from "lucide-react";
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import {
-  dayTradeEvidence, EXPOSURE_CAP_REASON, PAPER_STRATEGY, regionOfCode, type Currency, type Evidence, type GuardResult, type Plan, type PlanItem, type ScanResult, type ServerState,
+  dayTradeEvidence, EXPOSURE_CAP_REASON, PAPER_STRATEGY, regionOfCode, type Currency, type Evidence, type Plan, type PlanItem, type ScanResult, type ServerState,
 } from "@jusik/shared";
 import { useActions } from "../../app/actions";
 import { useApp } from "../../app/AppContext";
 import { Link, navigate } from "../../app/router";
 import type { OrderRequest } from "../../features/OrderReviewSheet";
+import { guardOf, guardView } from "../../features/risk/riskSummary";
 import {
-  atLeast, Button, Disclaimer, EmptyState, EvidenceStrip, EvidenceStripFull, fmtBig, fmtInt, fmtMoneyByCurrency, fmtNum, fmtPct, fmtPrice, fmtRatio, fmtTime, Notice, NoteList,
+  atLeast, Button, Disclaimer, EmptyState, EvidenceStrip, EvidenceStripFull, fmtInt, fmtMoneyByCurrency, fmtPct, fmtPrice, fmtRatio, MARKET_LABEL, Notice, NoteList,
   RiskMeter, RuleTag, Section, useBreakpoint, type Breakpoint,
 } from "../../ui";
+import { nextScanText } from "../discover/logic";
 import { AccountTitle, asOfText, Loss, ScanButton } from "./parts";
-import { accountBase, capHit, CUR_NAME, currenciesShown, distPct, planCashBase, planKey, planRisk, reasonCounts, regionOfCur } from "./tradeModel";
+import { accountBase, amountText, capHit, CUR_NAME, currenciesShown, distPct, payoffText, planCashBase, planKey, planRisk, reasonCounts, regionOfCur } from "./tradeModel";
 
 /*
  * 오늘의 계획(지도서 2장 매매 = M3 신호 + M4 리스크).
  * 마지막 스캔이 통화별로 예수금(또는 모의계좌 현금)과 위험 한도 안에서 짠 매수 계획.
  *  - 항목마다 근거 스트립(단타 돌파 칸 순서 고정)과 '근거 보기', 진입·손절·목표, 수량·투자금·비중, 손절 시 손실
  *  - '매수 주문 검토'는 검토 시트만 연다(손절가 필수·위험 상자·규칙 체크는 시트가 맡는다). Ctrl/Cmd+Enter도 시트만 연다
- *  - 리스크 가드로 잠겼으면 경고 문장만 보이고 검토 버튼을 없앤다(다음 거래일에 풀린다)
+ *  - 리스크 가드(서버가 지금 계산한 server.guards)로 잠겼으면 경고 문장과 풀리는 때만 보이고 검토 버튼을 없앤다
  *  - 컴퓨터·태블릿 가로: 목록 + 오른쪽 상세(위험 먼저, 버튼은 그 아래). 핸드폰·태블릿 세로: 목록 + 아래 고정 버튼
  */
 
@@ -34,8 +36,10 @@ interface PlanEntry {
   executed: boolean;
   minuteHeld: boolean;
   blocked: boolean;
-  /** 잠긴 이유(리스크 가드의 첫 '걸림' 문장) */
+  /** 잠긴 이유(리스크 가드의 '걸림' 문장) */
   blockReason: string | null;
+  /** 언제 풀리는지(일일 손실 한도 '다음 거래일에 풀려요.', 연속 손실 휴식은 서버 문장) */
+  releaseText: string | null;
   /** 손절 시 손실의 계좌 대비(%) — 모의매매를 켜면 모의계좌 총자산, 끄면 예수금 기준 */
   lossPct: number | null;
 }
@@ -49,9 +53,6 @@ function orderRequest(x: PlanEntry): OrderRequest {
   const c = x.item.candidate;
   return { code: c.code, name: c.name, side: "BUY", price: c.entry, stop: c.stop, target: c.target, strategy: PAPER_STRATEGY, reason: x.ev.headline, evidence: x.ev, qty: x.item.qty };
 }
-
-/** 금액(목록): 국내는 억·만 단위 + 원, 미국은 $ */
-const amountText = (n: number, cur: Currency) => (cur === "KRW" ? `${fmtBig(n, "KR")}원` : fmtBig(n, "US"));
 
 // ───────────────────────── 계획 행 ─────────────────────────
 
@@ -71,6 +72,7 @@ function PlanRow({ x, selected, onSelect, onKey }: { x: PlanEntry; selected: boo
           {x.executed && <span className="trd-tag">모의 진입함</span>}
           {!x.executed && x.minuteHeld && (
             <span className="trd-tag is-warn" title="분봉 확인으로 이번 스캔에서는 모의 진입을 미뤘어요">
+              <AlertTriangle size={12} strokeWidth={1.5} aria-hidden="true" />
               분봉 보류
             </span>
           )}
@@ -90,8 +92,8 @@ function PlanRow({ x, selected, onSelect, onKey }: { x: PlanEntry; selected: boo
           진입 {fmtPrice(c.entry, region)} · 손절 {fmtPrice(c.stop, region)} <span className="t-cap">({fmtPct(distPct(c.entry, c.stop))})</span> · 목표 {fmtPrice(c.target, region)}{" "}
           <span className="t-cap">({fmtPct(distPct(c.entry, c.target))})</span>
         </span>
-        <Button variant="link" className="trd-touchlink" onClick={(e) => (e.stopPropagation(), openStock(c.code))} aria-label={`${c.name} 종목 상세 보기`}>
-          종목 보기
+        <Button variant="link" className="trd-touchlink" onClick={(e) => (e.stopPropagation(), openStock(c.code))} aria-label={`${c.name} 종목 분석 열기`}>
+          종목 분석 열기
         </Button>
       </div>
     </li>
@@ -123,12 +125,12 @@ function PlanDetail({ x, server }: { x: PlanEntry | null; server: ServerState })
             {c.name}
           </h3>
           <Button variant="link" className="trd-touchlink" onClick={() => openStock(c.code)}>
-            종목 상세
+            종목 분석 열기
             <ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" />
           </Button>
         </div>
         <span className="t-2">
-          {c.code} · {c.market} · {x.ev.strategyName} · 점수 <span className="num">{c.score}</span>
+          {c.code} · {MARKET_LABEL[c.market] ?? c.market} · {x.ev.strategyName} · 점수 <span className="num">{c.score}</span>
         </span>
       </div>
 
@@ -170,15 +172,15 @@ function PlanDetail({ x, server }: { x: PlanEntry | null; server: ServerState })
         <div>
           <dt>최대 보유 · 순손익비</dt>
           <dd className="num">
-            {c.maxHoldDays}거래일 · {fmtNum(c.netRR, 2)}
+            {c.maxHoldDays}거래일 · {payoffText(c.netRR)}
           </dd>
         </div>
       </dl>
 
-      <div className="ui-panel flat stack-3" aria-label="위험 상자">
+      <div className="ui-panel flat stack-3" role="group" aria-label="위험 상자">
         <div className="row between base">
           <span className="t-2">손절 시 예상 손실</span>
-          <span className="t-cap">계좌의 {x.lossPct == null ? "-" : fmtRatio(x.lossPct, 2)}</span>
+          <span className="t-cap">계좌의 {fmtRatio(x.lossPct)}</span>
         </div>
         <Loss value={x.item.riskAmount} currency={x.cur} className="t-price" />
         <RiskMeter label="계획 비중" value={x.item.weightPct} limit={cap} format={(n) => fmtRatio(n)} limitLabel={`종목 비중 상한 ${fmtRatio(cap)}`} overText="상한 초과" />
@@ -186,7 +188,7 @@ function PlanDetail({ x, server }: { x: PlanEntry | null; server: ServerState })
 
       {x.blocked ? (
         <Notice tone="warn" title="오늘은 신규 매수가 잠겼어요">
-          {x.blockReason ?? "리스크 한도에 닿았어요."} 다음 거래일에 풀려요. 계획은 참고로만 보여요.
+          {x.blockReason ?? "리스크 한도에 닿았어요."} {x.releaseText} 계획은 참고로만 보여요.
         </Notice>
       ) : (
         <div className="stack">
@@ -205,18 +207,27 @@ function PlanDetail({ x, server }: { x: PlanEntry | null; server: ServerState })
 
 // ───────────────────────── 통화별 계획 ─────────────────────────
 
+/**
+ * 계획의 돈 흐름. 모두 계획을 세울 때의 값이다(계획 당시 현금 − 계획 투자 = 남는 현금).
+ * 모의매매가 계획대로 산 뒤의 지금 현금은 보유 탭에 있다(한 줄에 지금 값과 계획 값을 섞지 않는다).
+ */
 function CashLine({ server, cur, plan }: { server: ServerState; cur: Currency; plan: Plan }) {
-  const base = planCashBase(server, cur);
+  const base = planCashBase(server, cur, plan);
   return (
     <dl className="trd-cash">
       <div>
         <dt>{base.label}</dt>
-        <dd className="num">{fmtMoneyByCurrency(base.cash, cur)}</dd>
+        <dd>
+          <span className="num">{fmtMoneyByCurrency(base.cash, cur)}</span>
+          {base.snapshot && <span className="t-cap">{server.settings.paperEnabled ? "모의계좌" : "예수금"} 기준</span>}
+        </dd>
       </div>
       <div>
         <dt>쓸 수 있는 돈</dt>
-        <dd className="num">{fmtMoneyByCurrency(plan.spendable, cur)}</dd>
-        <span className="t-cap">예비 현금·국면 상한 반영</span>
+        <dd>
+          <span className="num">{fmtMoneyByCurrency(plan.spendable, cur)}</span>
+          <span className="t-cap">예비 현금·국면 상한 반영</span>
+        </dd>
       </div>
       <div>
         <dt>계획 투자</dt>
@@ -236,32 +247,32 @@ function CashLine({ server, cur, plan }: { server: ServerState; cur: Currency; p
   );
 }
 
-function GuardBlock({ guard, hasScan }: { guard: GuardResult | undefined; hasScan: boolean }) {
-  if (!hasScan) return null;
-  if (!guard) return <p className="t-cap">리스크 가드는 다음 스캔부터 점검해요.</p>;
-  if (guard.blocked) {
-    const reason = guard.notes.find((n) => n.tone === "bad")?.text ?? "리스크 한도에 닿았어요.";
-    const rest = guard.notes.filter((n) => n.text !== reason);
+/** 리스크 가드: 서버가 지금 설정·오늘 날짜로 계산한 값(server.guards). 잠금 까닭과 풀리는 때는 서버 노트에서 */
+function GuardBlock({ server, cur }: { server: ServerState; cur: Currency }) {
+  const g = guardView(guardOf(server, cur));
+  if (!g.checked) return <p className="t-cap">리스크 가드는 다음 스캔부터 점검해요.</p>;
+  if (g.blocked)
     return (
       <Notice
         tone="warn"
         title="오늘은 신규 매수가 잠겼어요"
         action={
           <Link to="/trade/limits" className="trd-link nowrap">
-            비중·한도
+            비중과 한도
           </Link>
         }
       >
-        <span>{reason} 다음 거래일에 풀려요. 아래 계획은 참고로만 보여요.</span>
-        {rest.length > 0 && <NoteList notes={rest} dense />}
+        <span>
+          {g.blockReason} {g.releaseText} 아래 계획은 참고로만 보여요.
+        </span>
+        {g.notes.length > 0 && <NoteList notes={g.notes} dense />}
       </Notice>
     );
-  }
-  if (guard.notes.length)
+  if (g.notes.length)
     return (
       <div className="stack" style={{ gap: 4 }}>
         <span className="t-2 t-medium">리스크 가드 메모</span>
-        <NoteList notes={guard.notes} dense />
+        <NoteList notes={g.notes} dense />
       </div>
     );
   return null;
@@ -330,6 +341,7 @@ function MinuteSkips({ list }: { list: MinuteSkip[] }) {
               <span className="t-medium">{x.name}</span> <span className="t-cap">{x.code}</span>
             </button>
             <span className={`t-2 ${x.verdict === "avoid" ? "warn-text" : ""}`}>
+              {x.verdict === "avoid" && <AlertTriangle size={14} strokeWidth={1.5} aria-hidden="true" className="trd-inline-ico" />}
               <span className="t-medium">{VERDICT_LABEL[x.verdict] ?? x.verdict}</span> {x.reason || "사유 없음"}
             </span>
           </li>
@@ -359,13 +371,13 @@ function CurrencyPlan({ cur, server, entries, selKey, onSelect, onKey }: {
       ) : (
         <>
           <CashLine server={server} cur={cur} plan={plan} />
-          <GuardBlock guard={scan.guards?.[cur]} hasScan />
+          <GuardBlock server={server} cur={cur} />
           {entries.length === 0 ? (
             <EmptyState
               title="지금 한도 안에서 살 만한 종목이 없어요"
               action={
-                <Button variant="secondary" onClick={() => navigate("/discover")}>
-                  발굴에서 후보 보기
+                <Button variant="secondary" className="trd-touch-btn" onClick={() => navigate("/discover")}>
+                  후보 모두 보기
                 </Button>
               }
             >
@@ -397,7 +409,7 @@ function ActionBar({ x, bp }: { x: PlanEntry; bp: Breakpoint }) {
           {x.item.candidate.name} · <span className="num">{fmtInt(x.item.qty)}주</span>
         </span>
         <span className="t-cap">
-          손절 시 <Loss value={x.item.riskAmount} currency={x.cur} /> · 계좌의 {x.lossPct == null ? "-" : fmtRatio(x.lossPct, 2)}
+          손절 시 <Loss value={x.item.riskAmount} currency={x.cur} /> · 계좌의 {fmtRatio(x.lossPct)}
         </span>
       </div>
       {x.blocked ? (
@@ -433,12 +445,11 @@ export function planEntries(server: ServerState): PlanEntry[] {
     const plan = scan.plans[cur];
     if (!plan) return [];
     const base = accountBase(server, cur);
-    const guard = scan.guards?.[cur];
-    const blocked = !!guard?.blocked;
-    const blockReason = blocked ? (guard?.notes.find((n) => n.tone === "bad")?.text ?? null) : null;
+    // 잠금은 서버가 지금 계산한 가드(마지막 스캔의 가드가 아니다)
+    const { blocked, blockReason, releaseText } = guardView(guardOf(server, cur));
     return plan.items.map((item) => ({
       cur, key: planKey(cur, item.candidate.code), item, ev: dayTradeEvidence(item.candidate), executed: executed.has(item.candidate.code),
-      minuteHeld: held.has(item.candidate.code), blocked, blockReason, lossPct: base > 0 ? (item.riskAmount / base) * 100 : null,
+      minuteHeld: held.has(item.candidate.code), blocked, blockReason, releaseText, lossPct: base > 0 ? (item.riskAmount / base) * 100 : null,
     }));
   });
 }
@@ -475,7 +486,6 @@ export function PlanTab({ server }: { server: ServerState }) {
 
   const currencies = currenciesShown(server);
   const total = scan.candidates.length;
-  const next = server.status.scheduler.nextScanAt;
 
   /** ↑↓로 계획 사이를 옮긴다(고른 종목도 함께 바뀐다) */
   const onKey = (e: KeyboardEvent<HTMLButtonElement>, key: string) => {
@@ -509,13 +519,8 @@ export function PlanTab({ server }: { server: ServerState }) {
         <div className="stack" style={{ gap: 2 }}>
           <h2 className="t-section">오늘의 계획</h2>
           <span className="t-cap">
-            마지막 스캔 <span className="num">{asOfText(scan.at, now)}</span> · 후보 <span className="num">{fmtInt(total)}</span>종목 중 <span className="num">{fmtInt(entries.length)}</span>종목 계획
-            {next && (
-              <>
-                {" "}
-                · 다음 자동 스캔 <span className="num">{fmtTime(next)}</span>
-              </>
-            )}
+            마지막 스캔 <span className="num">{asOfText(scan.at, now)}</span> · 후보 <span className="num">{fmtInt(total)}</span>종목 중 <span className="num">{fmtInt(entries.length)}</span>종목 계획 ·{" "}
+            {nextScanText(server.status.scheduler, server.settings)}
           </span>
         </div>
         <ScanButton />
@@ -535,7 +540,7 @@ export function PlanTab({ server }: { server: ServerState }) {
         </Notice>
       )}
 
-      {split ? (
+      {split && entries.length > 0 ? (
         <div className={`trd-plan-grid is-${bp}`}>
           <div className="trd-plan-listcol">{list}</div>
           <div className="trd-plan-detailcol">
@@ -543,9 +548,10 @@ export function PlanTab({ server }: { server: ServerState }) {
           </div>
         </div>
       ) : (
+        // 계획이 하나도 없으면 오른쪽 상세 칸을 두지 않는다(고를 것이 없다). 통화마다 까닭과 다음 행동이 목록에 있다
         <>
           {list}
-          {selected && <ActionBar x={selected} bp={bp} />}
+          {!split && selected && <ActionBar x={selected} bp={bp} />}
         </>
       )}
     </div>

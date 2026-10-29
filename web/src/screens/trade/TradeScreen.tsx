@@ -2,12 +2,13 @@ import { AlertTriangle, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { useApp } from "../../app/AppContext";
 import { navigate, useRoute } from "../../app/router";
-import { riskSummary } from "../../features/risk/riskSummary";
+import { manualStreakOf, riskSummary } from "../../features/risk/riskSummary";
 import { Button, Notice, Skeleton, SkeletonRows, Tabs, useBreakpoint } from "../../ui";
 import { HoldingsTab, nearStopCount } from "./HoldingsTab";
 import { LimitsTab } from "./LimitsTab";
+import { useManualBook } from "./parts";
 import { planEntries, PlanTab } from "./PlanTab";
-import { currenciesShown } from "./tradeModel";
+import { currenciesShown, regionOfCur, todayOf } from "./tradeModel";
 import "./trade.css";
 
 /*
@@ -27,8 +28,8 @@ function tabOf(seg: string | undefined): TabId {
 
 function LoadingShape() {
   return (
-    <div className="stack-5" role="status" aria-label="불러오는 중">
-      <div className="stack-3">
+    <div className="stack-5">
+      <div className="stack-3" aria-hidden="true">
         <Skeleton w={140} h={18} />
         <Skeleton w={220} h={34} />
         <div className="trd-skel-kv">
@@ -43,17 +44,23 @@ function LoadingShape() {
 }
 
 export default function TradeScreen() {
-  const { server, offline, refreshServer, now } = useApp();
+  const { server, offline, refreshServer, now, journal } = useApp();
   const route = useRoute();
   const bp = useBreakpoint();
   const tab = tabOf(route.segments[1]);
   const [retrying, setRetrying] = useState(false);
+  // 직접 기록한 보유와 현재가: 보유 탭과 탭 이름 옆 경고 개수가 같은 값을 쓴다
+  const book = useManualBook(journal);
 
-  // 탭 이름 옆 상태(색에만 기대지 않게 숫자·아이콘과 함께)
+  // 탭 이름 옆 상태(색에만 기대지 않게 숫자·아이콘과 함께). 잠금은 서버가 지금 계산한 가드(riskSummary)
   const planCount = server ? planEntries(server).length : 0;
   const rs = server ? riskSummary(server) : null;
-  const locked = !!server && !!rs && currenciesShown(server).some((c) => rs[c].blocked);
-  const near = server ? nearStopCount(server, now) : 0;
+  const shown = server ? currenciesShown(server) : [];
+  const locked = !!rs && shown.some((c) => rs[c].blocked);
+  // 직접 기록한 매매가 연속 손실로 쉬는 기간이면(모의 잠금과 따로) '휴식'
+  const resting =
+    !!server && shown.some((c) => manualStreakOf(journal, regionOfCur(c), todayOf(regionOfCur(c), now), server.settings.maxConsecutiveLosses).resting);
+  const near = (server ? nearStopCount(server, now) : 0) + book.nearStop;
   const items = [
     {
       value: "holdings" as const,
@@ -77,7 +84,7 @@ export default function TradeScreen() {
       label: (
         <span className="trd-tablbl">
           비중·한도
-          {locked && (
+          {locked ? (
             <>
               <span className="trd-tabmark is-warn" aria-hidden="true">
                 <AlertTriangle size={12} strokeWidth={1.5} />
@@ -85,6 +92,16 @@ export default function TradeScreen() {
               </span>
               <span className="sr-only">, 신규 매수 잠김</span>
             </>
+          ) : (
+            resting && (
+              <>
+                <span className="trd-tabmark is-warn" aria-hidden="true">
+                  <AlertTriangle size={12} strokeWidth={1.5} />
+                  휴식
+                </span>
+                <span className="sr-only">, 직접 매매 연속 손실로 오늘은 기록만 하기를 권해요</span>
+              </>
+            )
           )}
         </span>
       ),
@@ -128,18 +145,18 @@ export default function TradeScreen() {
               }
             }}
           >
-            다시 연결
+            다시 불러오기
           </Button>
         }
       >
-        서버와 다시 연결되면 자동으로 받아요. 바로 다시 시도하려면 '다시 연결'을 누르세요.
+        서버와 다시 연결되면 자동으로 받아요. 바로 다시 받으려면 '다시 불러오기'를 누르세요.
       </Notice>
     ) : (
       <LoadingShape />
     );
   } else if (tab === "limits") body = <LimitsTab server={server} />;
   else if (tab === "plan") body = <PlanTab server={server} />;
-  else body = <HoldingsTab server={server} />;
+  else body = <HoldingsTab server={server} book={book} />;
 
   return (
     <div className={`trd is-${bp}`}>

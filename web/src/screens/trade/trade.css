@@ -30,7 +30,6 @@
 .trd-link:hover, .trd-more:hover { text-decoration: underline; }
 .ui-btn.link.trd-touchlink { min-height: 32px; font-size: var(--font-size-secondary); gap: 2px; align-self: flex-start; text-decoration: none; }
 .ui-btn.link.trd-touchlink:hover { text-decoration: underline; }
-.trd-touch { min-height: 48px; }
 /* 태블릿·핸드폰에서 누르는 버튼은 터치 크기(44~48) */
 .ui-btn.trd-touch-btn { min-height: var(--touch-min); }
 @media (max-width: 1199.98px) {
@@ -64,14 +63,16 @@
 .trd-kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: var(--space-3) var(--space-5); margin: 0; min-width: 0; }
 .trd-kv > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .trd-kv dt { font-size: var(--font-size-secondary); color: var(--color-text-2); }
-.trd-kv dd { margin: 0; font-weight: var(--font-weight-medium); }
+.trd-kv dd { margin: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; font-weight: var(--font-weight-medium); }
+.trd-kv dd .t-cap { font-weight: var(--font-weight-regular); }
 @media (max-width: 599.98px) { .trd-kv { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .trd-kv-plan { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
 /* ───────── 표(컴퓨터·태블릿) ───────── */
 .trd-table td { vertical-align: top; }
-.trd-table td:first-child .t-medium { white-space: nowrap; }
-.trd-table td:first-child .t-cap { word-break: keep-all; }
+/* 종목 칸: 이름과 '코드 · 전략' 줄은 낱말 가운데서 끊지 않고 한 줄로, 넘치면 말줄임(전체는 title) */
+.trd-namecell { display: flex; flex-direction: column; gap: 0; min-width: 0; max-width: 16em; }
+.trd-namecell > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .trd-table td.r .trd-cell-stack { align-items: flex-end; }
 .trd-cell-stack { display: inline-flex; flex-direction: column; gap: 2px; }
 .trd-table tr.trd-warnrow td:first-child { border-left: 3px solid var(--color-warn); }
@@ -106,14 +107,6 @@
 }
 .trd-ready { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--color-ok-text); font-size: var(--font-size-secondary); font-weight: var(--font-weight-medium); }
 
-/* 기록 내보내기 */
-.trd-export { margin: 0; display: flex; flex-direction: column; }
-.trd-export > div { display: flex; flex-direction: column; gap: 2px; padding: var(--space-2) 0; border-bottom: 1px solid var(--color-border); }
-.trd-export dt { font-size: var(--font-size-secondary); color: var(--color-text-2); }
-.trd-export dd { margin: 0; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.trd-path { overflow-wrap: anywhere; }
-a.ui-btn.trd-a-btn { text-decoration: none; }
-@media (max-width: 1199.98px) { a.ui-btn.trd-a-btn, .trd-export + .row .ui-btn { min-height: var(--touch-min); } }
 .trd-progress { display: flex; flex-direction: column; gap: var(--space-1); }
 .trd-progress-track { position: relative; height: 6px; border-radius: var(--radius-pill); background: var(--color-surface-2); overflow: hidden; }
 .trd-progress-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: var(--radius-pill); background: var(--color-text-2); }
@@ -149,7 +142,7 @@ a.ui-btn.trd-a-btn { text-decoration: none; }
 .trd-plan-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 400px); column-gap: var(--space-6); align-items: start; }
 .trd-plan-grid.is-expanded { grid-template-columns: minmax(0, 1.15fr) minmax(280px, 1fr); column-gap: var(--space-5); }
 .trd-plan-listcol { min-width: 0; }
-.trd-plan-detailcol { position: sticky; top: calc(var(--topbar-h) + var(--space-4)); border-left: 1px solid var(--color-border); padding-left: var(--space-5); min-width: 0; max-height: calc(100dvh - var(--topbar-h) - var(--space-6)); overflow-y: auto; }
+.trd-plan-detailcol { position: sticky; top: var(--sticky-top); max-height: var(--sticky-max-h); border-left: 1px solid var(--color-border); padding-left: var(--space-5); min-width: 0; overflow-y: auto; overscroll-behavior: contain; }
 .trd-plan-detail { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
 
 .trd-plan-cur { min-width: 0; }
@@ -158,7 +151,8 @@ a.ui-btn.trd-a-btn { text-decoration: none; }
 .trd-cash { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--space-3) var(--space-4); margin: 0; }
 .trd-cash > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .trd-cash dt { font-size: var(--font-size-secondary); color: var(--color-text-2); }
-.trd-cash dd { margin: 0; font-weight: var(--font-weight-medium); }
+.trd-cash dd { margin: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; font-weight: var(--font-weight-medium); }
+.trd-cash dd .t-cap { font-weight: var(--font-weight-regular); }
 @media (max-width: 599.98px) { .trd-cash { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 .trd-plan-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--color-border); }
@@ -176,7 +170,7 @@ a.ui-btn.trd-a-btn { text-decoration: none; }
 }
 .trd-plan-name .t-bold { font-size: var(--font-size-body); }
 .trd-tags { gap: var(--space-1); margin-right: auto; }
-.trd-tag { font-size: var(--font-size-caption); line-height: 18px; padding: 0 6px; border-radius: var(--radius-chip); border: 1px solid var(--color-border); color: var(--color-text-2); white-space: nowrap; }
+.trd-tag { display: inline-flex; align-items: center; gap: 2px; font-size: var(--font-size-caption); line-height: 18px; padding: 0 6px; border-radius: var(--radius-chip); border: 1px solid var(--color-border); color: var(--color-text-2); white-space: nowrap; }
 .trd-tag.is-warn { border-color: var(--color-warn); color: var(--color-warn-text); }
 .trd-plan-loss { white-space: nowrap; }
 .trd-plan-px { min-width: 0; white-space: normal; }
@@ -195,7 +189,9 @@ a.ui-btn.trd-a-btn { text-decoration: none; }
 .trd-minute { border-top: 1px solid var(--color-border); padding-top: var(--space-3); }
 .trd-caveat { max-width: 72ch; margin: var(--space-4) auto 0; text-align: center; }
 
-/* 아래 붙는 버튼 줄(핸드폰은 하단 탭 바로 위, 태블릿 세로는 화면 맨 아래). 목록을 내리는 동안 엄지 영역에 머문다 */
+/* 아래 붙는 버튼 줄(핸드폰은 하단 탭 바로 위, 태블릿 세로는 화면 맨 아래). 목록을 내리는 동안 엄지 영역에 머문다.
+   높이(위아래 여백 12 + 버튼 48 + 선 1)를 --actionbar-h로 알려 포커스 이동·알림 띠가 이 줄 밑에 숨지 않게 한다 */
+html:has(.trd-actionbar) { --actionbar-h: 73px; }
 .trd-actionbar {
   position: sticky; z-index: 20; bottom: calc(var(--bottomtabs-h) + env(safe-area-inset-bottom));
   display: flex; align-items: center; gap: var(--space-3); margin: 0 calc(-1 * var(--gutter)); padding: var(--space-3) var(--gutter);
