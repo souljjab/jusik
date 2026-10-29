@@ -84,6 +84,19 @@ import { usePrefs, setPrefs } from "../../app/prefs"; // 기기별 화면 설정
 - **서버 추가**: `GET /api/alerts`(신호·리스크·공시·국면, 최신 순), `POST /api/journal/check`, 일지 `selfCheck`(손절가를 미리 정했다·비중 상한을 지켰다·계획에 없던 매수다), `ServerState.todayPnl`, `shared` `followedRules(entry)`(규칙 준수 판정), `marketSession`, `shortDateKo`.
 - **차트**: `theme.ts`의 `useChartColors()`가 토큰을 읽어 테마·색 관례를 따른다. 모든 차트 옵션에 `localization: { locale: CHART_LOCALE }`와 `fontFamily: CHART_FONT`. 차트 바탕은 투명 또는 `colors.bg`, 격자는 옅게.
 
+### 5-1. UI 리뷰(156건) 뒤 정한 것
+
+- **색**: 기본 버튼(`.ui-btn.primary`)은 잉크색(글자색 바탕). 강조 보라는 선택·근거 스트립·국면 게이지·링크·포커스·안 읽은 알림 표시에만 쓴다. 차트 계열(이동평균·보조 지표·비교선)은 `colors.line1..3`, `accent`는 고른 신호 표식에만.
+- **서식(`ui/format.ts`)**: 빼기 기호는 ASCII `-`. `fmtIndex`(지수, 소수 둘째), `fmtMonth`("2026년 9월"), `MARKET_LABEL`(코스피·코스닥·미국 — 열거값을 그대로 보이지 않는다), `errorText(e)`(연결 오류·서버 오류를 한국어 문장으로, `e.message`를 그대로 쓰지 않는다), `fmtInputPrice`/`parseInputPrice`(가격 입력칸 쉼표). 한도·비중은 `fmtRatio`, 손익 금액은 `fmtPnl`, 손익비는 소수 한 자리. 조사는 `shared`의 `josa(word, "으로/로")`, 저장된 알림 문장은 `app/notify.ts`의 `fixParticles`.
+- **시각**: `serverAt`은 받은 시각이다. 'HH:mm 기준'에는 데이터 자신의 시각(마지막 스캔 `latestScan.at`, 모의계좌 시세 `paper[cur].pricedAt`, 지수 `asOf`·날짜)을 쓰고, 받은 시각밖에 모르면 'HH:mm 받음'이라고 쓴다.
+- **리스크 가드**: 서버가 `GET /api/state`마다 지금 설정·오늘 날짜로 계산한 `server.guards`가 유일한 출처. 화면은 `features/risk/riskSummary`의 `riskSummary`·`guardOf`·`guardView`(`releaseText`·`notes`·`blockReasons`)·`manualStreakOf`·`stopDistanceText`·`nearStopSentence`를 쓰고 `latestScan.guards`를 읽지 않는다. 다음 자동 스캔 문장은 `screens/discover/logic.ts`의 `nextScanText(sch, settings)`.
+- **일지**: 전략 이름은 `JOURNAL_STRATEGIES`·`journalStrategyOf`·`MANUAL_STRATEGY`(shared). `weightPct`는 이번 주문 뒤 그 종목 전체 비중. 계획한 분할 매수는 `plannedAdd`.
+- **고정 막대·고정 패널**: 화면 아래 고정 막대가 있으면 `html:has(.내-막대) { --actionbar-h: 높이px }`(포커스 스크롤 여백과 토스트 위치가 이 값을 쓴다). 옆에 붙는 패널은 `top: var(--sticky-top); max-height: var(--sticky-max-h)`. 긴 표는 `.ui-table-wrap.tall`로 머리글을 고정.
+- **불러오기**: 화면 스켈레톤은 `useSlow(active)`가 참이면(1초 넘음) `<ProgressLine/>`을 함께 보인다.
+- **창 제목·오류 경계**: `shell/nav.ts`의 `screenTitle()`이 화면마다 창 제목을 붙이고, 화면 하나가 깨져도 '이 화면을 표시하지 못했어요' + '다시 불러오기'만 보인다.
+- **알림 요약**: `prefs.digest`(`{ enabled, times }`, 기본 꺼짐·12:00·15:40). 켜면 신호 알림만 정한 시각에 '신호 N건'으로 묶고 리스크·공시·국면 알림은 바로 보낸다.
+- **공용 계산 위치**: 여러 화면이 쓰는 계산은 화면 폴더가 아니라 `features/`(예: `features/strategyRun.ts` — 전략 실행·백테스트)나 `ui/`에 둔다.
+
 ## 6. 문장(지도서 7.4·9.2)
 
 - 버튼은 무엇이 일어나는지 동사로: '매수 주문 검토', '일지 저장', '지금 스캔', '전략으로 저장'('확인', '저장'만 쓰지 않는다). 같은 동작은 처음부터 끝까지 같은 이름.
