@@ -470,7 +470,8 @@ export const STRATEGY_OPTIONS: [string, string][] = JOURNAL_STRATEGIES.map((n): 
 /** 화면 낭독용 손익 문장: "8만 1천 원 손실", "18.50달러 이익"(부호 대신 말로) */
 export function srPnl(value: number, currency: Currency): string {
   const t = toneOf(value);
-  const amount = currency === "USD" ? `${Math.abs(value).toFixed(2)}달러` : fmtPnlKrw(Math.abs(value), { sign: false });
+  // 국내는 화면 글자와 같은 반올림(부호 있는 값으로 줄인 뒤 부호만 뗀다: -11,500 → "1만 1천 원")
+  const amount = currency === "USD" ? `${Math.abs(value).toFixed(2)}달러` : fmtPnlKrw(value).replace(/^[+-]/, "");
   return t === "flat" ? `손익 ${amount}` : `${amount} ${t === "up" ? "이익" : "손실"}`;
 }
 

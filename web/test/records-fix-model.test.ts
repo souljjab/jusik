@@ -123,6 +123,8 @@ describe("R088·R115 문장", () => {
   it("손익·수익률은 부호 대신 말로 읽는다", () => {
     expect(srPnl(-81_000, "KRW")).toBe("8만 1천 원 손실");
     expect(srPnl(18.5, "USD")).toBe("18.50달러 이익");
+    // 화면 글자(-1만 1천 원)와 같은 반올림
+    expect(srPnl(-11_500, "KRW")).toBe("1만 1천 원 손실");
     expect(srRet(-3.1)).toBe("3.10% 손실");
     expect(srRet(0)).toBe("0.00% 보합");
   });

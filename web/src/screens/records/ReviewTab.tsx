@@ -1,5 +1,5 @@
 import { AlertTriangle, ChevronLeft, ChevronRight, NotebookPen } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { expectancy, josa, regionOfCode, summarizeJournal, type Currency, type JournalEntry } from "@jusik/shared";
 import { useApp } from "../../app/AppContext";
 import { navigate } from "../../app/router";
@@ -342,10 +342,12 @@ function OverallCur({ cur, entries }: { cur: Currency; entries: JournalEntry[] }
         <p className="t-2">
           보유 중:{" "}
           {sm.open.map((o, i) => (
-            <span key={o.code} className="nowrap">
+            <Fragment key={o.code}>
               {i > 0 && ", "}
-              {o.name} <span className="num">{fmtInt(o.qty)}주(평단 {fmtPrice(o.avgPrice, region)})</span>
-            </span>
+              <span className="nowrap">
+                {o.name} <span className="num">{fmtInt(o.qty)}주(평단 {fmtPrice(o.avgPrice, region)})</span>
+              </span>
+            </Fragment>
           ))}
         </p>
       )}
