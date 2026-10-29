@@ -192,6 +192,16 @@ describe("journal check with the user's settings", () => {
   });
 });
 
+describe("excel performance table", () => {
+  it("shows the expectancy when every closed trade lost (R042), like the records screen", () => {
+    const { store } = setup();
+    store.state.journal = [...autoLoss("000001", "2024-03-12"), ...autoLoss("000002", "2024-03-13")];
+    const t = buildTables(store.state, { provider: "stub", sample: true, now: MON_1030_KST }).find((x) => x.name === "성과")!;
+    const krw = t.rows.find((r) => r[0] === "KRW")!;
+    expect(krw[t.headers.indexOf("거래당 기대값(%)")]).toBeLessThan(0);
+  });
+});
+
 describe("scheduler status", () => {
   it("reports no next automatic scan when the scheduler is off or every enabled market is closed (R015·R132)", async () => {
     const { scheduler, setNow } = setup();

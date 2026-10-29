@@ -134,7 +134,8 @@ export function buildTables(state: AppState, meta: { provider: string; sample: b
   const perf: Cell[][] = [];
   for (const cur of ["KRW", "USD"] as const) {
     const sm = summarizeJournal(journal.filter((e) => curOf(e.code) === cur));
-    const ev = sm.winRate != null && sm.avgWinPct != null && sm.avgLossPct != null ? expectancy({ winRate: sm.winRate, avgWinPct: sm.avgWinPct, avgLossPct: sm.avgLossPct }) : null;
+    // 모두 이기거나 모두 진 기간도 기대값을 낸다(없는 쪽 평균은 0). 기록 화면의 '전체 기간 성과'와 같은 값
+    const ev = sm.winRate != null ? expectancy({ winRate: sm.winRate, avgWinPct: sm.avgWinPct ?? 0, avgLossPct: sm.avgLossPct ?? 0 }) : null;
     perf.push([
       cur, sm.closed.length, sm.winRate == null ? "" : r2(sm.winRate * 100), sm.avgWinPct == null ? "" : r2(sm.avgWinPct), sm.avgLossPct == null ? "" : r2(sm.avgLossPct),
       ev ? r2(ev.expectancyPct) : "", sm.avgR == null ? "" : r2(sm.avgR), sm.rCount ?? 0, r2(sm.totalPnl),
