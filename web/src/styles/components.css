@@ -45,7 +45,8 @@
   display: inline-grid; place-items: center; width: var(--touch-min); height: var(--touch-min); border-radius: var(--radius-panel);
   background: none; border: 0; color: var(--color-text-2); position: relative;
 }
-.ui-iconbtn:hover { background: var(--color-surface-2); color: var(--color-text); }
+.ui-iconbtn:hover:not(:disabled) { background: var(--color-surface-2); color: var(--color-text); }
+.ui-iconbtn:disabled { color: var(--color-text-2); opacity: 0.5; cursor: not-allowed; }
 .ui-iconbtn.sm { width: 32px; height: 32px; }
 @media (max-width: 1199.98px) { .ui-iconbtn.sm { width: var(--touch-min); height: var(--touch-min); } }
 .ui-badge {

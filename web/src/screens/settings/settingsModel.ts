@@ -1,6 +1,6 @@
 import { DEFAULT_SETTINGS, GUARD_DEFAULTS, MACRO_PARAMS, POSTURE_LABEL, josa, type Posture, type Settings } from "@jusik/shared";
 import { dndSummary } from "../alerts/alertsModel";
-import { errorText } from "../../ui/format";
+import { errorText, fmtMonth } from "../../ui/format";
 
 /*
  * 설정 화면 계산(UI 지도서 2장 전역·3.1·9.3). 입력 칸은 덜 친 값도 들고 있어야 해서 글자로 두고,
@@ -196,8 +196,8 @@ export function parseIsm(d: IsmDraft): IsmParse {
   return { ok: true, value: { value: Math.round(n! * 10) / 10, month: m } };
 }
 
-/** 달 표시: "2026-09" → "2026.09"(화면에는 날짜 원문 대신 이 형식으로) */
-export const monthText = (ym: string) => (MONTH_RE.test(ym) ? ym.replace("-", ".") : ym);
+/** 달 표시: "2026-09" → "2026년 9월"(근거 문장·홈 매크로와 같은 ui/format의 fmtMonth) */
+export const monthText = (ym: string) => (MONTH_RE.test(ym) ? fmtMonth(ym) : ym);
 
 /** 이번 달(서버와 같이 UTC 날짜 기준) "YYYY-MM" */
 export const thisMonthUtc = (now: Date) => now.toISOString().slice(0, 7);

@@ -4,7 +4,7 @@ import {
   type RegimeAssessment, type Region, type ScanResult, type SchedulerStatus, type Settings,
 } from "@jusik/shared";
 import { nearStopSentence, type NearStop } from "../../features/risk/riskSummary";
-import { fmtDate, fmtIndex, fmtInt, MARKET_LABEL } from "../../ui/format";
+import { fmtDate, fmtIndex, fmtInt, fmtMonth, MARKET_LABEL } from "../../ui/format";
 import { bindingRejection, nextScanText, rejectionAdvice, scanDraftOf } from "../discover/logic";
 
 /*
@@ -23,7 +23,8 @@ export function signedFixed(n: number, d: number): string {
   return `${r > 0 ? "+" : r < 0 ? "-" : ""}${Math.abs(r).toFixed(d)}`;
 }
 /** "2026-09" 또는 "2026-09-30" → "2026년 9월"(연도가 바뀌는 월간·분기 자료라 연도를 함께 쓴다) */
-export const monthKo = (ym: string) => `${ym.slice(0, 4)}년 ${Number(ym.slice(5, 7))}월`;
+/** "2026-09" → "2026년 9월"(ui/format의 fmtMonth와 같다) */
+export const monthKo = fmtMonth;
 
 /** 경로 질의의 시장(?market=KOSDAQ — 국면 알림이 가리키는 시장). 모르는 값이면 null */
 export function marketFromQuery(q: string | null | undefined): Market | null {

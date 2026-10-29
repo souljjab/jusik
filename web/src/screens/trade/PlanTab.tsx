@@ -428,10 +428,11 @@ function ActionBar({ x, bp }: { x: PlanEntry; bp: Breakpoint }) {
 
 // ───────────────────────── 탭 ─────────────────────────
 
-function NoScan() {
+/** 자동 스캔 문장은 서버 스케줄러 상태 그대로(꺼져 있으면 꺼져 있다고) */
+function NoScan({ server }: { server: ServerState }) {
   return (
     <EmptyState title="아직 스캔 기록이 없어요" action={<ScanButton variant="primary" size="md" />}>
-      <span className="t-2">스캔하면 예수금과 위험 한도 안에서 살 수 있는 계획이 여기에 나와요. 장이 열린 동안에는 정해진 간격으로 자동 스캔해요.</span>
+      <span className="t-2">스캔하면 예수금과 위험 한도 안에서 살 수 있는 계획이 여기에 나와요. {nextScanText(server.status.scheduler, server.settings)}.</span>
     </EmptyState>
   );
 }
@@ -480,7 +481,7 @@ export function PlanTab({ server }: { server: ServerState }) {
   if (!scan)
     return (
       <Section title="오늘의 계획" as="h2">
-        <NoScan />
+        <NoScan server={server} />
       </Section>
     );
 

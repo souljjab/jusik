@@ -247,5 +247,7 @@ describe("stored alerts from earlier versions (R050·R116·R131)", () => {
     expect(migrateAlert({ ...old, text: "코스피 국면이 공격에서 방어(으)로 바뀌었어요." }).text).toBe("코스피 국면이 공격에서 방어로 바뀌었어요.");
     const signal = { ...old, category: "signal" as const };
     expect(migrateAlert(signal)).toBe(signal);
+    const guard = { ...old, category: "risk" as const, key: "guard:KRW:2024-03-18", route: "/trade", text: "오늘 손실 한도에 닿았어요." };
+    expect(migrateAlert(guard).route).toBe("/trade/limits");
   });
 });

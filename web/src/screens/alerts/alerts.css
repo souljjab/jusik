@@ -84,7 +84,6 @@ a.glb-al-link:hover { background: var(--color-surface-2); }
 /* 글자를 키운 좁은 화면에서는 '빼기'가 다음 줄로 넘어간다 */
 .glb-digest-times li { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
 /* 끈 상태·마지막 한 줄의 '빼기'는 누를 수 없음을 보이게(아이콘 단추에는 공용 비활성 모양이 없다) */
-.glb-digest-times .ui-iconbtn:disabled { color: var(--color-text-2); opacity: 0.5; }
 
 .glb-notify { display: flex; flex-direction: column; gap: var(--space-3); }
 

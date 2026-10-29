@@ -57,11 +57,11 @@ describe("R116 조사", () => {
     for (const msg of Object.values(limitsErrors(Object.fromEntries(Object.keys(limitsDraftOf(DEFAULT_SETTINGS)).map((k) => [k, ""])) as typeof DEFAULT_LIMITS)))
       expect(msg).not.toMatch(/\(를\)|\(는\)|\(으\)/);
   });
-  it("ISM 안내: 달은 2026.10 형식, 조사는 숫자 읽기에 맞게", () => {
+  it("ISM 안내: 달은 2026년 10월 형식, 조사는 읽는 소리에 맞게", () => {
     const now = new Date("2026-10-15T01:00:00Z");
-    expect(ismNotes({ value: 50, month: "2026-10" }, now)[0]).toMatch(/^2026\.10은 아직 끝나지 않은 달이라/);
-    expect(ismNotes({ value: 50, month: "2026-05" }, now)[0]).toMatch(/^2026\.05 값은/);
-    expect(monthText("2026-09")).toBe("2026.09");
+    expect(ismNotes({ value: 50, month: "2026-10" }, now)[0]).toMatch(/^2026년 10월은 아직 끝나지 않은 달이라/);
+    expect(ismNotes({ value: 50, month: "2026-05" }, now)[0]).toMatch(/^2026년 5월 값은/);
+    expect(monthText("2026-09")).toBe("2026년 9월");
     expect(monthText("bad")).toBe("bad");
   });
   it("R050 예전에 저장된 국면 알림도 알림 센터에서 바른 조사(브라우저 알림과 같은 fixParticles)", () => {

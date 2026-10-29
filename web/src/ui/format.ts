@@ -107,6 +107,8 @@ export function fmtTime(iso: string | number | Date | null | undefined): string 
 export const fmtAsOf = (iso: string | number | Date | null | undefined) => (iso == null ? "" : `${fmtTime(iso)} 기준`);
 /** "YYYY-MM-DD" → "10.12(월)" */
 export const fmtDate = (ymd: string | null | undefined) => (ymd ? shortDateKo(ymd.slice(0, 10)) : "-");
+/** 달: "2026-09"·"2026-09-01" → "2026년 9월"(형식이 다르면 그대로) */
+export const fmtMonth = (ym: string) => (/^\d{4}-\d{2}/.test(ym) ? `${ym.slice(0, 4)}년 ${Number(ym.slice(5, 7))}월` : ym);
 /** ISO 시각 → 한국 날짜 "YYYY-MM-DD" */
 export function kstDate(iso: string | number | Date): string {
   const d = new Date(iso);

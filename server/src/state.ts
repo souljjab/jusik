@@ -104,6 +104,8 @@ function fresh(): AppState {
  * (홈 알림·브라우저 알림이 문장을 그대로 보여 준다)
  */
 export function migrateAlert(a: AlertItem): AlertItem {
+  // 이전 버전의 가드 알림은 '/trade'로 열렸다. 지금은 비중·한도 탭으로 연다
+  if (a.category === "risk" && a.key.startsWith("guard:") && a.route === "/trade") return { ...a, route: "/trade/limits" };
   if (a.category !== "regime") return a;
   const text = a.text.replace(/(\S+)\(으\)로/g, (_, w: string) => josa(w, "으로/로"));
   const market = /^regime:([A-Z]+):/.exec(a.key)?.[1];
