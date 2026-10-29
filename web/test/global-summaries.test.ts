@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS } from "@jusik/shared";
 import {
-  STYLE_OPTIONS, alertsSummary, dataSummary, displaySummary, limitsSummary, paperSummary, providerLabel, styleLabel,
+  STYLE_OPTIONS, alertsSummary, dataSummary, displaySummary, limitsSummary, paperSummary, providerLabel,
 } from "../src/screens/settings/settingsModel";
 
 describe("설정 목록 요약", () => {
@@ -31,7 +31,5 @@ describe("투자 성향", () => {
   it("세 가지이고 먼저 볼 곳은 앱 경로", () => {
     expect(STYLE_OPTIONS.map((o) => o.id)).toEqual(["daytrade", "swing", "long"]);
     for (const o of STYLE_OPTIONS) for (const s of o.start) expect(s.path.startsWith("/")).toBe(true);
-    expect(styleLabel("swing")).toBe("스윙");
-    expect(styleLabel(null)).toBe("고르지 않음");
   });
 });

@@ -72,7 +72,7 @@ function AlertRow({ a, unread, candidate, wide }: { a: AlertItem; unread: boolea
           {wide && <ChevronRight className="glb-al-chev" size={18} strokeWidth={1.5} aria-hidden="true" />}
         </a>
       ) : (
-        <div className="glb-al-link static">
+        <div className="glb-al-link">
           <span className="glb-al-main">{inner}</span>
         </div>
       )}
@@ -162,8 +162,10 @@ export default function AlertsScreen() {
       <span className="glb-al-tab">
         {filterLabel(f)}
         {counts[f] > 0 && (
-          <span className="glb-al-tabn num" aria-label={`${counts[f]}건`}>
+          <span className="glb-al-tabn num">
+            <span className="sr-only">, </span>
             {counts[f] > 99 ? "99+" : counts[f]}
+            <span className="sr-only">건</span>
           </span>
         )}
       </span>
@@ -193,7 +195,7 @@ export default function AlertsScreen() {
           title={`${filterLabel(filter)} 알림이 없어요`}
           action={
             <Button variant="secondary" onClick={() => setFilter("all")}>
-              전체 알림 보기
+              알림 모두 보기
             </Button>
           }
         >
@@ -257,7 +259,7 @@ export default function AlertsScreen() {
               title="알림을 불러오지 못했어요"
               action={
                 <Button variant="secondary" busy={refreshing} onClick={() => void refresh()}>
-                  다시 받기
+                  다시 불러오기
                 </Button>
               }
             >

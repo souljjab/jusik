@@ -7,7 +7,7 @@ import { accountBaseOf } from "../../features/OrderReviewSheet";
 import { Button, Notice, RuleTag, Section, fmtMoneyByCurrency, useToast } from "../../ui";
 import { ActionBar, NumField } from "./parts";
 import {
-  DEFAULT_LIMITS, LIMIT_KEYS, LIMIT_SPEC, limitsChanged, limitsDraftOf, limitsErrors, limitsPatch, limitsWarnings, parseNum,
+  DEFAULT_LIMITS, LIMIT_KEYS, LIMIT_SPEC, failText, limitsChanged, limitsDraftOf, limitsErrors, limitsPatch, limitsWarnings, parseNum,
   type LimitKey, type LimitsDraft,
 } from "./settingsModel";
 import { SectionLoading, ServerMissing } from "./status";
@@ -70,13 +70,14 @@ export function LimitsSection({ gh, bp, drafts, setDraft }: SecProps & DraftProp
     setError(null);
     try {
       await saveSettings(patch);
+      // 서버가 리스크 가드를 /api/state마다 새 한도로 다시 계산하므로, 곧바로 다시 받아 주문 검토·비중과 한도가 새 기준을 쓰게 한다
       await refreshServer();
       setDraft("limits", null);
       setTried(false);
       setShown(new Set());
       toast("매매 한도를 저장했어요. 주문 검토에는 바로, 매매 계획에는 다음 스캔부터 적용돼요.", "ok");
     } catch (e) {
-      setError(`매매 한도를 저장하지 못했어요: ${e instanceof Error ? e.message : String(e)}. 서버 연결을 확인하고 다시 저장하세요.`);
+      setError(failText("매매 한도를 저장하지 못했어요", e, "값을 확인하고 다시 저장하세요."));
     } finally {
       setSaving(false);
     }
@@ -186,7 +187,7 @@ export function LimitsSection({ gh, bp, drafts, setDraft }: SecProps & DraftProp
           ) : (
             !isDefault && (
               <Button variant="ghost" icon={<RotateCcw size={16} strokeWidth={1.5} aria-hidden="true" />} onClick={() => setDraft("limits", DEFAULT_LIMITS)}>
-                기본값으로
+                기본값으로 되돌리기
               </Button>
             )
           )}

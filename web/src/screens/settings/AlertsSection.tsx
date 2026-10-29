@@ -4,7 +4,7 @@ import { Button, Section } from "../../ui";
 import { AlertSources, BrowserNotify, DndEditor } from "../alerts/NotifyControls";
 import type { SecProps } from "./types";
 
-/** 알림(이 기기): 방해 금지 시간과 리스크 예외, 브라우저 알림, 알림이 생기는 때 */
+/** 알림(이 기기): 방해 금지 시간과 리스크 예외, 브라우저 알림과 장중 신호 요약, 알림이 생기는 때 */
 export function AlertsSection({ gh }: SecProps) {
   return (
     <>
@@ -18,7 +18,7 @@ export function AlertsSection({ gh }: SecProps) {
         <AlertSources />
         <div>
           <Button variant="secondary" icon={<Bell size={16} strokeWidth={1.5} aria-hidden="true" />} onClick={() => navigate("/alerts")}>
-            알림 센터 열기
+            알림 모두 보기
           </Button>
         </div>
       </Section>

@@ -32,7 +32,7 @@ const WHERE: Record<SectionId, string> = {
 };
 const LEAD: Record<SectionId, string> = {
   display: "테마와 상승·하락 색, 투자 성향을 정해요.",
-  alerts: "방해 금지 시간과 브라우저 알림을 정해요.",
+  alerts: "방해 금지 시간, 브라우저 알림, 장중 신호 요약을 정해요.",
   limits: "규칙을 어기는 순간 멈추게 하는 기준이에요. 1회 손실, 종목 비중, 하루 손실 한도를 정해요.",
   paper: "서버가 규칙대로 가상으로 사고파는 계좌예요. 실제 증권 계좌와는 연결되어 있지 않아요.",
   data: "데이터 출처와 자동 스캔 상태를 보고, ISM 값을 넣고, 기록을 내보내요.",
@@ -52,7 +52,7 @@ function useSummaries(): Record<SectionId, string | null> {
   const notify = useNotifyState();
   return {
     display: displaySummary(prefs),
-    alerts: alertsSummary(prefs.dnd, notify === "on"),
+    alerts: alertsSummary(prefs.dnd, notify === "on", prefs.digest),
     limits: server ? limitsSummary(server.settings) : null,
     paper: server ? paperSummary(server.settings) : null,
     data: health ? dataSummary(health.provider, health.sample) : null,
@@ -96,7 +96,7 @@ function SectionNav({ current, dirty, summaries }: { current: SectionId; dirty: 
           return (
             <li key={id}>
               <a className={`glb-set-navitem ${on ? "on" : ""}`} href={href(`/settings/${id}`)} aria-current={on ? "page" : undefined}>
-                <Icon size={18} strokeWidth={on ? 2 : 1.5} aria-hidden="true" />
+                <Icon size={18} strokeWidth={1.5} aria-hidden="true" />
                 <span className="glb-set-navtxt">
                   <span className="glb-set-navlbl">
                     {SECTION_LABEL[id]}

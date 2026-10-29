@@ -140,7 +140,7 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
           </div>
           <div className="glb-ob-btns">
             {!last && (
-              <Button variant="ghost" size={size} className="glb-ob-later" onClick={onDone}>
+              <Button variant="ghost" size={size} onClick={onDone}>
                 나중에
               </Button>
             )}
@@ -149,6 +149,7 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
                 이전
               </Button>
             )}
+            {/* glb-ob-next: 시트가 열릴 때 포커스를 줄 단추(initialFocus 선택자). 모양 규칙은 없다 */}
             <Button variant="primary" size={size} className="glb-ob-next" onClick={() => (last ? onDone() : setStep((s) => s + 1))}>
               {last ? "시작하기" : "다음"}
             </Button>

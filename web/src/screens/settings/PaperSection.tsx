@@ -1,11 +1,12 @@
+import { AlertTriangle } from "lucide-react";
 import { useState } from "react";
 import { paperEquity, type Currency, type ServerState } from "@jusik/shared";
 import { resetPaper, saveSettings } from "../../api";
 import { useApp } from "../../app/AppContext";
 import { Link } from "../../app/router";
-import { Button, Notice, Section, Sheet, Toggle, arrowOf, fmtAsOf, fmtInt, fmtMoneyByCurrency, fmtPnlByCurrency, toneOf, useToast } from "../../ui";
+import { Button, Notice, Section, Sheet, Toggle, arrowOf, fmtInt, fmtMoneyByCurrency, fmtPnlByCurrency, fmtWhen, toneOf, useToast } from "../../ui";
 import { ActionBar, NumField } from "./parts";
-import { MONITOR_RANGE, monitorError, parseNum } from "./settingsModel";
+import { MONITOR_RANGE, failText, monitorError, parseNum } from "./settingsModel";
 import { SectionLoading, ServerMissing } from "./status";
 import type { DraftProps, SecProps } from "./types";
 
@@ -18,7 +19,11 @@ const CURS: Currency[] = ["KRW", "USD"];
 const CUR_NAME: Record<Currency, string> = { KRW: "원화", USD: "달러" };
 
 function AccountSummary({ server }: { server: ServerState }) {
-  const { serverAt } = useApp();
+  const { now } = useApp();
+  // 평가 자산의 기준은 보유 종목 가격을 마지막으로 받은 시각(pricedAt). 받은 시각(serverAt)은 '기준'이 아니다
+  const priced = CURS.filter((c) => server.paper[c].positions.length > 0 && server.paper[c].pricedAt).map(
+    (c) => `${CUR_NAME[c]} ${fmtWhen(server.paper[c].pricedAt!, now)}`,
+  );
   return (
     <div className="glb-accts">
       {CURS.map((c) => {
@@ -26,7 +31,7 @@ function AccountSummary({ server }: { server: ServerState }) {
         const eq = paperEquity(a);
         const rate = a.closed > 0 ? (a.wins / a.closed) * 100 : null;
         return (
-          <dl key={c} className="glb-acct" aria-label={`${CUR_NAME[c]} 모의계좌`}>
+          <dl key={c} className="glb-acct">
             <div className="glb-acct-head">
               <dt className="t-medium">{CUR_NAME[c]} 모의계좌</dt>
               <dd className="num t-section">{fmtMoneyByCurrency(eq, c)}</dd>
@@ -56,7 +61,7 @@ function AccountSummary({ server }: { server: ServerState }) {
         );
       })}
       <p className="t-cap">
-        평가 자산은 보유 종목의 최근 가격으로 계산했어요{serverAt ? ` · ${fmtAsOf(serverAt)}` : ""}. 종목별 손익은 <Link to="/trade">매매 · 보유</Link>에서 봐요.
+        평가 자산은 보유 종목의 최근 가격으로 계산했어요{priced.length ? `(${priced.join(" · ")} 기준)` : ""}. 종목별 손익은 <Link to="/trade">매매 · 보유</Link>에서 봐요.
       </p>
     </div>
   );
@@ -80,7 +85,7 @@ function ResetPaper({ server, compact }: { server: ServerState; compact: boolean
       toast("모의계좌를 예수금으로 초기화했어요", "ok");
       setOpen(false);
     } catch (e) {
-      setError(`초기화하지 못했어요: ${e instanceof Error ? e.message : String(e)}. 서버 연결을 확인하고 다시 시도하세요.`);
+      setError(failText("모의계좌를 초기화하지 못했어요", e, "잠시 뒤 다시 해 주세요."));
     } finally {
       setBusy(false);
     }
@@ -105,7 +110,15 @@ function ResetPaper({ server, compact }: { server: ServerState; compact: boolean
             <Button variant="ghost" size={compact ? "lg" : "md"} onClick={() => setOpen(false)}>
               취소
             </Button>
-            <Button variant="primary" size={compact ? "lg" : "md"} busy={busy} onClick={() => void run()}>
+            {/* 되돌릴 수 없는 동작: 기본(잉크) 버튼 대신 보조 버튼 + 경고 아이콘·경고색 글자(빨강·강조색은 쓰지 않는다) */}
+            <Button
+              variant="secondary"
+              className="glb-destructive"
+              size={compact ? "lg" : "md"}
+              busy={busy}
+              icon={<AlertTriangle size={16} strokeWidth={1.5} aria-hidden="true" />}
+              onClick={() => void run()}
+            >
               모의계좌 초기화
             </Button>
           </div>
@@ -143,7 +156,7 @@ export function PaperSection({ gh, bp, drafts, setDraft }: SecProps & DraftProps
       await refreshServer();
       toast(on ? "모의매매 자동 실행을 켰어요. 장이 열린 동안 계획대로 모의로 사고팔아요." : "모의매매 자동 실행을 껐어요. 새로 들어가지 않아요.", "ok");
     } catch (e) {
-      setError(`바꾸지 못했어요: ${e instanceof Error ? e.message : String(e)}. 서버 연결을 확인하고 다시 시도하세요.`);
+      setError(failText("모의매매 자동 실행을 바꾸지 못했어요", e, "잠시 뒤 다시 해 주세요."));
     } finally {
       setBusy(null);
     }
@@ -167,7 +180,7 @@ export function PaperSection({ gh, bp, drafts, setDraft }: SecProps & DraftProps
       setMonErrShown(false);
       toast("점검 주기를 저장했어요", "ok");
     } catch (e) {
-      setError(`점검 주기를 저장하지 못했어요: ${e instanceof Error ? e.message : String(e)}. 서버 연결을 확인하고 다시 저장하세요.`);
+      setError(failText("점검 주기를 저장하지 못했어요", e, "값을 확인하고 다시 저장하세요."));
     } finally {
       setBusy(null);
     }
