@@ -4,7 +4,7 @@ import {
   zeroScanSentence,
 } from "../src/screens/discover/logic";
 import { PRESET_MAX, cleanPresetName, normalizePresets, presetMatches, presetNameProblem, removePreset, renamePreset, upsertPreset } from "../src/screens/discover/presets";
-import { fmtYmd } from "../src/features/strategyRun";
+import { btFormOf, defaultParams, fmtAmountInput, fmtYmd, parseAmountInput, parseBtForm } from "../src/features/strategyRun";
 
 describe("R080 최소 거래대금 절반으로", () => {
   it("1억·$1M에서도 실제로 반이 된다(반올림으로 그대로 남지 않는다)", () => {
@@ -109,5 +109,27 @@ describe("R110 백테스트·적립식 표 날짜", () => {
   it("월.일(요일), 다른 해는 연도 두 자리", () => {
     expect(fmtYmd("2024-01-12", "2026-10-26")).toBe("24.1.12(금)");
     expect(fmtYmd("2026-01-12T00:00:00Z", "2026-10-26")).toBe("1.12(월)");
+  });
+});
+
+describe("R079·R107 백테스트 입력", () => {
+  const base = defaultParams("KR");
+  it("음수 기준점: '-'만 친 중간 상태는 0이 되지 않고 오류로 남으며, '-15'는 그대로 읽는다", () => {
+    const f = btFormOf(base);
+    expect(f.sell).toBe(String(base.sellThreshold));
+    expect(parseBtForm({ ...f, sell: "-" }, base).params).toBeNull();
+    expect(parseBtForm({ ...f, sell: "-" }, base).errors.sell).toMatch(/-100~100/);
+    expect(parseBtForm({ ...f, sell: "-15", buy: "-5" }, base).params).toMatchObject({ sellThreshold: -15, buyThreshold: -5 });
+    expect(parseBtForm({ ...f, buy: "120" }, base).errors.buy).toBeDefined();
+    expect(parseBtForm({ ...f, stop: "" }, base).params?.stopPct).toBe(0);
+  });
+  it("투자금은 천 단위 쉼표로 보이고 쉼표를 빼고 읽는다", () => {
+    expect(btFormOf(base).cash).toBe("10,000,000");
+    expect(btFormOf(defaultParams("US")).cash).toBe("10,000");
+    expect(fmtAmountInput("0012a345")).toBe("12,345");
+    expect(fmtAmountInput("")).toBe("");
+    expect(parseAmountInput("10,000,000")).toBe(10_000_000);
+    expect(parseBtForm({ ...btFormOf(base), cash: "" }, base).errors.cash).toMatch(/0보다 크게/);
+    expect(parseBtForm({ ...btFormOf(base), cash: "5,000,000" }, base).params?.initialCash).toBe(5_000_000);
   });
 });
