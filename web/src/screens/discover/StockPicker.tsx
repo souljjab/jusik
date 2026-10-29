@@ -3,7 +3,7 @@ import { Search } from "lucide-react";
 import { isValidCode, type StockInfo } from "@jusik/shared";
 import { searchStocks } from "../../api";
 import { useApp } from "../../app/AppContext";
-import { Chip } from "../../ui";
+import { Chip, MARKET_LABEL } from "../../ui";
 
 /**
  * 백테스트할 종목 고르기: 이름·코드 검색, 관심종목과 스캔 후보에서 바로 고르기.
@@ -97,7 +97,7 @@ export function StockPicker({ code, onPick }: { code: string; onPick: (code: str
               <li key={s.code} id={`${listId}-${i}`} role="option" aria-selected={i === active} onMouseDown={(e) => (e.preventDefault(), pick(s.code))} onMouseEnter={() => setActive(i)}>
                 <span className="t-medium">{s.name}</span>
                 <span className="t-cap">
-                  {s.code} · {s.market}
+                  {s.code} · {MARKET_LABEL[s.market]}
                 </span>
               </li>
             ))}

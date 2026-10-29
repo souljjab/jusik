@@ -18,6 +18,8 @@ const STYLE = { solid: LineStyle.Solid, dotted: LineStyle.Dotted, dashed: LineSt
 /**
  * 자산 곡선 차트(전략·단순 보유·지수). 바탕은 투명, 격자는 가로선만 옅게.
  * 화면 낭독기에는 summary 문장을 읽어 준다(차트에는 요약 문장 — 지도서 10장).
+ * 차트 라이브러리가 그림 상자 안에 출처 링크(TradingView)를 넣으므로 상자를 role="img"로 두지 않는다:
+ * figure + 숨긴 figcaption으로 요약을 주고, 캔버스 표만 낭독에서 감춘다(링크는 그대로 키보드로 닿는다).
  * hidden에 든 선은 숨기기만 한다(확대 상태 유지).
  */
 export function EquityChart({ lines, height = 280, summary, hidden }: { lines: ChartLine[]; height?: number; summary: string; hidden?: ReadonlySet<string> }) {
@@ -41,6 +43,8 @@ export function EquityChart({ lines, height = 280, summary, hidden }: { lines: C
         priceFormatter: (p: number) => (Math.abs(p) >= 1000 ? Math.round(p).toLocaleString("ko-KR") : p.toFixed(2)),
       },
     });
+    // 캔버스를 담은 표(내용 없음)는 낭독에서 감춘다. 초점이 가는 요소가 없어 aria-hidden으로 충분하다
+    node.querySelector("table")?.setAttribute("aria-hidden", "true");
     const map = new Map<string, ISeriesApi<"Line">>();
     for (const l of lines) {
       const s = chart.addLineSeries({
@@ -66,7 +70,12 @@ export function EquityChart({ lines, height = 280, summary, hidden }: { lines: C
     for (const [id, s] of series.current) s.applyOptions({ visible: !hidden?.has(id) });
   }, [hidden, lines, colors]);
 
-  return <div ref={el} className="disc-chart" style={{ height }} role="img" aria-label={summary} />;
+  return (
+    <figure className="disc-chart-fig">
+      <div ref={el} className="disc-chart" style={{ height }} />
+      <figcaption className="sr-only">{summary}</figcaption>
+    </figure>
+  );
 }
 
 /** 선 범례. onToggle이 있으면 눌러서 선을 숨기고 보인다 */
@@ -74,7 +83,7 @@ export function ChartLegend({ lines, hidden, onToggle }: { lines: Pick<ChartLine
   return (
     <div className="disc-legend" role={onToggle ? "group" : undefined} aria-label={onToggle ? "차트에 표시할 선" : undefined}>
       {lines.map((l) => {
-        const sw = <i className={`disc-swatch ${l.style ?? "solid"}`} style={{ borderColor: l.color }} aria-hidden="true" />;
+        const sw = <i className={`disc-swatch ${l.style && l.style !== "solid" ? l.style : ""}`} style={{ borderColor: l.color }} aria-hidden="true" />;
         return onToggle ? (
           <button key={l.id} type="button" className="disc-legend-item" aria-pressed={!hidden?.has(l.id)} onClick={() => onToggle(l.id)}>
             {sw}

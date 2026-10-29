@@ -1,14 +1,14 @@
-import { useMemo, useState, type KeyboardEvent } from "react";
+import { useMemo, useState } from "react";
 import { ArrowRight, RefreshCw } from "lucide-react";
 import { EXPOSURE_CAP_REASON, regionOf, type Currency, type Market, type ScanResult, type ServerState } from "@jusik/shared";
 import { useApp } from "../../app/AppContext";
 import { Link, navigate } from "../../app/router";
 import { CandidateList } from "../../features/candidates/CandidateList";
 import {
-  Button, Chip, Disclaimer, EmptyState, Notice, RegimeGauge, RuleTag, Section, Segmented, Skeleton, SkeletonRows,
-  fmtBig, fmtInt, useBreakpoint,
+  Button, Chip, Disclaimer, EmptyState, Notice, ProgressLine, RegimeGauge, RuleTag, Section, Segmented, Skeleton, SkeletonRows,
+  fmtBig, fmtInt, useBreakpoint, useSlow,
 } from "../../ui";
-import { FILTER_CHIPS, bindingRejection, filterCandidates, filterCounts, postureLine, rejectionAdvice, scanDraftOf, type FilterId, type MarketFilter } from "./logic";
+import { FILTER_CHIPS, filterCandidates, filterCounts, postureLine, zeroScanSentence, type FilterId, type MarketFilter } from "./logic";
 import { ScanStatus } from "./ScanStatus";
 import { useScan } from "./useScan";
 
@@ -89,6 +89,7 @@ export function RecommendTab() {
             <div className="disc-list">
               <CandidateList
                 candidates={list}
+                showPrice={bp !== "compact"}
                 empty={
                   !scan ? (
                     <EmptyState title="아직 스캔 결과가 없어요" action={bp === "compact" ? undefined : scanButton}>
@@ -96,7 +97,7 @@ export function RecommendTab() {
                     </EmptyState>
                   ) : all.length === 0 ? (
                     <EmptyState title="조건에 맞는 후보가 없어요" action={<Button onClick={() => navigate("/discover/screener")}>스크리너에서 조건 보기</Button>}>
-                      {zeroSentence(scan, server.settings)}
+                      {zeroScanSentence(scan, server.settings)}
                     </EmptyState>
                   ) : (
                     <EmptyState title="고른 근거를 모두 충족한 후보가 없어요" action={<Button onClick={() => (setFilters(new Set()), setMarket("all"))}>필터 지우기</Button>}>
@@ -123,20 +124,12 @@ export function RecommendTab() {
   );
 }
 
-/** 조건 충족 0개일 때의 사실 문장(자세한 완화 제안은 스크리너에서) */
-function zeroSentence(scan: ScanResult, settings: ServerState["settings"]): string {
-  const top = bindingRejection(scan.rejected, scan.scannedCount);
-  return top
-    ? `모든 조건을 만족하는 종목이 없어요. 가장 많이 걸러낸 조건은 ${rejectionAdvice(top.reason, scanDraftOf(settings)).condition}(${fmtInt(top.count)}종목)이에요. 스크리너에서 완화 제안을 볼 수 있어요.`
-    : "모든 조건을 만족하는 종목이 없어요. 장중에 다시 스캔해 보세요.";
-}
-
 /** 시장 국면(근거 스트립의 마지막 칸). 자세한 근거는 홈의 국면 상세 */
 function PostureBlock({ scan }: { scan: ScanResult }) {
   const markets = scan.markets.length ? scan.markets : (Object.keys(scan.regimes) as Market[]);
   if (!markets.length) return null;
   return (
-    <Section title="시장 국면" actions={<Link to="/?view=regime" className="disc-more">국면 자세히</Link>}>
+    <Section title="시장 국면" actions={<Link to="/?view=regime" className="disc-more">국면 근거 보기</Link>}>
       <ul className="disc-plain">
         {markets.map((m) => {
           const p = scan.postures?.[m] ?? null;
@@ -172,7 +165,7 @@ function PlanBlock({ server, scan }: { server: ServerState; scan: ScanResult }) 
               <li key={c} className="disc-kv">
                 <span className="t-2">{CUR_LABEL[c]} 계획</span>
                 <span className="num t-medium">
-                  {p.items.length}종목{p.items.length > 0 && <> · 투자 {fmtBig(p.used, region)}{region === "KR" && <span className="unit">원</span>}</>}
+                  {p.items.length}종목{p.items.length > 0 && <> · 투자 {fmtBig(p.used, region)}{region === "KR" && <span className="unit"> 원</span>}</>}
                 </span>
               </li>
             );
@@ -228,8 +221,9 @@ function RejectedBlock({ scan }: { scan: ScanResult }) {
   const total = rows.reduce((a, [, n]) => a + n, 0);
   return (
     <Section title="걸러진 종목" sub={`${fmtInt(total)}종목`} actions={<Link to="/discover/screener" className="disc-more">조건 보기</Link>}>
-      <p className="t-2 num">
-        후보 풀 {fmtInt(scan.universeCount)} → 분석 {fmtInt(scan.scannedCount)} → 조건 충족 {fmtInt(scan.candidates.length)}
+      <p className="t-2">
+        후보 풀 <span className="num">{fmtInt(scan.universeCount)}</span> → 분석 <span className="num">{fmtInt(scan.scannedCount)}</span> → 조건 충족{" "}
+        <span className="num">{fmtInt(scan.candidates.length)}</span>
       </p>
       {rows.length > 0 && (
         <ul className="disc-plain">
@@ -259,8 +253,10 @@ function RejectedBlock({ scan }: { scan: ScanResult }) {
 }
 
 function RecommendSkeleton() {
+  const slow = useSlow();
   return (
     <div className="disc-rec" aria-busy="true">
+      {slow && <ProgressLine text="스캔 결과와 시장 국면을 받는 중이에요" />}
       <div className="disc-status">
         <div className="disc-status-text">
           <Skeleton w={180} h={16} />

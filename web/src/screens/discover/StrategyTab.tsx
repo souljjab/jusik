@@ -7,16 +7,18 @@ import { useApp } from "../../app/AppContext";
 import { navigate, useRoute } from "../../app/router";
 import { useChartColors, type ChartColors } from "../../theme";
 import {
-  Button, Change, Chip, EvidenceStrip, Field, MarketStatus, Notice, QuoteLine, RuleTag, Section, Skeleton, Stat, Stats, Toggle,
-  fmtInt, fmtMoney, fmtNum, fmtPct, fmtPrice, fmtRatio, useBreakpoint,
+  Button, Change, Chip, EvidenceStrip, Field, MARKET_LABEL, MarketStatus, Notice, ProgressLine, QuoteLine, RuleTag, Section, Skeleton, Stat, Stats, Toggle,
+  errorText, fmtInt, fmtMoney, fmtNum, fmtPct, fmtPrice, fmtRatio, useBreakpoint, useSlow,
 } from "../../ui";
+import { AmountInput, amountLabel } from "./AmountInput";
 import { DcaSection } from "./DcaSection";
 import { ChartLegend, EquityChart, type ChartLine } from "./EquityChart";
 import { StockPicker } from "./StockPicker";
 import { MIN_SAMPLE, indexEquity, periodLabel, summarizeBacktest } from "./logic";
 import {
-  ALL_STRATEGIES, APP_STRATEGIES, BOOK_STRATEGIES, DEFAULT_STRATEGY_ID, btCostText, btCosts, defaultParams, fmtYmd, hasRegimeToggle, runSelected, signalEvidenceFor, strategyMeta,
-  type AnyBacktest, type BtParams, type StrategyMeta,
+  ALL_STRATEGIES, APP_STRATEGIES, BOOK_STRATEGIES, DEFAULT_STRATEGY_ID, btCostText, btCosts, btFormOf, defaultParams, fmtYmd, hasRegimeToggle, parseBtForm, runSelected,
+  signalEvidenceFor, strategyMeta,
+  type AnyBacktest, type BtForm, type BtParams, type StrategyMeta,
 } from "../../features/strategyRun";
 
 const INDEX_NAME: Record<Market, string> = { KOSPI: "코스피", KOSDAQ: "코스닥", US: "S&P 500" };
@@ -46,7 +48,7 @@ export function StrategyTab() {
     setLoaded({ code, data: null, error: null, at: null });
     loadStock(code)
       .then((d) => alive && setLoaded({ code, data: d, error: null, at: new Date().toISOString() }))
-      .catch((e: unknown) => alive && setLoaded({ code, data: null, error: e instanceof Error ? e.message : String(e), at: null }));
+      .catch((e: unknown) => alive && setLoaded({ code, data: null, error: errorText(e), at: null }));
     return () => {
       alive = false;
     };
@@ -54,15 +56,23 @@ export function StrategyTab() {
   const data = loaded.code === code ? loaded.data : null;
   const region: Region = data ? regionOf(data.info.market) : /^\d{6}$/.test(code) ? "KR" : "US";
 
-  // 고친 값(draft)은 '백테스트 실행'을 눌러야 적용(applied)된다. 지역이 바뀌면 기본값으로
-  const [draft, setDraft] = useState<BtParams>(() => defaultParams(region));
+  // 고친 값(form, 입력칸 글자 그대로)은 '백테스트 실행'을 눌러야 적용(applied)된다. 지역이 바뀌면 기본값으로
+  const [form, setForm] = useState<BtForm>(() => btFormOf(defaultParams(region)));
   const [applied, setApplied] = useState<BtParams>(() => defaultParams(region));
+  const [showErrors, setShowErrors] = useState(false);
   useEffect(() => {
-    setDraft(defaultParams(region));
+    setForm(btFormOf(defaultParams(region)));
     setApplied(defaultParams(region));
+    setShowErrors(false);
   }, [region]);
-  const dirty = JSON.stringify(draft) !== JSON.stringify(applied);
-  const run = () => setApplied(draft);
+  const parsed = parseBtForm(form, applied);
+  const errors = showErrors ? parsed.errors : {};
+  const dirty = !parsed.params || JSON.stringify(parsed.params) !== JSON.stringify(applied);
+  const edit = (patch: Partial<BtForm>) => setForm((f) => ({ ...f, ...patch }));
+  const run = () => {
+    setShowErrors(true);
+    if (parsed.params) setApplied(parsed.params);
+  };
 
   const result = useMemo(
     () => (data ? runSelected(id, data.candles, data.indexCandles, data.info, region, applied) : null),
@@ -70,7 +80,7 @@ export function StrategyTab() {
   );
 
   const runBtn = (
-    <Button variant="primary" size={compact ? "lg" : "md"} block={compact} disabled={!data || !(draft.initialCash > 0)} onClick={run} icon={<Play size={16} strokeWidth={1.5} aria-hidden="true" />}>
+    <Button variant="primary" size={compact ? "lg" : "md"} block={compact} disabled={!data} onClick={run} icon={<Play size={16} strokeWidth={1.5} aria-hidden="true" />}>
       백테스트 실행
     </Button>
   );
@@ -110,37 +120,29 @@ export function StrategyTab() {
           <StockLine loaded={loaded} code={code} />
           {data && <SignalNow id={id} data={data} />}
           <div className="disc-form">
-            <Field label={`투자금(${region === "US" ? "달러" : "원"})`} htmlFor="disc-bt-cash">
-              <input
-                id="disc-bt-cash"
-                className="ui-input num"
-                type="number"
-                min={0}
-                step={region === "US" ? 1000 : 1_000_000}
-                value={draft.initialCash}
-                onChange={(e) => setDraft((d) => ({ ...d, initialCash: Math.max(0, +e.target.value || 0) }))}
-                onKeyDown={(e) => e.key === "Enter" && run()}
-              />
+            <Field label={amountLabel("투자금", region)} htmlFor="disc-bt-cash" error={errors.cash}>
+              <AmountInput id="disc-bt-cash" region={region} value={form.cash} onChange={(v) => edit({ cash: v })} onEnter={run} invalid={!!errors.cash} />
             </Field>
             {id === "app-score" && (
               <>
-                <Field label="매수 기준 점수(이상)" htmlFor="disc-bt-buy">
-                  <input id="disc-bt-buy" className="ui-input num" type="number" min={-100} max={100} value={draft.buyThreshold} onChange={(e) => setDraft((d) => ({ ...d, buyThreshold: +e.target.value }))} />
+                {/* 음수 기준점을 칠 수 있게 글자 그대로 둔다('-'만 친 중간 상태가 0이 되지 않게) */}
+                <Field label="매수 기준 점수(이상)" hint="-100~100" htmlFor="disc-bt-buy" error={errors.buy}>
+                  <input id="disc-bt-buy" className="ui-input num" type="number" min={-100} max={100} value={form.buy} onChange={(e) => edit({ buy: e.target.value })} onKeyDown={(e) => e.key === "Enter" && run()} />
                 </Field>
-                <Field label="매도 기준 점수(이하)" htmlFor="disc-bt-sell">
-                  <input id="disc-bt-sell" className="ui-input num" type="number" min={-100} max={100} value={draft.sellThreshold} onChange={(e) => setDraft((d) => ({ ...d, sellThreshold: +e.target.value }))} />
+                <Field label="매도 기준 점수(이하)" hint="-100~100" htmlFor="disc-bt-sell" error={errors.sell}>
+                  <input id="disc-bt-sell" className="ui-input num" type="number" min={-100} max={100} value={form.sell} onChange={(e) => edit({ sell: e.target.value })} onKeyDown={(e) => e.key === "Enter" && run()} />
                 </Field>
-                <Field label="손절 %" hint="0이면 쓰지 않아요" htmlFor="disc-bt-stop">
-                  <input id="disc-bt-stop" className="ui-input num" type="number" min={0} max={50} value={draft.stopPct} onChange={(e) => setDraft((d) => ({ ...d, stopPct: Math.max(0, +e.target.value || 0) }))} />
+                <Field label="손절 %" hint="0이면 쓰지 않아요" htmlFor="disc-bt-stop" error={errors.stop}>
+                  <input id="disc-bt-stop" className="ui-input num" type="number" min={0} max={50} value={form.stop} onChange={(e) => edit({ stop: e.target.value })} onKeyDown={(e) => e.key === "Enter" && run()} />
                 </Field>
               </>
             )}
           </div>
           {hasRegimeToggle(id) && (
             <Toggle
-              checked={draft.useRegime}
+              checked={form.useRegime}
               disabled={!!data && !data.indexCandles}
-              onChange={(v) => setDraft((d) => ({ ...d, useRegime: v }))}
+              onChange={(v) => edit({ useRegime: v })}
               label="지수 약세 국면에서는 매수 안 함"
               hint={data && !data.indexCandles ? "지수 자료가 없어 쓸 수 없어요" : "와인스타인 M1-02"}
             />
@@ -151,7 +153,7 @@ export function StrategyTab() {
 
         {loaded.error && loaded.code === code ? (
           <Notice tone="warn" title="종목 시세를 받지 못했어요" action={<Button size="sm" onClick={() => setReload((n) => n + 1)}>다시 불러오기</Button>}>
-            {loaded.error}. 종목 코드를 확인하거나 잠시 뒤 다시 불러오세요.
+            {/[.!?]$/.test(loaded.error) ? loaded.error : `${loaded.error}.`} 종목 코드를 확인하거나 잠시 뒤 다시 불러오세요.
           </Notice>
         ) : !data ? (
           <PreviewSkeleton compact={compact} />
@@ -225,11 +227,12 @@ function StockLine({ loaded, code }: { loaded: Loaded; code: string }) {
       <span className="row base wrap">
         <span className="t-section">{d.info.name}</span>
         <span className="t-cap">
-          {d.info.code} · {d.info.market}
+          {d.info.code} · {MARKET_LABEL[d.info.market]}
         </span>
       </span>
       <QuoteLine name={d.info.name} price={d.quote.price} change={d.quote.change} pct={d.quote.changePct} region={region} />
-      <MarketStatus region={region} now={now} asOf={loaded.at} />
+      {/* 시세에는 자체 시각이 없어 받은 시각을 '받음'으로 쓴다('기준'이라고 쓰지 않는다) */}
+      <MarketStatus region={region} now={now} receivedAt={loaded.at} />
       <Button variant="link" onClick={() => openStock(d.info.code)} icon={<ExternalLink size={14} strokeWidth={1.5} aria-hidden="true" />}>
         종목 분석 열기
       </Button>
@@ -257,6 +260,7 @@ function SignalNow({ id, data }: { id: string; data: StockData }) {
       <span className="t-medium">{ev.headline}</span>
       <EvidenceStrip
         evidence={ev}
+        subject={data.info.name}
         onOpen={() => openEvidence({ title: `${data.info.name} 근거`, evidence: ev, code: data.info.code, notes: cand?.notes })}
       />
     </div>
@@ -270,11 +274,11 @@ function Preview({ result, data, meta, params, region, compact }: { result: AnyB
   const idxName = INDEX_NAME[data.info.market];
   const lines = useMemo<ChartLine[]>(() => {
     const out: ChartLine[] = [
-      { id: "st", label: "전략", color: colors.accent, width: 2, data: result.equity.map((p) => ({ date: p.date, value: p.equity })) },
+      { id: "st", label: "전략", color: colors.line1, width: 2, data: result.equity.map((p) => ({ date: p.date, value: p.equity })) },
       { id: "bh", label: "단순 보유", color: colors.muted, width: 1, style: "dashed", data: result.equity.map((p) => ({ date: p.date, value: p.buyHold })) },
     ];
     const ix = indexEquity(result.equity, data.indexCandles, params.initialCash);
-    if (ix.length > 1) out.push({ id: "ix", label: idxName, color: colors.ma60, width: 1, style: "dotted", data: ix });
+    if (ix.length > 1) out.push({ id: "ix", label: idxName, color: colors.line2, width: 1, style: "dotted", data: ix });
     return out;
   }, [result, data.indexCandles, params.initialCash, colors, idxName]);
   const ixRet = lines.find((l) => l.id === "ix")?.data;
@@ -292,7 +296,7 @@ function Preview({ result, data, meta, params, region, compact }: { result: AnyB
         <Stat value={<Change pct={s.cagrPct} showAbs={false} />} label="연평균 수익률" />
         <Stat value={<Change pct={s.maxDrawdownPct} showAbs={false} />} label="최대 낙폭" />
         <Stat value={s.winRatePct == null ? "-" : fmtRatio(s.winRatePct, 0)} label={`승률 · ${fmtInt(s.tradeCount)}회`} />
-        <Stat value={s.payoff == null ? "-" : s.payoff.toFixed(2)} label="손익비" />
+        <Stat value={s.payoff == null ? "-" : s.payoff.toFixed(1)} label="손익비" />
       </Stats>
       {!compact && (
         <dl className="disc-kvrow">
@@ -409,9 +413,9 @@ function TradeTable({ result, region }: { result: AnyBacktest; region: Region })
   );
 }
 
-/** 전략별 선 색과 모양: 상승·하락 색과 겹치지 않게 차트 전용 색 + 선 모양으로 나눈다 */
+/** 전략별 선 색과 모양: 상승·하락·강조색과 겹치지 않게 차트 전용 색(line1~3) + 선 모양으로 나눈다 */
 function lineStyleOf(c: ChartColors, i: number): Pick<ChartLine, "color" | "style"> {
-  const colors = [c.accent, c.ma5, c.ma60, c.text];
+  const colors = [c.line1, c.line2, c.line3, c.text];
   return { color: colors[i % colors.length]!, style: i < colors.length ? "solid" : "dashed" };
 }
 
@@ -486,7 +490,7 @@ function Comparison({ data, region, cash, selected, onPick }: { data: StockData;
                 <tr key={r.id} className={`click ${r.id === selected ? "sel" : ""}`} tabIndex={0} onClick={() => onPick(r.id)} onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && onPick(r.id)} aria-current={r.id === selected ? "true" : undefined}>
                   <td>
                     <div className="row" style={{ gap: 8 }}>
-                      {st && <i className={`disc-swatch ${st.style}`} style={{ borderColor: st.color }} aria-hidden="true" />}
+                      {st && <i className={`disc-swatch ${st.style === "solid" ? "" : st.style ?? ""}`} style={{ borderColor: st.color }} aria-hidden="true" />}
                       <div className="stack" style={{ gap: 0 }}>
                         <span className="t-medium">
                           {r.name}
@@ -539,8 +543,10 @@ function Comparison({ data, region, cash, selected, onPick }: { data: StockData;
 }
 
 function PreviewSkeleton({ compact }: { compact: boolean }) {
+  const slow = useSlow();
   return (
     <section className="ui-section" aria-busy="true" aria-label="백테스트 불러오는 중">
+      {slow && <ProgressLine text="종목 시세를 받아 백테스트를 돌리는 중이에요" />}
       <Skeleton w={200} h={20} />
       <div className="ui-stats" style={{ ["--n" as string]: compact ? 2 : 4 }}>
         {Array.from({ length: 4 }, (_, i) => (

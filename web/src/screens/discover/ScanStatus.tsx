@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { regionOf, type Market, type Region } from "@jusik/shared";
 import { useApp } from "../../app/AppContext";
 import { MarketStatus, Notice } from "../../ui";
-import { lastScanText, nextScanText } from "./logic";
+import { lastScanText, nextScanText, scanErrorText } from "./logic";
 
 /**
  * 스캔 상태 줄: 마지막 스캔 기준 시각, 다음 스캔, 켠 시장의 장 상태(지도서 9.1 — 상태를 숨기지 않는다).
@@ -15,6 +15,8 @@ export function ScanStatus({ scanning, error, action }: { scanning: boolean; err
   const s = server.settings;
   const scan = server.latestScan;
   const regions = [...new Set((Object.keys(s.markets) as Market[]).filter((m) => s.markets[m]).map(regionOf))] as Region[];
+  // 다시 스캔하는 동안에는 지난 시도의 오류를 띄우지 않는다(끝나면 결과를 알림으로 알린다)
+  const lastError = scanning ? null : sch.lastError;
   return (
     <div className="disc-status" aria-live="polite">
       <div className="disc-status-text">
@@ -27,9 +29,9 @@ export function ScanStatus({ scanning, error, action }: { scanning: boolean; err
         </span>
       </div>
       {action && <div className="disc-status-action">{action}</div>}
-      {(error || sch.lastError) && (
+      {(error || lastError) && (
         <Notice tone="warn" title={error ? "스캔을 마치지 못했어요" : "최근 스캔에서 오류가 났어요"} className="disc-status-notice">
-          {error ?? `${sch.lastError} 다음 스캔에서 다시 시도해요. 계속되면 서버 기록을 확인하세요.`}
+          {error ?? `${scanErrorText(lastError)} 다음 스캔에서 다시 시도해요. 계속되면 서버 기록을 확인하세요.`}
         </Notice>
       )}
     </div>

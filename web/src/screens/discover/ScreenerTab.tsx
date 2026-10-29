@@ -1,18 +1,20 @@
 import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
-import { FlaskConical, Lock, RefreshCw, RotateCcw } from "lucide-react";
+import { BookmarkPlus, FlaskConical, Lock, RefreshCw, RotateCcw, Settings2 } from "lucide-react";
 import { INTRADAY_PARAMS, STRATEGIES, dayTradeEvidence, regionOf, type DayTradeCandidate, type Market, type Region, type ScanResult, type Settings } from "@jusik/shared";
 import { saveSettings } from "../../api";
 import { useActions } from "../../app/actions";
 import { useApp } from "../../app/AppContext";
 import { Link, navigate } from "../../app/router";
 import {
-  Button, Change, Chip, EmptyState, EvidenceStrip, MarketStatus, Notice, RuleTag, ScoreBar, Section, Skeleton, SkeletonRows, Sparkline, Toggle,
-  fmtBig, fmtInt, fmtNum, fmtPct, fmtPrice, fmtWhen, useBreakpoint, useToast,
+  Button, Change, Chip, EmptyState, EvidenceStrip, MarketStatus, Notice, ProgressLine, RuleTag, ScoreBar, Section, Skeleton, SkeletonRows, Sparkline, Toggle,
+  MARKET_LABEL, errorText, fmtBig, fmtInt, fmtPct, fmtPrice, fmtWhen, useBreakpoint, useSlow, useToast,
 } from "../../ui";
 import {
-  FIXED_RULES, MARKET_NAME, SCAN_DEFAULTS, bindingRejection, changedKeys, draftProblems, rejectionAdvice, scanDraftOf,
+  FIXED_RULES, SCAN_DEFAULTS, bindingRejection, changedKeys, draftProblems, rejectionAdvice, scanDraftOf,
   type ScanDraft, type ScanKey,
 } from "./logic";
+import { presetMatches, useSavedPresets, type SavedPreset } from "./presets";
+import { PresetSheet } from "./PresetSheet";
 import { useScan } from "./useScan";
 import { useSparks } from "./useSparks";
 
@@ -42,6 +44,8 @@ export function ScreenerTab() {
   const [touched, setTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [presetSheet, setPresetSheet] = useState<"save" | "manage" | null>(null);
+  const { presets } = useSavedPresets();
   const changed = changedKeys(saved, draft);
   const dirty = touched && changed.length > 0;
 
@@ -71,7 +75,7 @@ export function ScreenerTab() {
       toast("조건을 저장했어요. 다음 스캔부터 적용돼요.", "ok");
       return true;
     } catch (e) {
-      setSaveError(`조건을 저장하지 못했어요: ${e instanceof Error ? e.message : String(e)}. 서버 연결을 확인하고 다시 저장하세요.`);
+      setSaveError(`조건을 저장하지 못했어요. ${errorText(e)} 연결되면 '조건 저장'을 다시 누르세요.`);
       return false;
     } finally {
       setSaving(false);
@@ -110,7 +114,7 @@ export function ScreenerTab() {
     <div className="disc-scr">
       {bp === "large" && <aside className="disc-cond-pane" aria-label="스캔 조건">{conditions}</aside>}
       <div className="disc-scr-main">
-        <Presets />
+        <Presets saved={presets} draft={draft} onLoad={(p) => set(p.draft)} onManage={bp !== "compact" && presets.length > 0 ? () => setPresetSheet("manage") : undefined} />
         {(bp === "medium" || bp === "expanded") && conditions}
 
         <section className="disc-result" aria-labelledby="disc-result-ttl">
@@ -130,6 +134,9 @@ export function ScreenerTab() {
               <div className="row wrap">
                 {saveBtn}
                 {scanBtn}
+                <Button variant="ghost" icon={<BookmarkPlus size={16} strokeWidth={1.5} aria-hidden="true" />} onClick={() => setPresetSheet("save")}>
+                  전략으로 저장
+                </Button>
                 {scan && scan.candidates.length > 0 && (
                   <Button variant="ghost" icon={<FlaskConical size={16} strokeWidth={1.5} aria-hidden="true" />} onClick={() => navigate(`/discover/strategy?id=daytrade-breakout&code=${encodeURIComponent(scan.candidates[0]!.code)}`)}>
                     백테스트 실행
@@ -140,8 +147,9 @@ export function ScreenerTab() {
           </div>
           {scan && (
             <div className="disc-result-meta">
-              <p className="t-2 num">
-                {fmtWhen(scan.at, now)} 스캔 기준 · 후보 풀 {fmtInt(scan.universeCount)} → 분석 {fmtInt(scan.scannedCount)} → 조건 충족 {fmtInt(scan.candidates.length)}
+              <p className="t-2">
+                <span className="num">{fmtWhen(scan.at, now)}</span> 스캔 기준 · 후보 풀 <span className="num">{fmtInt(scan.universeCount)}</span> → 분석{" "}
+                <span className="num">{fmtInt(scan.scannedCount)}</span> → 조건 충족 <span className="num">{fmtInt(scan.candidates.length)}</span>
               </p>
               <span className="disc-status-markets">
                 {scanRegions(scan).map((r) => (
@@ -186,6 +194,7 @@ export function ScreenerTab() {
           {scanBtn}
         </div>
       )}
+      <PresetSheet mode={presetSheet} draft={draft} onClose={() => setPresetSheet(null)} />
     </div>
   );
 }
@@ -196,8 +205,11 @@ function scanRegions(scan: ScanResult): Region[] {
   return r.length ? r : ["KR"];
 }
 
-/** A. 전략 프리셋: 스캔이 쓰는 단타 돌파 하나 + 종목별로 시험하는 책 전략 */
-function Presets() {
+/**
+ * A. 전략 프리셋: 스캔이 쓰는 단타 돌파 하나 + 종목별로 시험하는 책 전략 + 사용자가 저장한 내 전략(조건 묶음).
+ * 내 전략을 누르면 그 조건을 편집 칸에 불러온다(저장하거나 '저장하고 스캔'을 눌러야 스캔에 쓰인다).
+ */
+function Presets({ saved, draft, onLoad, onManage }: { saved: SavedPreset[]; draft: ScanDraft; onLoad: (p: SavedPreset) => void; onManage?: () => void }) {
   return (
     <div className="disc-presets">
       <div className="disc-chips scroll" role="group" aria-label="전략 프리셋">
@@ -211,8 +223,28 @@ function Presets() {
           </Chip>
         ))}
       </div>
+      {saved.length > 0 && (
+        <div className="disc-mine">
+          <div className="disc-chips scroll" role="group" aria-label="내 전략(저장한 조건 불러오기)">
+            <span className="t-2 disc-mine-label" aria-hidden="true">
+              내 전략
+            </span>
+            {saved.map((p) => (
+              <Chip key={p.id} pressed={presetMatches(p, draft)} onClick={() => onLoad(p)}>
+                {p.name}
+              </Chip>
+            ))}
+          </div>
+          {onManage && (
+            <Button variant="link" onClick={onManage} icon={<Settings2 size={14} strokeWidth={1.5} aria-hidden="true" />}>
+              내 전략 관리
+            </Button>
+          )}
+        </div>
+      )}
       <p className="t-cap">
         시장 전체 스캔은 단타 돌파 규칙만 돌려요. 책 전략(와인스타인·설춘환·캔들마스터 등)을 누르면 종목 하나로 시험하는 전략과 백테스트로 가요.
+        {saved.length > 0 && " 내 전략을 누르면 저장해 둔 조건을 불러와요."}
       </p>
     </div>
   );
@@ -239,7 +271,7 @@ function ConditionEditor({ draft, set, dirty, onRevert, onDefaults, compact }: {
             </Button>
           )}
           <Button variant="link" onClick={onDefaults}>
-            기본값으로
+            기본값으로 되돌리기
           </Button>
         </div>
       </div>
@@ -248,7 +280,7 @@ function ConditionEditor({ draft, set, dirty, onRevert, onDefaults, compact }: {
         <Group title="대상">
           <div className="disc-toggles">
             {(["KOSPI", "KOSDAQ", "US"] as Market[]).map((m) => (
-              <Toggle key={m} checked={draft.markets[m]} onChange={(v) => set({ markets: { ...draft.markets, [m]: v } })} label={MARKET_NAME[m]} />
+              <Toggle key={m} checked={draft.markets[m]} onChange={(v) => set({ markets: { ...draft.markets, [m]: v } })} label={MARKET_LABEL[m]} />
             ))}
           </div>
           <ValueRow
@@ -473,7 +505,7 @@ function ResultTable({ list }: { list: DayTradeCandidate[] }) {
   );
   return (
     <Section title="결과" sub={`${list.length}종목 · 행을 누르면 종목 분석`}>
-      <div className="ui-table-wrap">
+      <div className="ui-table-wrap tall">
         <table className="ui-table disc-result-table">
           <thead>
             <tr>
@@ -499,12 +531,12 @@ function ResultTable({ list }: { list: DayTradeCandidate[] }) {
                     <div className="stack" style={{ gap: 0 }}>
                       <span className="t-medium">{c.name}</span>
                       <span className="t-cap">
-                        {c.code} · {MARKET_NAME[c.market]}
+                        {c.code} · {MARKET_LABEL[c.market]}
                       </span>
                     </div>
                   </td>
                   <td>
-                    <EvidenceStrip evidence={ev} onOpen={() => openEvidence({ title: `${c.name} 근거`, evidence: ev, code: c.code, notes: c.notes })} />
+                    <EvidenceStrip evidence={ev} subject={c.name} onOpen={() => openEvidence({ title: `${c.name} 근거`, evidence: ev, code: c.code, notes: c.notes })} />
                   </td>
                   <td className="r">
                     <ScoreBar value={c.score} />
@@ -519,7 +551,7 @@ function ResultTable({ list }: { list: DayTradeCandidate[] }) {
                   <td className="r num">{fmtBig(c.tradeValue, region)}</td>
                   <td className="r">
                     <div className="disc-cell2">
-                      <span className="num">{c.netRR.toFixed(2)}</span>
+                      <span className="num">{c.netRR.toFixed(1)}</span>
                       <span className="t-cap num">손절 {fmtPct(-c.stopPct)}</span>
                     </div>
                   </td>
@@ -527,8 +559,9 @@ function ResultTable({ list }: { list: DayTradeCandidate[] }) {
                     {sp ? (
                       <Sparkline values={sp} width={80} tone="muted" label={`52주 추세${spPct != null ? `, 52주 전 대비 ${fmtPct(spPct)}` : ""}`} />
                     ) : (
-                      <span className="t-cap" aria-label="추세선 없음">
-                        -
+                      <span className="t-cap">
+                        <span aria-hidden="true">-</span>
+                        <span className="sr-only">추세선 없음</span>
                       </span>
                     )}
                   </td>
@@ -544,9 +577,11 @@ function ResultTable({ list }: { list: DayTradeCandidate[] }) {
 }
 
 function ScreenerSkeleton() {
+  const slow = useSlow();
   return (
     <div className="disc-scr" aria-busy="true">
       <div className="disc-scr-main stack-4">
+        {slow && <ProgressLine text="스캔 조건과 결과를 받는 중이에요" />}
         <div className="row wrap">
           <Skeleton w={120} h={32} />
           <Skeleton w={140} h={32} />

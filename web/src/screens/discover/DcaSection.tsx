@@ -4,14 +4,16 @@ import { useChartColors } from "../../theme";
 import { Change, Chip, Field, NoteList, Notice, RuleTag, Section, Stat, Stats, Toggle, arrowOf, fmtInt, fmtMoney, fmtNum, fmtPct, fmtPnl, fmtPrice } from "../../ui";
 import { ChartLegend, EquityChart, type ChartLine } from "./EquityChart";
 import { periodLabel } from "./logic";
-import { btCostText, btCosts, btDefaultCash, fmtYmd } from "../../features/strategyRun";
+import { btCostText, btCosts, btDefaultCash, fmtAmountInput, fmtYmd, parseAmountInput } from "../../features/strategyRun";
+import { AmountInput, amountLabel } from "./AmountInput";
 
 const RULE = "M3-19 헬로마녀";
 
 /** 적립식 분할 매수(적금주식) 시뮬레이터 — 규칙 M3-19 헬로마녀. 핸드폰은 요약 지표만 */
 export function DcaSection({ candles, region, compact, name }: { candles: Candle[]; region: Region; compact: boolean; name: string }) {
   const colors = useChartColors();
-  const [capitalInput, setCapital] = useState(() => btDefaultCash(region));
+  const [capitalText, setCapital] = useState(() => fmtAmountInput(String(btDefaultCash(region))));
+  const capitalInput = parseAmountInput(capitalText);
   const [daysInput, setDays] = useState(DCA_DAYS);
   const [targetInput, setTarget] = useState<number>(DCA_TARGETS.large);
   const [reinvest, setReinvest] = useState(DEFAULT_DCA.reinvest);
@@ -19,7 +21,7 @@ export function DcaSection({ candles, region, compact, name }: { candles: Candle
   const days = useDeferredValue(daysInput);
   const targetPct = useDeferredValue(targetInput);
 
-  useEffect(() => setCapital(btDefaultCash(region)), [region]);
+  useEffect(() => setCapital(fmtAmountInput(String(btDefaultCash(region)))), [region]);
 
   const { feeRate, sellTaxRate } = btCosts(region);
   const invalid =
@@ -34,7 +36,7 @@ export function DcaSection({ candles, region, compact, name }: { candles: Candle
       result
         ? [
             {
-              id: "dca", label: "적립식 자산", color: colors.accent, width: 2,
+              id: "dca", label: "적립식 자산", color: colors.line1, width: 2,
               data: result.equity.map((p) => ({ date: p.date, value: p.equity })),
               markers: result.cycles.flatMap((cy) => (cy.end ? [{ date: cy.end, color: colors.text }] : [])),
             },
@@ -43,7 +45,6 @@ export function DcaSection({ candles, region, compact, name }: { candles: Candle
         : [],
     [result, colors],
   );
-  const unit = region === "US" ? "달러" : "원";
 
   return (
     <Section title="적립식 분할 매수" sub={<RuleTag rule={RULE} />}>
@@ -53,8 +54,8 @@ export function DcaSection({ candles, region, compact, name }: { candles: Candle
         점검하라고 해요.
       </p>
       <div className="disc-form">
-        <Field label={`투자금(${unit})`} htmlFor="disc-dca-cap">
-          <input id="disc-dca-cap" className="ui-input num" type="number" min={0} step={region === "US" ? 1000 : 1_000_000} value={capitalInput} onChange={(e) => setCapital(Math.max(0, +e.target.value || 0))} />
+        <Field label={amountLabel("투자금", region)} htmlFor="disc-dca-cap">
+          <AmountInput id="disc-dca-cap" region={region} value={capitalText} onChange={setCapital} invalid={!(capitalInput > 0)} />
         </Field>
         <Field label="나눠 살 기간(영업일)" htmlFor="disc-dca-days">
           <input id="disc-dca-days" className="ui-input num" type="number" min={1} max={250} value={daysInput} onChange={(e) => setDays(Math.min(250, Math.max(0, Math.floor(+e.target.value || 0))))} />
@@ -140,8 +141,8 @@ function OpenCycle({ r, region }: { r: DcaResult; region: Region }) {
         <dl className="disc-kvgrid">
           <div className="disc-kv">
             <dt className="t-2">투입액 / 예산</dt>
-            <dd className="num">
-              {fmtMoney(o.invested, region)} / {fmtMoney(o.budget, region)}
+            <dd>
+              <span className="num">{fmtMoney(o.invested, region)}</span> / <span className="num">{fmtMoney(o.budget, region)}</span>
             </dd>
           </div>
           <div className="disc-kv">
@@ -222,7 +223,7 @@ function CycleTable({ r, region }: { r: DcaResult; region: Region }) {
                   {cy.returnPct != null ? (
                     <Change pct={cy.returnPct} showAbs={false} />
                   ) : live != null ? (
-                    <span className="row" style={{ justifyContent: "flex-end", gap: 4 }}>
+                    <span className="row disc-nowrap" style={{ justifyContent: "flex-end", gap: 4, flexWrap: "nowrap" }}>
                       <span className="t-cap">평가</span>
                       <Change pct={live} showAbs={false} />
                     </span>
