@@ -185,8 +185,9 @@
 /* 분석 자세히: 접는 구역 */
 .stk-analysis { display: flex; flex-direction: column; gap: var(--space-3); border-top: 1px solid var(--color-border); padding-top: var(--space-5); }
 .stk-step { border-top: 1px solid var(--color-border); }
+/* 글자를 키워 한 줄에 안 들어가면 요약 문구가 제목 아래로 내려간다 */
 .stk-step > summary {
-  list-style: none; display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: var(--touch-min);
+  list-style: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1) var(--space-3); min-height: var(--touch-min);
   padding: var(--space-2) 0; cursor: pointer;
 }
 .stk-step > summary::-webkit-details-marker { display: none; }
@@ -195,10 +196,10 @@
   transform: rotate(45deg); transition: transform var(--motion-fast) var(--motion-ease);
 }
 .stk-step[open] > summary::after { transform: rotate(225deg); }
-.stk-step-title { display: inline-flex; align-items: center; gap: var(--space-2); flex: none; }
+.stk-step-title { display: inline-flex; align-items: center; gap: var(--space-2); flex: 0 1 auto; min-width: 0; }
 /* 단계 번호는 장식이라 강조색이 아니라 글자색(강조색은 선택·근거·게이지·링크에만) */
 .stk-step-n { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--color-text); color: var(--color-text); font-size: var(--font-size-caption); font-weight: var(--font-weight-bold); }
-.stk-step-sum { flex: 1; min-width: 0; text-align: right; }
+.stk-step-sum { flex: 1 1 10rem; min-width: 0; text-align: right; }
 .stk-step-body { display: flex; flex-direction: column; gap: var(--space-3); padding: 0 0 var(--space-4); }
 .stk-details > summary { cursor: pointer; color: var(--color-text-2); font-size: var(--font-size-secondary); min-height: 32px; display: flex; align-items: center; gap: var(--space-2); }
 .stk-details[open] > summary { margin-bottom: var(--space-2); }
@@ -238,7 +239,7 @@
 .stk-side.sell { color: var(--color-down-text); }
 .stk-side.warn { color: var(--color-warn-text); }
 .stk-side.info { color: var(--color-text-2); }
-.stk-daily { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: var(--space-2); align-items: start; }
+.stk-daily { display: grid; grid-template-columns: minmax(2.25rem, max-content) minmax(0, 1fr); gap: var(--space-2); align-items: start; }
 .stk-daily .stk-side { padding-top: var(--space-2); }
 .stk-bullets { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: var(--space-1); }
 .stk-link { display: inline-flex; align-items: center; min-height: 32px; align-self: flex-start; color: var(--color-accent); font-size: var(--font-size-secondary); font-weight: var(--font-weight-medium); text-decoration: none; }
@@ -296,7 +297,8 @@
 .stk-dislink svg { display: inline; margin-left: 4px; vertical-align: -1px; color: var(--color-text-2); }
 .stk-dislink:hover { color: var(--color-accent); text-decoration: underline; }
 .stk-flowlist { list-style: none; margin: 0; padding: 0; }
-.stk-flowlist li { display: flex; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) 0; border-top: 1px solid var(--color-border); }
+.stk-flowlist li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-1) var(--space-3); padding: var(--space-2) 0; border-top: 1px solid var(--color-border); }
+.stk-flowlist li > .stack { min-width: 0; }
 .stk-flowlist li:first-child { border-top: 0; }
 /* 표를 쓰는 너비(태블릿)에서도 이름·내용 칸이 한 글자씩 꺾이지 않게 — 좁으면 표 안에서 가로로 넘긴다 */
 .stk .ui-table td { word-break: keep-all; }
@@ -360,7 +362,8 @@ html:has(.stk-mbar) { --actionbar-h: var(--stk-mbar-h, 92px); }
   background: var(--color-surface); border-top: 1px solid var(--color-border);
 }
 .stk-mbar-risk { text-align: center; }
-.stk-mbar-btns { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+/* 매도·매수 두 칸. 글자를 키워 한 칸에 문구가 안 들어가면 위아래로 쌓는다(가로로 밀려나지 않게) */
+.stk-mbar-btns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); gap: var(--space-2); }
 .stk-mbar-space { height: calc(var(--actionbar-h) + var(--space-3)); flex: none; }
 .stk-mbar-warn { display: inline-flex; align-items: center; gap: 2px; margin-left: var(--space-1); }
 @media (min-width: 600px) {
