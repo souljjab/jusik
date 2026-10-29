@@ -1,10 +1,10 @@
-import { ExternalLink, RefreshCw } from "lucide-react";
+import { AlertTriangle, ExternalLink, RefreshCw } from "lucide-react";
 import {
-  classifyDisclosure, classifySecFiling, FLOW_RULES, secItemsOfTitle, US_FLOW_RULES,
+  classifyDisclosure, classifySecFiling, FLOW_RULES, josa, secItemsOfTitle, US_FLOW_RULES,
   type Disclosure, type InvestorFlow, type Region, type StockExtras, type UsHolders,
 } from "@jusik/shared";
-import { Button, Change, fmtDate, fmtInt, fmtNum, fmtPct, fmtPrice, Notice, NoteList, Section, SkeletonRows, Stat, Stats } from "../../ui";
-import { objParticle } from "./stocksModel";
+import { Button, Change, fmtDate, fmtInt, fmtNum, fmtPct, fmtPrice, kstDate, Notice, NoteList, Section, SkeletonRows, Stat, Stats } from "../../ui";
+import { markDate } from "./stocksModel";
 import { useExtras } from "./useExtras";
 
 /*
@@ -21,6 +21,8 @@ const INSIDER_ROWS = 8;
 const shares = (n: number) => `${n > 0 ? "+" : ""}${fmtInt(n)}`;
 const toneOf = (n: number) => (n > 0 ? "up" : n < 0 ? "down" : "flat");
 const pctOrDash = (n: number | undefined, d = 1) => (n == null ? "-" : `${fmtNum(n, d)}%`);
+/** 날짜(지도서 3.2 '10.12(월)'). 해가 다르면 '25.3.14(금)'처럼 해를 붙인다. 날짜 꼴이 아니면 그대로 */
+const dateKo = (d: string | null | undefined) => (!d ? "-" : /^\d{4}-\d{2}-\d{2}/.test(d) ? markDate(d.slice(0, 10), kstDate(new Date())) : d);
 
 function Tag({ tone, children, title }: { tone: "good" | "bad" | "info"; children: string; title?: string }) {
   return (
@@ -59,7 +61,7 @@ function FlowRows({ flows, compact }: { flows: InvestorFlow[]; compact: boolean 
       </ul>
     );
   return (
-    <div className="ui-table-wrap">
+    <div className="ui-table-wrap tall" tabIndex={0} role="region" aria-label="외국인·기관 순매매 표">
       <table className="ui-table on-surface">
         <thead>
           <tr>
@@ -112,7 +114,7 @@ function DisclosureList({ list, sec }: { list: Disclosure[]; sec: boolean }) {
         const text = sec && d.title.startsWith(prefix) ? d.title.slice(prefix.length) : d.title;
         return (
           <li key={`${d.date}-${i}`}>
-            <span className="t-cap num stk-dis-date">{fmtDate(d.date)}</span>
+            <span className="t-cap num">{dateKo(d.date)}</span>
             <span className="stk-dis-title">
               <DisLink d={d} text={text} />
             </span>
@@ -131,7 +133,7 @@ function Reports({ reports }: { reports: NonNullable<StockExtras["reports"]> }) 
   return (
     <div className="stack">
       <h4 className="stk-sub">정기보고서 제출 현황(DART)</h4>
-      <div className="ui-table-wrap">
+      <div className="ui-table-wrap" tabIndex={0} role="region" aria-label="정기보고서 제출 현황 표">
         <table className="ui-table on-surface">
           <thead>
             <tr>
@@ -147,9 +149,16 @@ function Reports({ reports }: { reports: NonNullable<StockExtras["reports"]> }) 
               <tr key={`${r.kind}-${r.period}`}>
                 <td className="nowrap">{r.period}</td>
                 <td className="nowrap">{r.kind}</td>
-                <td className="r num">{r.filed}</td>
-                <td className="r num">{r.deadline}</td>
-                <td className="nowrap">{r.late ? <span className="warn-text t-medium">기한 초과</span> : <span className="t-2">기한 내</span>}{r.amended ? <span className="t-cap"> · 정정본만 확인</span> : null}</td>
+                <td className="r num">{dateKo(r.filed)}</td>
+                <td className="r num">{dateKo(r.deadline)}</td>
+                <td className="nowrap">{r.late ? (
+                    <span className="warn-text t-medium stk-warnline">
+                      <AlertTriangle size={12} strokeWidth={1.5} aria-hidden="true" />
+                      기한 초과
+                    </span>
+                  ) : (
+                    <span className="t-2">기한 내</span>
+                  )}{r.amended ? <span className="t-cap"> · 정정본만 확인</span> : null}</td>
               </tr>
             ))}
           </tbody>
@@ -217,7 +226,7 @@ function Holders({ h, compact }: { h: UsHolders | null | undefined; compact: boo
                 <li key={`${t.name}-${i}`}>
                   <span className="stack" style={{ gap: 0, minWidth: 0 }}>
                     <span className="t-medium">{t.name}</span>
-                    <span className="t-cap num">{t.date} 기준</span>
+                    <span className="t-cap num">{dateKo(t.date)} 기준</span>
                   </span>
                   <span className="stack right" style={{ gap: 0 }}>
                     <span className="num">{fmtNum(t.pctHeld, 2)}%</span>
@@ -227,7 +236,7 @@ function Holders({ h, compact }: { h: UsHolders | null | undefined; compact: boo
               ))}
             </ul>
           ) : (
-          <div className="ui-table-wrap">
+          <div className="ui-table-wrap tall" tabIndex={0} role="region" aria-label="상위 보유 기관 표">
             <table className="ui-table on-surface">
               <thead>
                 <tr>
@@ -243,7 +252,7 @@ function Holders({ h, compact }: { h: UsHolders | null | undefined; compact: boo
                     <td>{t.name}</td>
                     <td className="r num">{fmtNum(t.pctHeld, 2)}%</td>
                     <td className={`r num ${t.pctChange == null ? "" : toneOf(t.pctChange)}`}>{t.pctChange == null ? "-" : fmtPct(t.pctChange, 1)}</td>
-                    <td className="r num">{t.date}</td>
+                    <td className="r num">{dateKo(t.date)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -262,7 +271,7 @@ function Holders({ h, compact }: { h: UsHolders | null | undefined; compact: boo
                   <span className="stack" style={{ gap: 0, minWidth: 0 }}>
                     <span className="t-medium">{t.name}</span>
                     <span className="t-cap">
-                      <span className="num">{t.date}</span> · {t.text || "-"}
+                      <span className="num">{dateKo(t.date)}</span> · {t.text || "-"}
                     </span>
                   </span>
                   <span className="stack right" style={{ gap: 0 }}>
@@ -273,7 +282,7 @@ function Holders({ h, compact }: { h: UsHolders | null | undefined; compact: boo
               ))}
             </ul>
           ) : (
-          <div className="ui-table-wrap">
+          <div className="ui-table-wrap" tabIndex={0} role="region" aria-label="최근 내부자 거래 표">
             <table className="ui-table on-surface">
               <thead>
                 <tr>
@@ -287,7 +296,7 @@ function Holders({ h, compact }: { h: UsHolders | null | undefined; compact: boo
               <tbody>
                 {recent.map((t, i) => (
                   <tr key={`${t.date}-${i}`}>
-                    <td className="nowrap">{t.date}</td>
+                    <td className="nowrap">{dateKo(t.date)}</td>
                     <td className="stk-td-name">{t.name}</td>
                     <td className="stk-td-text">{t.text || "-"}</td>
                     <td className="r num">{fmtInt(t.shares)}</td>
@@ -320,14 +329,14 @@ export function DisclosureTab({ code, region, sample, compact }: { code: string;
       <div className="stk-tabbody">
         <Notice
           tone="warn"
-          title={`${what}${objParticle(what)} 받지 못했어요`}
+          title={`${josa(what, "을/를")} 받지 못했어요`}
           action={
             <Button size="sm" onClick={reload} icon={<RefreshCw size={14} strokeWidth={1.5} aria-hidden="true" />}>
               다시 불러오기
             </Button>
           }
         >
-          {error ?? "응답이 비어 있어요"}. 서버 연결을 확인한 뒤 다시 불러오세요.
+          {(error ?? "응답이 비어 있어요").replace(/[.\s]+$/, "")}. 잠시 뒤 다시 불러오세요.
         </Notice>
       </div>
     );

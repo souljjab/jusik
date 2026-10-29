@@ -5,13 +5,13 @@ import {
   type IChartApi, type IPriceLine, type ISeriesApi, type Time, type UTCTimestamp,
 } from "lightweight-charts";
 import {
-  aggregateBars, INTRADAY_PARAMS, INTRADAY_SESSIONS, marketClock, smaOf,
+  aggregateBars, INTRADAY_PARAMS, INTRADAY_SESSIONS, marketClock, marketSession, smaOf,
   type IntradayAssessment, type IntradayBar, type IntradayVerdict, type MinuteResponse, type Note, type Region,
 } from "@jusik/shared";
 import { getMinute } from "../../api";
 import { CHART_FONT, CHART_LOCALE, useChartColors, type ChartColors } from "../../theme";
-import { Button, Change, EvidenceStrip, fmtDate, fmtPrice, Notice, NoteList, Segmented, Skeleton, Stat, Stats } from "../../ui";
-import { minuteEvidence } from "./stocksModel";
+import { Button, Change, errorText, EvidenceStrip, fmtDate, fmtPrice, Notice, NoteList, Segmented, Skeleton, Stat, Stats } from "../../ui";
+import { minuteClock, minuteEvidence } from "./stocksModel";
 
 /*
  * 분봉(1분봉·3분봉)과 강창권 장중 타점 판단(자료집 4.7·M3-18). 예전 분봉 탭을 종목 차트의 '분' 기간으로 옮겼다.
@@ -29,7 +29,6 @@ const VERDICT: Record<IntradayVerdict, { label: string; help: string }> = {
 };
 
 const isOpenNow = (region: Region) => marketClock(region, new Date()).isOpen;
-const elapsed = (m: number) => (m < 60 ? `${m}분` : `${Math.floor(m / 60)}시간 ${m % 60}분`);
 const clockText = (ms: number) => new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(ms);
 
 // ───────── 차트 ─────────
@@ -93,6 +92,8 @@ function MinuteChart({ bars, region, levels, height }: { bars: IntradayBar[]; re
     const vol = chart.addHistogramSeries({ priceFormat: { type: "volume" }, priceScaleId: "vol", lastValueVisible: false, priceLineVisible: false });
     chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
     api.current = { chart, candle, vol, mas, lines: [], count: 0, first: null };
+    // 출처 링크(TradingView)는 그림(role=img) 밖 보통 링크로 두고 이름을 붙인다(요약은 숨긴 문장으로)
+    box.querySelectorAll("a").forEach((a) => a.getAttribute("aria-label") || a.setAttribute("aria-label", "차트 라이브러리 TradingView 사이트(새 탭)"));
     return () => {
       api.current = null;
       chart.remove();
@@ -132,7 +133,7 @@ function MinuteChart({ bars, region, levels, height }: { bars: IntradayBar[]; re
       .map((l) =>
         a.candle.createPriceLine({
           price: l.price, title: l.title, lineWidth: 1, axisLabelVisible: true,
-          color: l.kind === "stop" ? colors.warn : colors.accent,
+          color: l.kind === "stop" ? colors.warn : colors.line2,
           lineStyle: l.kind === "stop" ? LineStyle.Solid : LineStyle.Dashed,
         }),
       );
@@ -157,7 +158,7 @@ function MinuteChart({ bars, region, levels, height }: { bars: IntradayBar[]; re
           ))}
           {levels.some((l) => l.kind === "split") && (
             <span>
-              <i className="stk-key dashed" style={{ borderColor: colors.accent }} aria-hidden="true" />
+              <i className="stk-key dashed" style={{ borderColor: colors.line2 }} aria-hidden="true" />
               분할 매수가
             </span>
           )}
@@ -170,7 +171,10 @@ function MinuteChart({ bars, region, levels, height }: { bars: IntradayBar[]; re
         </span>
       </div>
       {has ? (
-        <div ref={el} className="stk-chart-main" style={{ height }} role="img" aria-label={`${frame}분봉 차트, 봉 ${shown.length}개, 마지막 종가 ${priceText(region)(shown.at(-1)!.close)}`} />
+        <>
+          <p className="sr-only">{`${frame}분봉 차트, 봉 ${shown.length}개, 마지막 종가 ${priceText(region)(shown.at(-1)!.close)}`}</p>
+          <div ref={el} className="stk-chart-main" style={{ height }} />
+        </>
       ) : (
         <div className="stk-chart-empty" style={{ height: Math.min(height, 200) }}>
           <span className="t-2">표시할 분봉이 없어요.</span>
@@ -208,7 +212,7 @@ function Step({ title, flag, children }: { title: string; flag: ReactNode; child
   return (
     <div className="stk-mstep">
       <div className="row between wrap">
-        <h4 className="t-body t-bold">{title}</h4>
+        <h3 className="t-body t-bold">{title}</h3>
         {flag}
       </div>
       {children}
@@ -216,16 +220,18 @@ function Step({ title, flag, children }: { title: string; flag: ReactNode; child
   );
 }
 
-function Assessment({ a, region, stale, sessionDate, labels }: { a: IntradayAssessment; region: Region; stale: boolean; sessionDate: string | null; labels: string[] }) {
+function Assessment({ a, region, stale, sessionDate, labels, open }: { a: IntradayAssessment; region: Region; stale: boolean; sessionDate: string | null; labels: string[]; open: boolean }) {
   const v = VERDICT[a.entry.verdict];
   const m = (n: number | null | undefined) => (n == null ? "-" : fmtPrice(n, region));
   const P = INTRADAY_PARAMS;
+  // 장이 끝났으면 경과 시간 대신 '장 마감'과 종가 시각
+  const clock = minuteClock({ open, sessionDate, today: marketClock(region, new Date()).date, close: INTRADAY_SESSIONS[region].close, minutesSinceOpen: a.minutesSinceOpen });
   return (
     <section className="stack-3" aria-labelledby="stk-minute-h">
       <div className="row between wrap">
-        <h3 id="stk-minute-h" className="t-section">
+        <h2 id="stk-minute-h" className="t-section">
           분봉 타점 판단
-        </h3>
+        </h2>
         <span className="row wrap">
           {a.asOf && <EvidenceStrip evidence={minuteEvidence(a)} size="md" />}
           <span className={`stk-verdict ${a.entry.verdict}`}>{v.label}</span>
@@ -242,7 +248,7 @@ function Assessment({ a, region, stale, sessionDate, labels }: { a: IntradayAsse
         <>
           <Stats n={4}>
             <Stat value={a.gapPct == null ? "-" : <Change pct={a.gapPct} showAbs={false} />} label="시초가 갭" />
-            <Stat value={elapsed(a.minutesSinceOpen)} label="장 시작 후 경과" />
+            {clock.closed ? <Stat value="장 마감" label={clock.closeText} /> : <Stat value={clock.elapsed} label="장 시작 후 경과" />}
             <Stat value={m(a.sessionLow)} label="당일 저가" />
             <Stat value={m(a.last)} label="마지막 1분봉 종가" />
           </Stats>
@@ -359,7 +365,7 @@ export function MinuteView({ code, region, height }: { code: string; region: Reg
     setSt((s) => (s.code === code ? { ...s, loading: true } : { code, data: null, error: null, loading: true, at: null }));
     getMinute(code)
       .then((data) => id === seq.current && setSt({ code, data, error: null, loading: false, at: Date.now() }))
-      .catch((e: Error) => id === seq.current && setSt((s) => ({ ...s, code, error: e.message, loading: false })));
+      .catch((e: unknown) => id === seq.current && setSt((s) => ({ ...s, code, error: errorText(e), loading: false })));
   }, [code]);
 
   useEffect(() => load(), [load]);
@@ -378,6 +384,9 @@ export function MinuteView({ code, region, height }: { code: string; region: Reg
   const a = data?.assessment ?? null;
   const reg = data?.region ?? region;
   const stale = !!data?.sessionDate && data.sessionDate !== marketClock(reg, new Date()).date;
+  // 장이 열려 있으면 받은 시각, 아니면 그 세션의 종가 시각(받은 시각을 '기준'이라 쓰지 않는다)
+  const session = marketSession(reg, new Date());
+  const closeText = data?.sessionDate ? minuteClock({ open: false, sessionDate: data.sessionDate, today: marketClock(reg, new Date()).date, close: INTRADAY_SESSIONS[reg].close, minutesSinceOpen: 0 }) : null;
   const labels = useMemo(() => (a && data ? splitLabels(a.entry.splitPrices, data.bars, data.region) : []), [a, data]);
   const levels = useMemo<MinuteLevel[]>(() => {
     if (!a) return [];
@@ -395,8 +404,9 @@ export function MinuteView({ code, region, height }: { code: string; region: Reg
         </span>
         <span className="row wrap">
           <span className="t-cap">
-            {open ? "장중 · 30초마다 다시 받아요" : "장 시간이 아니라 자동으로 다시 받지 않아요"}
-            {st.at != null && ` · ${clockText(st.at)} 기준`}
+            {open
+              ? `장중 · 30초마다 다시 받아요${st.at != null ? ` · ${clockText(st.at)} 받음` : ""}`
+              : `${session.label}${closeText?.closed ? ` · ${closeText.closeText}` : ""} · 장 시간이 아니라 자동으로 다시 받지 않아요`}
           </span>
           <Button size="sm" variant="secondary" busy={st.loading} onClick={load} icon={<RefreshCw size={14} strokeWidth={1.5} aria-hidden="true" />}>
             분봉 다시 받기
@@ -405,13 +415,13 @@ export function MinuteView({ code, region, height }: { code: string; region: Reg
       </div>
       {st.error && (
         <Notice tone="warn" title="분봉을 받지 못했어요" action={<Button size="sm" onClick={load}>다시 불러오기</Button>}>
-          {st.error}. 서버 연결을 확인한 뒤 다시 불러오세요.
+          {st.error.replace(/[.\s]+$/, "")}. 잠시 뒤 다시 불러오세요.
         </Notice>
       )}
       {data?.message && <Notice tone="info">{data.message.replace(/\d{4}-\d{2}-\d{2}/g, (d) => fmtDate(d))}</Notice>}
       {!data && st.loading && <Skeleton h={height} />}
       {data && <MinuteChart bars={data.bars} region={data.region} levels={levels} height={height} />}
-      {data && a && <Assessment a={a} region={data.region} stale={stale} sessionDate={data.sessionDate} labels={labels} />}
+      {data && a && <Assessment a={a} region={data.region} stale={stale} sessionDate={data.sessionDate} labels={labels} open={open} />}
       {data && !a && !data.message && <p className="t-2">분봉 판단 자료가 없어요.</p>}
       <RulesCaption />
     </div>

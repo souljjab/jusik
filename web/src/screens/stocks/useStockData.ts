@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { marketSession, regionOfCode } from "@jusik/shared";
 import { loadStock, type StockData } from "../../api";
+import { errorText } from "../../ui/format";
 
 /*
  * 종목 자료(loadStock: 개요·일봉·지수·분석)와 받은 시각. loadStock은 60초 캐시라 같은 약속(Promise)을 돌려줄 수 있어,
@@ -48,7 +49,7 @@ export function useStockData(code: string | null): StockState {
         .then(({ data, at }) => id === seq.current && setSt({ code, data, at, error: null, loading: false }))
         .catch((e: unknown) => {
           if (id !== seq.current) return;
-          const msg = e instanceof Error ? e.message : String(e);
+          const msg = errorText(e);
           // 조용히 다시 받다 실패하면 보던 값을 지킨다
           setSt((s) => (silent && s.code === code && s.data ? { ...s, loading: false } : { code, data: null, at: null, error: msg, loading: false }));
         });
@@ -85,18 +86,30 @@ export function useStockData(code: string | null): StockState {
   };
 }
 
-/** 목록 행용: 같은 loadStock 캐시를 쓴다(상세로 들어가면 바로 그려진다). at은 받은 시각(ms) */
+/**
+ * 목록 행용: 같은 loadStock 캐시를 쓴다(상세로 들어가면 바로 그려진다). at은 받은 시각(ms).
+ * 상세와 같이 장이 열려 있고 화면이 보이는 동안 1분마다 다시 받는다(고른 행과 가격 머리말이 같은 값을 보이게). 다시 받다 실패하면 보던 값을 지킨다
+ */
 export function useStockLite(code: string): { data: StockData | null; failed: boolean; at: number | null } {
   const [st, setSt] = useState<{ code: string; data: StockData | null; failed: boolean; at: number | null }>({ code, data: null, failed: false, at: null });
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     let alive = true;
     setSt((s) => (s.code === code ? s : { code, data: null, failed: false, at: null }));
     fetchStock(code)
       .then(({ data, at }) => alive && setSt({ code, data, failed: false, at }))
-      .catch(() => alive && setSt({ code, data: null, failed: true, at: null }));
+      .catch(() => alive && setSt((s) => (s.code === code && s.data ? s : { code, data: null, failed: true, at: null })));
     return () => {
       alive = false;
     };
+  }, [code, tick]);
+  useEffect(() => {
+    const region = regionOfCode(code);
+    const t = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      if (marketSession(region, new Date()).state === "open") setTick((n) => n + 1);
+    }, REFRESH_MS);
+    return () => clearInterval(t);
   }, [code]);
   return st.code === code ? { data: st.data, failed: st.failed, at: st.at } : { data: null, failed: false, at: null };
 }

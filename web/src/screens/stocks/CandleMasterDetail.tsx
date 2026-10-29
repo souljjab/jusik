@@ -3,7 +3,7 @@ import {
   CANDLE_MASTER_PARAMS, CANDLE_MASTER_SIGNAL_LABEL, CANDLE_MASTER_SIZING, candleMaster244Note, candleMasterSizing,
   type CandleMasterExclusion, type CandleMasterResult, type Note, type Region,
 } from "@jusik/shared";
-import { fmtDate, fmtMoney, fmtNum, fmtPrice, NoteList, RuleTag } from "../../ui";
+import { fmtDate, fmtMoney, fmtNum, fmtPct, fmtPrice, fmtRatio, NoteList, RuleTag } from "../../ui";
 
 /*
  * 캔들마스터 주봉 캔들매매(자료집 4.5, M3-12·M3-13·M4-01·M4-03). 파동 → 캔들군 → 캔들 신호 3층을 차례로 보여 주고,
@@ -36,7 +36,7 @@ function Flag({ on, label, title }: { on: boolean; label: string; title?: string
   const Icon = on ? Check : X;
   return (
     <span className={`stk-flag ${on ? "good" : "info"}`} title={title}>
-      <Icon size={12} strokeWidth={2} aria-hidden="true" />
+      <Icon size={12} strokeWidth={1.5} aria-hidden="true" />
       {label}
       <span className="sr-only">{on ? " 충족" : " 미충족"}</span>
     </span>
@@ -63,7 +63,7 @@ function WaveMetrics({ r }: { r: CandleMasterResult }) {
   return (
     <details className="stk-details">
       <summary>파동 수치 보기</summary>
-      <div className="ui-table-wrap">
+      <div className="ui-table-wrap" tabIndex={0} role="region" aria-label="파동 수치 표">
         <table className="ui-table on-surface">
           <thead>
             <tr>
@@ -105,7 +105,7 @@ function Levels({ r, region }: { r: CandleMasterResult; region: Region }) {
         </dt>
         <dd>
           <span className="num t-medium">{m(r.stop)}</span>
-          <span className="t-cap">진입가 대비 −{fmtNum(r.stopPct, 1)}% (기본 −{P.defaultStopPct}%, 최대 −{P.maxStopPct}%)</span>
+          <span className="t-cap">진입가 대비 {fmtPct(-r.stopPct)} (기본 {fmtRatio(-P.defaultStopPct, 0)}, 최대 {fmtRatio(-P.maxStopPct, 0)})</span>
         </dd>
         {r.target != null && (
           <>
@@ -139,12 +139,12 @@ function Levels({ r, region }: { r: CandleMasterResult; region: Region }) {
         </dt>
         <dd>
           <span className="num t-medium">{m(r.stop)}</span>
-          <span className="t-cap">1/3 지점 기준 −{fmtNum(r.stopPct, 1)}%로 최대 −{P.maxStopPct}%를 넘어요</span>
+          <span className="t-cap">1/3 지점 기준 {fmtPct(-r.stopPct)}로 최대 {fmtRatio(-P.maxStopPct, 0)}를 넘어요</span>
         </dd>
         <dt>진입 대기 가격</dt>
         <dd>
           <span className="num t-medium">{m(r.waitPrice)}</span>
-          <span className="t-cap">진입가가 이 가격 이하로 내려와야 손절폭이 −{P.maxStopPct}% 안에 들어와요</span>
+          <span className="t-cap">진입가가 이 가격 이하로 내려와야 손절폭이 {fmtRatio(-P.maxStopPct, 0)} 안에 들어와요</span>
         </dd>
       </dl>
     );
@@ -200,7 +200,7 @@ export function CandleMasterDetail({ r, capital, region }: { r: CandleMasterResu
       <p className="t-cap">
         {fmtDate(r.date)} 마감 주봉 기준 · 종가 {fmtPrice(r.close, region)} · 주봉 {w.weeks}개. 이동평균·거래량·보조지표 없이 파동 → 캔들군 → 캔들 신호만 보는 별도 매매법이에요.
       </p>
-      <h5 className="stk-layer">① 파동</h5>
+      <h4 className="stk-layer">① 파동</h4>
       <div className="stk-flags">
         {w.exclusions.map((x) => (
           <span key={x} className="stk-flag warn" title={EXCLUSION_TEXT[x][1]}>
@@ -218,7 +218,7 @@ export function CandleMasterDetail({ r, capital, region }: { r: CandleMasterResu
       <NoteList notes={w.notes} dense />
       <WaveMetrics r={r} />
 
-      <h5 className="stk-layer">② 캔들군</h5>
+      <h4 className="stk-layer">② 캔들군</h4>
       {g ? (
         <>
           <div className="stk-flags">
@@ -230,7 +230,7 @@ export function CandleMasterDetail({ r, capital, region }: { r: CandleMasterResu
         <p className="t-2">캔들군을 볼 주봉이 모자라요.</p>
       )}
 
-      <h5 className="stk-layer">③ 캔들 신호</h5>
+      <h4 className="stk-layer">③ 캔들 신호</h4>
       {r.signals.length ? (
         <>
           <div className="stk-flags">
@@ -248,11 +248,11 @@ export function CandleMasterDetail({ r, capital, region }: { r: CandleMasterResu
         <p className="t-2">이번 주(마감 기준) 매수 신호 캔들이 없어요. 파동이 좋아도 신호가 나와야 진입 근거가 생겨요.</p>
       )}
 
-      <h5 className="stk-layer">진입·손절·목표</h5>
+      <h4 className="stk-layer">진입·손절·목표</h4>
       <Levels r={r} region={region} />
       {rest.length > 0 ? <NoteList notes={rest} dense /> : !r.valid && r.waitPrice == null && <p className="t-2">진입 근거가 없어 진입가·목표가를 계산하지 않았어요.</p>}
 
-      <h5 className="stk-layer">비중</h5>
+      <h4 className="stk-layer">비중</h4>
       <Sizing capital={capital} region={region} />
       <NoteList notes={[candleMaster244Note()]} dense />
     </div>

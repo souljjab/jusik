@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, Compass, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { dayTradeEvidence, regionOf, regionOfCode, type DayTradeCandidate } from "@jusik/shared";
 import { useActions } from "../../app/actions";
 import { useApp } from "../../app/AppContext";
@@ -44,7 +44,7 @@ function WatchRow({ code, active, editing, index, count, onMove, onRemove, onAt 
   const label = q ? `${srQuote(name, q.price, q.changePct, region)}${sub ? `, ${sub}` : ""}` : name;
 
   return (
-    <li className={`stk-row ${active ? "sel" : ""}`}>
+    <li className={`stk-row ${active ? "sel" : ""}`} data-code={code}>
       <a className="stk-row-main" href={href(stockPath(code))} aria-current={active ? "page" : undefined} aria-label={label}>
         <span className="stk-row-name" aria-hidden="true">
           <span className="t-medium ellipsis">{name}</span>
@@ -79,7 +79,7 @@ function WatchRow({ code, active, editing, index, count, onMove, onRemove, onAt 
           <IconButton size="sm" label={`${name} 아래로`} onClick={() => onMove(1)} disabled={index === count - 1}>
             <ArrowDown size={16} strokeWidth={1.5} aria-hidden="true" />
           </IconButton>
-          <IconButton size="sm" label={`${name} 관심종목에서 빼기`} onClick={onRemove}>
+          <IconButton size="sm" label={`${name} 관심종목에서 빼기`} onClick={onRemove} data-remove="">
             <X size={16} strokeWidth={1.5} aria-hidden="true" />
           </IconButton>
         </span>
@@ -105,7 +105,7 @@ function RecRow({ c, active }: { c: DayTradeCandidate; active: boolean }) {
         </span>
       </a>
       <span className="stk-row-ev">
-        <EvidenceStrip evidence={ev} onOpen={() => openEvidence({ title: `${c.name} 근거`, evidence: ev, code: c.code, notes: c.notes })} />
+        <EvidenceStrip evidence={ev} subject={c.name} onOpen={() => openEvidence({ title: `${c.name} 근거`, evidence: ev, code: c.code, notes: c.notes })} />
       </span>
     </li>
   );
@@ -134,12 +134,20 @@ export function WatchPane({ selected, mode, onMode, compact = false, showStatus 
   }, [mode, serverAt, watchlist, ats]);
   const [editing, setEditing] = useState(false);
   const [undo, setUndo] = useState<{ code: string; index: number } | null>(null);
+  const undoRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
   const recs = server?.latestScan?.candidates ?? [];
 
+  // 빼면 포커스를 다음 행(마지막이었으면 앞 행)의 '빼기'로, 목록이 비면 '되돌리기'로 옮긴다(포커스가 화면 맨 위로 사라지지 않게)
   const remove = (code: string) => {
     const index = watchlist.indexOf(code);
+    const next = watchlist[index + 1] ?? watchlist[index - 1] ?? null;
     setWatchlist(watchlist.filter((c) => c !== code));
     setUndo({ code, index });
+    requestAnimationFrame(() => {
+      const btn = next ? listRef.current?.querySelector<HTMLElement>(`li[data-code="${CSS.escape(next)}"] [data-remove]`) : null;
+      (btn ?? undoRef.current)?.focus();
+    });
   };
 
   const seg = (
@@ -168,7 +176,7 @@ export function WatchPane({ selected, mode, onMode, compact = false, showStatus 
       </div>
       {!compact && seg}
       {showStatus && regions.length > 0 && (
-        <div className="stk-list-status" aria-label="시장 상태">
+        <div className="stk-list-status" role="group" aria-label="시장 상태">
           {regions.map((r) => (
             <MarketStatus key={r} region={r} now={now} asOf={asOf} compact />
           ))}
@@ -179,7 +187,7 @@ export function WatchPane({ selected, mode, onMode, compact = false, showStatus 
       {undo && (
         <div className="stk-undo" role="status">
           <span className="t-2">관심종목에서 뺐어요.</span>
-          <Button variant="link" onClick={() => (setWatchlist(restoreAt(watchlist, undo.code, undo.index)), setUndo(null))}>
+          <Button ref={undoRef} variant="link" onClick={() => (setWatchlist(restoreAt(watchlist, undo.code, undo.index)), setUndo(null))}>
             되돌리기
           </Button>
         </div>
@@ -199,7 +207,7 @@ export function WatchPane({ selected, mode, onMode, compact = false, showStatus 
             <span className="t-2">발굴에서 후보를 찾아 추가하세요. 종목 화면의 별 단추로도 추가할 수 있어요.</span>
           </EmptyState>
         ) : (
-          <ul className="stk-rows" aria-label="관심종목">
+          <ul ref={listRef} className="stk-rows" aria-label="관심종목">
             {watchlist.map((code, i) => (
               <WatchRow
                 key={code}

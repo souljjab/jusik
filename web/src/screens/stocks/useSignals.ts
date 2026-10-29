@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  candleMasterEvidence, dayTradeEvidence, regionOf, weekKeyOf, weinsteinEvidence,
+  BUY_ACTIONS, candleMasterEvidence, dayTradeEvidence, regionOf, weekKeyOf, weinsteinEvidence,
   type DayTradeCandidate, type Evidence, type Note, type Posture,
 } from "@jusik/shared";
 import type { StockData } from "../../api";
@@ -35,6 +35,11 @@ export interface SignalView {
   mark?: SignalMark;
   /** 신호가 없는 근거(캔들마스터 '신호 없음'). 근거 패널의 보조 구역에만 보이고 신호 목록에는 넣지 않는다 */
   quiet?: boolean;
+  /**
+   * 그 전략의 진입(매수) 신호인지. '같은 신호의 과거 성과'(전략 백테스트의 진입·청산)는 진입 신호에만 맞는 숫자라
+   * 매도 쪽 신호·일봉 보조 신호·매수 의견이 아닌 지금 분석에는 보여 주지 않는다
+   */
+  entry: boolean;
 }
 
 export interface Signals {
@@ -70,17 +75,20 @@ export function useSignals(data: StockData | null, candidate: DayTradeCandidate 
     const out: SignalView[] = [];
     if (candidate) {
       const ev = dayTradeEvidence(candidate);
-      out.push({ id: NOW_DAYTRADE, strategy: "daytrade", title: ev.headline, when: `${fmtDate(candidate.asOf)} 스캔`, evidence: ev, notes: candidate.notes, historical: false });
+      out.push({ id: NOW_DAYTRADE, strategy: "daytrade", title: ev.headline, when: `${fmtDate(candidate.asOf)} 스캔`, evidence: ev, notes: candidate.notes, historical: false, entry: true });
     }
     if (a) {
       const ev = weinsteinEvidence(a);
-      out.push({ id: NOW, strategy: "weinstein", title: ev.headline, when: week(a.timing.weekDate), evidence: ev, notes: [...a.gates, ...a.timing.notes], historical: false });
+      out.push({
+        id: NOW, strategy: "weinstein", title: ev.headline, when: week(a.timing.weekDate), evidence: ev, notes: [...a.gates, ...a.timing.notes], historical: false,
+        entry: BUY_ACTIONS.includes(a.action),
+      });
       const cm = a.candleMaster;
       const cev = candleMasterEvidence(cm);
       if (cm && cev)
         out.push({
           id: NOW_CANDLE, strategy: "candle-master", title: cm.signals.length ? cev.headline : "캔들 신호 없음", when: week(cm.date), evidence: cev, notes: cm.notes,
-          historical: false, quiet: !cm.signals.length,
+          historical: false, quiet: !cm.signals.length, entry: cm.signals.length > 0,
         });
     }
     return out;
@@ -99,16 +107,16 @@ export function useSignals(data: StockData | null, candidate: DayTradeCandidate 
       if (m.kind === "weinstein" && m.stage) {
         const posture = postureAt(data?.indexCandles, m.date, caps, region);
         const ev = weinsteinEvidence(analysisAt(a, m.stage, posture));
-        return { id: m.id, strategy: "weinstein", title: m.label, when: week(m.date), evidence: { ...ev, headline: m.label }, notes: m.stage.notes, historical: !m.latest, mark: m };
+        return { id: m.id, strategy: "weinstein", title: m.label, when: week(m.date), evidence: { ...ev, headline: m.label }, notes: m.stage.notes, historical: !m.latest, mark: m, entry: m.side === "buy" };
       }
       if (m.kind === "candle" && m.candle) {
         const ev = candleMasterEvidence(m.candle);
-        return { id: m.id, strategy: "candle-master", title: m.label, when: week(m.date), evidence: ev, notes: m.candle.notes, historical: !m.latest, mark: m };
+        return { id: m.id, strategy: "candle-master", title: m.label, when: week(m.date), evidence: ev, notes: m.candle.notes, historical: !m.latest, mark: m, entry: true };
       }
       if (m.kind === "daily") {
         const st = stages.get(weekKeyOf(m.date));
         const ev = st ? weinsteinEvidence(analysisAt(a, st, postureAt(data?.indexCandles, m.date, caps, region))) : null;
-        return { id: m.id, strategy: "weinstein", title: m.label, when: markWhen(m, today()), evidence: ev, notes: [], historical: !m.latest, daily: m.daily, mark: m };
+        return { id: m.id, strategy: "weinstein", title: m.label, when: markWhen(m, today()), evidence: ev, notes: [], historical: !m.latest, daily: m.daily, mark: m, entry: false };
       }
       return null;
     },
@@ -119,7 +127,7 @@ export function useSignals(data: StockData | null, candidate: DayTradeCandidate 
     () =>
       viewOf(selectedId) ??
       current.find((v) => v.id === NOW) ??
-      current[0] ?? { id: NOW, strategy: "weinstein", title: "분석 없음", when: "", evidence: null, notes: [], historical: false },
+      current[0] ?? { id: NOW, strategy: "weinstein", title: "분석 없음", when: "", evidence: null, notes: [], historical: false, entry: false },
     [viewOf, selectedId, current],
   );
 

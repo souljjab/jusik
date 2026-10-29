@@ -1,6 +1,6 @@
 import { defaultBuyQty } from "../../features/orderMath";
 import {
-  BUY_ACTIONS, SELL_ACTIONS, STAGE_LABEL, assessRegimeAt, candleMasterAt, candleMasterSignals, completedWeeks, dailyRegimeLookup,
+  BUY_ACTIONS, SELL_ACTIONS, assessRegimeAt, candleMasterAt, candleMasterSignals, completedWeeks, dailyRegimeLookup,
   dailySignalsFromPrep, macd, prepareDailySignals, prepareStage, relativeStrength, rsi, shortDateKo, sma, stageAt, toWeekly,
   type Analysis, type Candle, type CandleMasterResult, type DailySignal, type DayTradeCandidate, type Evidence, type EvidenceCell,
   type IntradayAssessment, type Posture, type Region, type RegimeAssessment, type StageResult,
@@ -356,8 +356,6 @@ export function analysisAt(a: Analysis, stage: StageResult, posture: RegimeAsses
   return { ...a, timing: stage, posture };
 }
 
-export const stageTitle = (r: StageResult) => STAGE_LABEL[r.stage];
-
 // ───────────────────────── 포지션 미리 계산(G·E) ─────────────────────────
 
 export interface OrderPreviewInput {
@@ -385,21 +383,29 @@ export interface OrderPreview {
   /** 주문 후 종목 비중(%) */
   weightAfter: number | null;
   stopOk: boolean;
+  /** 1회 손실 한도로는 1주도 못 사서 1주를 제안했다(1주만 사도 한도를 넘는다) */
+  overRisk: boolean;
+  /** 이미 가진 수량만으로 종목 비중 상한에 닿아 더 살 수 없다(0주) */
+  overWeight: boolean;
 }
 
 /**
  * 주문 검토 시트(features/OrderReviewSheet)와 같은 식으로 기본 수량을 낸다:
- * 1회 손실 한도(예수금 × riskPct) ÷ 주당 손절폭, 종목 비중 상한(maxWeightPct) 이내. 매도는 보유 수량.
- * 미리 보기와 시트의 수량이 같아야 사용자가 헷갈리지 않는다.
+ * 1회 손실 한도(예수금 × riskPct) ÷ 주당 손절폭, 이미 가진 수량을 더해 종목 비중 상한(maxWeightPct) 이내. 매도는 보유 수량.
+ * 미리 보기와 시트의 수량이 같아야 사용자가 헷갈리지 않는다. 한도를 넘는 경우(overRisk·overWeight)도 시트와 같이 알린다.
  */
 export function orderPreview(i: OrderPreviewInput): OrderPreview {
   const price = i.price > 0 ? i.price : 0;
   const stopOk = i.side === "SELL" || (i.stop > 0 && price > 0 && i.stop < price);
   const perShare = i.side === "BUY" && stopOk ? price - i.stop : 0;
   let qty: number;
+  let overRisk = false, overWeight = false;
   if (i.side === "SELL") qty = Math.max(0, i.held);
   else {
-    qty = defaultBuyQty({ capital: i.capital, riskPct: i.riskPct, maxWeightPct: i.maxWeightPct, price, stop: stopOk ? i.stop : 0 }).qty;
+    const d = defaultBuyQty({ capital: i.capital, riskPct: i.riskPct, maxWeightPct: i.maxWeightPct, price, stop: stopOk ? i.stop : 0, held: Math.max(0, i.held) });
+    qty = d.qty;
+    overRisk = d.overRisk;
+    overWeight = !!d.overWeight;
   }
   const loss = perShare * qty;
   const after = i.side === "BUY" ? i.held + qty : Math.max(0, i.held - qty);
@@ -411,6 +417,8 @@ export function orderPreview(i: OrderPreviewInput): OrderPreview {
     stopPct: i.stop > 0 && price > 0 ? (i.stop / price - 1) * 100 : null,
     weightAfter: i.capital > 0 && price > 0 ? ((after * price) / i.capital) * 100 : null,
     stopOk,
+    overRisk,
+    overWeight,
   };
 }
 
@@ -487,6 +495,19 @@ export function minuteEvidence(a: IntradayAssessment): Pick<Evidence, "cells" | 
   return { cells, met: cells.filter((c) => c.state === "met").length, total: cells.length };
 }
 
+/** 장 시작 후 경과 시간 "45분", "2시간 5분" */
+export const fmtElapsed = (m: number) => (m < 60 ? `${m}분` : `${Math.floor(m / 60)}시간 ${m % 60}분`);
+
+/**
+ * 분봉 판단의 시점(지도서 9.1): 장중이면 '장 시작 후 경과'. 장이 열려 있지 않으면 경과 시간 대신 '장 마감'과
+ * 그 세션의 종가 시각('15:30 종가 기준', 지난 날이면 '10.15(목) 15:30 종가 기준', 거래소 현지 시각)을 쓴다.
+ */
+export function minuteClock(i: { open: boolean; sessionDate: string | null; today: string; close: string; minutesSinceOpen: number }):
+  { closed: false; elapsed: string } | { closed: true; closeText: string } {
+  if (i.open || !i.sessionDate) return { closed: false, elapsed: fmtElapsed(Math.max(0, i.minutesSinceOpen)) };
+  return { closed: true, closeText: `${i.sessionDate === i.today ? "" : `${shortDateKo(i.sessionDate)} `}${i.close} 종가 기준` };
+}
+
 // ───────────────────────── 관심종목 ─────────────────────────
 
 /** index 자리의 항목을 delta만큼 옮긴다(범위를 넘으면 그대로) */
@@ -528,6 +549,56 @@ export function stateLabel(x: { held: boolean; candidate: boolean; analysis: Ana
   return `${t.stage}단계 · 관찰`;
 }
 
+// ───────────────────────── 세 영역 폭(컴퓨터) ─────────────────────────
+
+/**
+ * 컴퓨터 세 영역(목록 | 차트 | 근거·주문)의 폭 규칙(지도서 5.2: 경계선을 끌어 바꾸고 다음에도 유지).
+ * 가운데 차트가 화면의 주인공이라 centerMin보다 좁아지지 않게, 저장한 폭도 창 폭에 맞춰 줄여 쓴다(저장 값은 그대로 둔다).
+ * 좁은 창(목록·차트·패널 상자가 narrowBox 미만)은 기본 폭을 줄여 시작한다.
+ */
+export const PANES = {
+  list: { key: "stocks.list", def: 256, narrowDef: 220, min: 220, max: 420 },
+  side: { key: "stocks.side", def: 372, narrowDef: 340, min: 340, max: 600 },
+  /** 차트 영역 최소 폭 */
+  centerMin: 420,
+  /** 경계선 손잡이 두 개의 폭 */
+  handles: 16,
+  narrowBox: 1100,
+} as const;
+
+export interface PaneFit {
+  list: number;
+  side: number;
+  /** 경계선을 끌 수 있는 최대 폭(차트 최소 폭을 남긴다) */
+  listMax: number;
+  sideMax: number;
+}
+
+/** box: 세 영역을 담은 상자 폭(모르면 0). saved: prefs.panes에 저장한 폭 */
+export function fitPanes(box: number, saved: { list?: number | null; side?: number | null }): PaneFit {
+  const L = PANES.list, R = PANES.side;
+  const narrow = box > 0 && box < PANES.narrowBox;
+  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+  let list = clamp(saved.list ?? (narrow ? L.narrowDef : L.def), L.min, L.max);
+  let side = clamp(saved.side ?? (narrow ? R.narrowDef : R.def), R.min, R.max);
+  if (!(box > 0)) return { list, side, listMax: L.max, sideMax: R.max };
+  const room = box - PANES.handles - PANES.centerMin;
+  // 차트 자리가 모자라면 오른쪽 패널부터, 그다음 목록을 최소 폭까지 줄인다
+  let over = list + side - room;
+  if (over > 0) {
+    const s = Math.min(over, side - R.min);
+    side -= s;
+    over -= s;
+  }
+  if (over > 0) list -= Math.min(over, list - L.min);
+  return {
+    list,
+    side,
+    listMax: clamp(room - side, L.min, L.max),
+    sideMax: clamp(room - list, R.min, R.max),
+  };
+}
+
 /** 기본 차트 기간(지도서 5.2 C): 단타 후보면 일봉, 그 밖(와인스타인)은 주봉 */
 export const defaultPeriod = (isCandidate: boolean): BarPeriod => (isCandidate ? "D" : "W");
 
@@ -557,13 +628,4 @@ export function saveMemo(code: string, text: string): boolean {
   } catch {
     return false;
   }
-}
-
-// ───────────────────────── 문장 ─────────────────────────
-
-/** 목적격 조사: 받침이 있으면 '을', 없으면 '를'. 한글이 아니면 '을(를)' */
-export function objParticle(word: string): string {
-  const c = word.charCodeAt(word.length - 1) - 0xac00;
-  if (!(c >= 0 && c < 11172)) return "을(를)";
-  return c % 28 === 0 ? "를" : "을";
 }
