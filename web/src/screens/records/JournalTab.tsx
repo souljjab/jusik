@@ -9,7 +9,7 @@ import {
 import { emptyForm, JournalFields, SaveResult, useJournalForm, useSaveJournal, type Saved } from "./JournalForm";
 import { EmotionPicker, Pnl, Ret, Side, sourceText, StrategyField, Verdict, downloadText } from "./parts";
 import {
-  breaches, composeEmotion, EXIT_REASONS, exitValue, groupByDate, inRange, journalCsv, parseEmotion, parseExit, pct0, periodRange, periodStats, ruleVerdict, SELF_CHECK_LABEL,
+  breaches, composeEmotion, EXIT_REASONS, failText, exitValue, groupByDate, inRange, journalCsv, parseEmotion, parseExit, pct0, periodRange, periodStats, ruleVerdict, SELF_CHECK_LABEL,
   sellResults, sourceOf, type SelfCheck, type SellResult,
 } from "./recordsModel";
 
@@ -60,12 +60,13 @@ export function JournalTab({ loaded }: { loaded: boolean }) {
       ) : (
         <>
           <Stats n={3}>
-            <Stat value={`${fmtInt(weekStats.trades)}건`} label="이번 주 거래" />
+            <Stat value={`${fmtInt(weekStats.closed)}건`} label="이번 주 거래" />
             <Stat value={pct0(weekStats.winRate)} label="승률" />
             <Stat value={pct0(weekStats.compliance)} label="규칙 준수" accent />
           </Stats>
           <p className="t-cap">
-            승률은 청산 {fmtInt(weekStats.closed)}건, 규칙 준수는 판단할 수 있는 기록 {fmtInt(weekStats.judged)}건 기준이에요.
+            거래와 승률은 결과를 아는 청산 {fmtInt(weekStats.closed)}건 기준이에요(기록은 매수 {fmtInt(weekStats.buys)}건 · 매도 {fmtInt(weekStats.sells)}건). 규칙 준수는 직접 쓴 기록 중 판단할 수 있는{" "}
+            {fmtInt(weekStats.judged)}건 기준이고, 모의매매 자동 기록은 빼요.
             {weekStats.judged === 0 && " 규칙 체크를 표시한 기록이 생기면 계산돼요."}
           </p>
         </>
@@ -167,7 +168,7 @@ export function JournalTab({ loaded }: { loaded: boolean }) {
         <>
           <div className={`rec-actionbar is-${bp}`} role="region" aria-label="새 일지">
             <Button variant="primary" size="lg" block icon={<PenLine size={18} strokeWidth={1.5} aria-hidden="true" />} onClick={() => setSheet(true)}>
-              새 일지 쓰기
+              일지 쓰기
             </Button>
           </div>
           <NewJournalSheet open={sheet} onClose={() => setSheet(false)} />
@@ -180,6 +181,7 @@ export function JournalTab({ loaded }: { loaded: boolean }) {
             <EntryDetail
               e={detailEntry}
               result={results.get(detailEntry.id)}
+              headingLevel="h3"
               onDelete={() => {
                 const target = detailEntry;
                 setOpen(null);
@@ -198,7 +200,7 @@ export function JournalTab({ loaded }: { loaded: boolean }) {
 
 function EntryRow({ e, result, expanded, onToggle, onDelete }: { e: JournalEntry; result: SellResult | undefined; expanded: boolean; onToggle: () => void; onDelete: () => void }) {
   const region = regionOfCode(e.code);
-  const v = ruleVerdict(e);
+  const v = ruleVerdict(e, result);
   const emo = parseEmotion(e.emotion);
   const emos = [...emo.chips, ...(emo.text ? [emo.text] : [])];
   const detailId = `rec-detail-${e.id}`;
@@ -252,12 +254,14 @@ function EntryRow({ e, result, expanded, onToggle, onDelete }: { e: JournalEntry
 
 const fmtR = (r: number) => `${r > 0 ? "+" : r < 0 ? "-" : ""}${Math.abs(r).toFixed(2)}R`;
 
-function EntryDetail({ e, result, onDelete }: { e: JournalEntry; result: SellResult | undefined; onDelete: () => void }) {
+/** 기록 상세. 목록 안에서 펼치면 날짜 제목(h3) 아래라 '복기'는 h4, 핸드폰 시트(제목 h2) 안에서는 h3 */
+function EntryDetail({ e, result, onDelete, headingLevel = "h4" }: { e: JournalEntry; result: SellResult | undefined; onDelete: () => void; headingLevel?: "h3" | "h4" }) {
   const { refreshJournal } = useApp();
   const toast = useToast();
   const region = regionOfCode(e.code);
   const sell = e.side === "SELL";
-  const issues = breaches(e);
+  const issues = breaches(e, result);
+  const H = headingLevel;
 
   const init = () => {
     const emo = parseEmotion(e.emotion);
@@ -295,7 +299,7 @@ function EntryDetail({ e, result, onDelete }: { e: JournalEntry; result: SellRes
       await refreshJournal();
       toast("복기를 저장했어요", "ok");
     } catch (x) {
-      setErr(`복기를 저장하지 못했어요. ${x instanceof Error ? x.message : String(x)}`);
+      setErr(`복기를 저장하지 못했어요. ${failText(x, "고친 내용은 그대로 있어요. 잠시 뒤 다시 저장해 주세요.")}`);
     } finally {
       setBusy(false);
     }
@@ -303,7 +307,7 @@ function EntryDetail({ e, result, onDelete }: { e: JournalEntry; result: SellRes
 
   const idb = `rec-ed-${e.id}`;
   return (
-    <div className="rec-detail stack-4">
+    <div className="stack-4">
       <dl className="rec-kv">
         <div>
           <dt>가격 × 수량</dt>
@@ -325,8 +329,14 @@ function EntryDetail({ e, result, onDelete }: { e: JournalEntry; result: SellRes
         )}
         {!sell && (
           <div>
-            <dt>비중</dt>
+            <dt title="이 주문 뒤 그 종목 전체 비중(이미 가진 수량 포함)">비중(주문 뒤)</dt>
             <dd className="num">{e.weightPct != null ? fmtRatio(e.weightPct) : "-"}</dd>
+          </div>
+        )}
+        {!sell && e.plannedAdd && (
+          <div>
+            <dt>손실 중 추가 매수</dt>
+            <dd>계획한 분할 매수</dd>
           </div>
         )}
         {sell && (
@@ -345,7 +355,7 @@ function EntryDetail({ e, result, onDelete }: { e: JournalEntry; result: SellRes
         )}
         {sell && (
           <div>
-            <dt title="R = (청산가 − 진입가) ÷ (진입가 − 계획 손절가). 1R은 계획한 1회 손실만큼이에요">R 배수</dt>
+            <dt title="R = (청산가 - 진입가) ÷ (진입가 - 계획 손절가). 1R은 계획한 1회 손실만큼이에요">R 배수</dt>
             <dd className="rec-tnum">
               {result?.r != null ? fmtR(result.r) : "-"}
               {result?.r != null && result.rDerived && <span className="t-cap"> 매수 손절가로 계산</span>}
@@ -386,12 +396,17 @@ function EntryDetail({ e, result, onDelete }: { e: JournalEntry; result: SellRes
               <li key={i}>{x}</li>
             ))}
           </ul>
+          {sell && result?.stopLate && <p className="rec-note">손절 지연이에요. 손절가에 닿았을 때 바로 정리했는지 돌아봐요.</p>}
         </Notice>
       )}
-      {sell && result?.stopLate && <Notice tone="warn" title="손절 지연">계획한 손절가보다 1% 넘게 아래에서 팔았어요. 손절가에 닿았을 때 바로 정리했는지 돌아봐요.</Notice>}
+      {sell && !result?.stopLate && result?.belowStopPct != null && (
+        <Notice tone="info" title="손절가 아래에서 체결됐어요">
+          모의매매 자동 손절이 계획한 손절가보다 {fmtRatio(result.belowStopPct)} 아래에서 체결됐어요. 갭 하락처럼 가격 확인 사이에 값이 크게 내려간 경우라 규칙 위반으로 세지 않아요.
+        </Notice>
+      )}
 
       <div className="rec-edit">
-        <h4 className="rec-lbl rec-edit-h">복기</h4>
+        <H className="rec-lbl rec-edit-h">복기</H>
         <Field label="복기 메모" htmlFor={`${idb}-review`}>
           <textarea id={`${idb}-review`} className="ui-textarea" rows={3} maxLength={1000} value={d.review} onChange={(x) => setD({ ...d, review: x.target.value })} placeholder="계획대로 했나요? 다음엔 무엇을 바꿀까요?" />
         </Field>
@@ -478,7 +493,7 @@ function DeleteSheet({ entry, onClose, onDeleted }: { entry: JournalEntry | null
       toast("기록을 삭제했어요", "info");
       onClose();
     } catch (x) {
-      setErr(`삭제하지 못했어요. ${x instanceof Error ? x.message : String(x)}`);
+      setErr(`기록을 삭제하지 못했어요. ${failText(x, "잠시 뒤 다시 눌러 주세요.")}`);
     } finally {
       setBusy(false);
     }

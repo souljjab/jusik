@@ -4,7 +4,7 @@ import { useApp } from "../../app/AppContext";
 import { navigate, useRoute } from "../../app/router";
 import { kstDate, Tabs, useBreakpoint } from "../../ui";
 import { JournalTab } from "./JournalTab";
-import { breaches, inRange, periodRange } from "./recordsModel";
+import { inRange, periodRange, sellResults, violationItems } from "./recordsModel";
 import { ReviewTab } from "./ReviewTab";
 import { RulesTab } from "./RulesTab";
 import "./records.css";
@@ -37,11 +37,12 @@ export default function RecordsScreen() {
     };
   }, [refreshJournal]);
 
-  // 이번 주 위반 수(탭 이름 옆, 색에만 기대지 않게 아이콘 + 숫자)
+  // 이번 주 위반 기록 수(탭 이름 옆, 색에만 기대지 않게 아이콘 + 숫자). 복기의 '규칙 위반' 목록과 같은 규칙(손절 지연 매도 포함)
+  const results = useMemo(() => sellResults(journal), [journal]);
   const weekBreaches = useMemo(() => {
     const w = periodRange("week", kstDate(now));
-    return journal.filter((e) => inRange(e.date, w) && breaches(e).length > 0).length;
-  }, [journal, now]);
+    return violationItems(journal.filter((e) => inRange(e.date, w)), results).length;
+  }, [journal, now, results]);
 
   const items = [
     { value: "journal" as const, label: "매매일지" },

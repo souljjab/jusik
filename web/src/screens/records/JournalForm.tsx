@@ -1,18 +1,19 @@
 import { CheckCircle2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { averagingDownCheck, currencyOfRegion, isValidCode, marketClock, preTradeChecklist, regionOfCode, type JournalCheck, type JournalEntry, type Note } from "@jusik/shared";
+import { averagingDownCheck, currencyOfRegion, isValidCode, josa, marketClock, preTradeChecklist, regionOfCode, type JournalCheck, type JournalEntry, type Note, type Region } from "@jusik/shared";
 import { addJournal, type JournalInput } from "../../api";
 import { useApp } from "../../app/AppContext";
-import { accountBaseOf } from "../../features/OrderReviewSheet";
-import { Button, Chip, Field, fmtInt, fmtPrice, fmtRatio, NoteList, Notice, NumberStepper, Segmented, Toggle, useToast } from "../../ui";
+import { accountBaseOf, heldQty } from "../../features/OrderReviewSheet";
+import { Button, Chip, Field, fmtInputPrice, fmtInt, fmtPct, fmtPrice, fmtRatio, NoteList, Notice, NumberStepper, Segmented, Toggle, useToast } from "../../ui";
 import { EmotionPicker, StockSearch, StrategyField } from "./parts";
-import { composeEmotion, EXIT_REASONS, exitValue, optNum, SELF_CHECK_LABEL, sourceOf, weightOf, type SelfCheck } from "./recordsModel";
+import { breaches, composeEmotion, failText, EXIT_REASONS, exitValue, optNum, SELF_CHECK_LABEL, sourceOf, weightOf, type SelfCheck } from "./recordsModel";
 
 /*
  * 새 일지(지도서 7.2 기록, 그림 10 오른쪽).
  * 종목·구분·가격·수량·날짜·전략·손절가·목표가·비중·진입 근거·지금 감정·규칙 체크 → '일지 저장'.
- * 저장 전 점검(주문 전 체크리스트·손실 중 추가 매수)은 서버가 저장할 때 하는 것과 같은 함수로 미리 보여 준다.
+ * 저장 전 점검(주문 전 체크리스트·손실 중 추가 매수)은 서버가 저장할 때 하는 것과 같은 함수·같은 설정값(비중 상한·1회 손실 한도·계좌 기준)으로 미리 보여 준다.
  * 막지는 않고, 고치지 않고 저장하면 서버가 위반으로 남긴다. 이 화면은 이미 낸 매매를 적는 곳이고 주문을 내지 않는다.
+ * 비중은 주문 검토 시트·모의매매와 같은 뜻: 이 주문 뒤 그 종목 전체 비중(직접 쓴 기록의 보유 수량 + 이번 수량).
  */
 
 export interface Saved {
@@ -59,13 +60,16 @@ export function useJournalForm(init: () => FormState) {
   const region = f.code ? regionOfCode(f.code) : "KR";
   const cur = currencyOfRegion(region);
   const base = accountBaseOf(server, cur);
-  const cap = server?.settings.maxWeightPct ?? null;
+  const settings = server?.settings;
+  const cap = settings?.maxWeightPct ?? null;
   const price = optNum(f.price);
-  const autoWeight = weightOf(price, f.qty, base);
+  const buy = f.side === "BUY";
+  // 직접 쓴 기록 기준 지금 보유 수량(모의계좌 보유는 내 실제 보유가 아니라 빼고 센다)
+  const held = buy && f.code ? Math.max(0, heldQty(journal, f.code)) : 0;
+  const autoWeight = weightOf(price, held + f.qty, base);
   const weight = f.weightTouched ? optNum(f.weight) : autoWeight ?? undefined;
   const stop = optNum(f.stop);
   const target = optNum(f.target);
-  const buy = f.side === "BUY";
 
   // 규칙 체크 기본값: 손절가를 적었는지·비중이 상한 이내인지를 따라간다(직접 바꾸면 그 값을 쓴다)
   const autoCheck: SelfCheck = {
@@ -82,10 +86,13 @@ export function useJournalForm(init: () => FormState) {
   // 저장 전 점검(매수만): 서버와 같은 함수. 모의계좌(자동) 기록은 내 실제 보유가 아니라 직접 쓴 기록끼리만 본다
   const notes = useMemo<Note[]>(() => {
     if (!buy) return [];
-    const out = preTradeChecklist({ stop, target, reason: f.reason, price, weightPct: weight });
+    const out = preTradeChecklist(
+      { stop, target, reason: f.reason, price, weightPct: weight, qty: f.qty, account: base },
+      settings ? { maxWeightPct: settings.maxWeightPct, maxPerTradeRiskPct: settings.riskPct } : {},
+    );
     if (f.code && price != null && price > 0) out.push(...averagingDownCheck(journal.filter((e) => sourceOf(e) === "수동"), { code: f.code, side: "BUY", price, date: f.date }).notes);
     return out;
-  }, [buy, stop, target, f.reason, price, weight, f.code, f.date, journal]);
+  }, [buy, stop, target, f.reason, price, weight, f.qty, base, settings, f.code, f.date, journal]);
   const averaging = notes.find((n) => n.tone !== "info" && (n.text.includes("손실 중 추가 매수") || n.text.includes("평균 단가")));
 
   const missing = !f.code || !isValidCode(f.code) ? "종목을 고르세요" : !(price != null && price > 0) ? "가격을 넣으세요" : !(f.qty >= 1) ? "수량을 넣으세요" : !/^\d{4}-\d{2}-\d{2}$/.test(f.date) ? "날짜를 고르세요" : "";
@@ -110,7 +117,7 @@ export function useJournalForm(init: () => FormState) {
       ...emptyForm(x.date), code: x.code, name: x.name, side: x.side, strategy: x.strategy,
     }));
 
-  return { f, set, setF, region, cur, base, cap, price, autoWeight, weight, buy, selfCheck, notes, averaging, missing, body, resetAfterSave, now, today: marketClock(region, now).date };
+  return { f, set, setF, region, cur, base, cap, held, price, autoWeight, weight, buy, selfCheck, notes, averaging, missing, body, resetAfterSave, now, today: marketClock(region, now).date };
 }
 
 export type JournalFormApi = ReturnType<typeof useJournalForm>;
@@ -118,6 +125,8 @@ export type JournalFormApi = ReturnType<typeof useJournalForm>;
 /** 저장 결과: 서버 점검 문장(위반은 경고색). 기록 완료와 규칙 준수에만 짧게 피드백한다 */
 export function SaveResult({ saved, onClose }: { saved: Saved; onClose?: () => void }) {
   const { entry, check } = saved;
+  // 기록 목록의 '위반 n건'과 같은 셈(서버 위반 + 스스로 표시한 체크, 같은 규칙은 한 번)
+  const issues = breaches(entry);
   const others = check.notes.filter((n) => n.tone !== "bad");
   const region = regionOfCode(entry.code);
   return (
@@ -138,20 +147,42 @@ export function SaveResult({ saved, onClose }: { saved: Saved; onClose?: () => v
           </Button>
         )}
       </div>
-      {check.violations.length > 0 && (
-        <Notice tone="warn" title={`규칙 위반 ${check.violations.length}건을 함께 남겼어요`}>
-          복기할 때 다시 봐요. {check.violations.join(" ")}
+      {issues.length > 0 && (
+        <Notice tone="warn" title={`규칙 위반 ${issues.length}건을 함께 남겼어요`}>
+          복기할 때 다시 봐요. {issues.join(" ")}
         </Notice>
       )}
       {others.length > 0 && <NoteList notes={others} dense />}
-      {entry.side === "BUY" && check.violations.length === 0 && <span className="t-2">저장 전 점검 항목을 모두 지켰어요.</span>}
+      {entry.side === "BUY" && issues.length === 0 && <span className="t-2">저장 전 점검 항목을 모두 지켰어요.</span>}
+    </div>
+  );
+}
+
+/** 가격 입력칸: 천 단위 쉼표(미국은 소수 둘째 자리까지), 오른쪽에 단위(주문 검토 시트와 같은 모양) */
+function PriceInput({ id, value, onChange, region, invalid }: { id: string; value: string; onChange: (v: string) => void; region: Region; invalid?: boolean }) {
+  return (
+    <div className="rec-input">
+      <input
+        id={id}
+        className="ui-input num"
+        inputMode={region === "US" ? "decimal" : "numeric"}
+        autoComplete="off"
+        spellCheck={false}
+        value={value}
+        aria-invalid={invalid || undefined}
+        onChange={(e) => onChange(fmtInputPrice(e.target.value, region))}
+      />
+      <span className="rec-unit" aria-hidden="true">
+        {region === "US" ? "달러" : "원"}
+      </span>
     </div>
   );
 }
 
 /** 입력 칸들(저장 버튼은 놓는 곳이 달라서 밖에 둔다) */
 export function JournalFields({ api, idBase }: { api: JournalFormApi; idBase: string }) {
-  const { f, set, setF, region, cap, price, autoWeight, buy, selfCheck, notes, averaging, base } = api;
+  const { f, set, setF, region, cap, held, price, autoWeight, buy, selfCheck, notes, averaging, base } = api;
+  const unit = region === "US" ? "달러" : "원";
   const id = (k: string) => `${idBase}-${k}`;
   const pct = (x: number | undefined) => (x != null && price ? ((x - price) / price) * 100 : null);
   const stop = optNum(f.stop);
@@ -187,8 +218,8 @@ export function JournalFields({ api, idBase }: { api: JournalFormApi; idBase: st
         />
       </div>
 
-      <Field label="가격" required htmlFor={id("price")} hint={price ? fmtPrice(price, region, { unit: true }) : region === "US" ? "달러" : "원"}>
-        <input id={id("price")} className="ui-input num" inputMode="decimal" autoComplete="off" value={f.price} onChange={(e) => set({ price: e.target.value.replace(/[^\d.,]/g, "") })} />
+      <Field label={<>가격<span className="sr-only">({unit})</span></>} required htmlFor={id("price")}>
+        <PriceInput id={id("price")} value={f.price} region={region} onChange={(v) => set({ price: v })} />
       </Field>
       <Field label="수량" required htmlFor={id("qty")} hint="주">
         <NumberStepper id={id("qty")} label="수량" value={f.qty} min={1} onChange={(qty) => set({ qty })} unit="주" />
@@ -196,16 +227,16 @@ export function JournalFields({ api, idBase }: { api: JournalFormApi; idBase: st
       {buy && (
         <>
           <Field
-            label="손절가"
+            label={<>손절가<span className="sr-only">({unit})</span></>}
             required
             htmlFor={id("stop")}
             error={stop != null && price != null && stop >= price ? "손절가는 매수가보다 낮아야 해요" : undefined}
-            hint={stop && price && stop < price ? `${fmtRatio(Math.abs(pct(stop)!), 2)} 아래 · ${fmtPrice(stop, region, { unit: true })}` : "사기 전에 얼마까지 잃을지 정해요"}
+            hint={stop && price && stop < price ? `가격 대비 ${fmtPct(pct(stop))}` : "사기 전에 얼마까지 잃을지 정해요"}
           >
-            <input id={id("stop")} className="ui-input num" inputMode="decimal" autoComplete="off" value={f.stop} aria-invalid={stop != null && price != null && stop >= price} onChange={(e) => set({ stop: e.target.value.replace(/[^\d.,]/g, "") })} />
+            <PriceInput id={id("stop")} value={f.stop} region={region} invalid={stop != null && price != null && stop >= price} onChange={(v) => set({ stop: v })} />
           </Field>
-          <Field label="목표가" htmlFor={id("target")} hint={target && price && target > price ? `${fmtRatio(pct(target)!, 2)} 위 · ${fmtPrice(target, region, { unit: true })}` : "매도 기준"}>
-            <input id={id("target")} className="ui-input num" inputMode="decimal" autoComplete="off" value={f.target} onChange={(e) => set({ target: e.target.value.replace(/[^\d.,]/g, "") })} />
+          <Field label={<>목표가<span className="sr-only">({unit})</span></>} htmlFor={id("target")} hint={target && price && target > price ? `가격 대비 ${fmtPct(pct(target))}` : "매도 기준"}>
+            <PriceInput id={id("target")} value={f.target} region={region} onChange={(v) => set({ target: v })} />
           </Field>
         </>
       )}
@@ -229,7 +260,7 @@ export function JournalFields({ api, idBase }: { api: JournalFormApi; idBase: st
           htmlFor={id("weight")}
           hint={
             !f.weightTouched && autoWeight != null
-              ? `가격 × 수량으로 계산했어요${cap != null ? ` · 상한 ${fmtRatio(cap)}` : ""}`
+              ? `${josa(held > 0 ? `보유 ${fmtInt(held)}주 + 이번 ${fmtInt(f.qty)}주` : "가격 × 수량", "으로/로")} 계산한 주문 뒤 종목 비중이에요${cap != null ? ` · 상한 ${fmtRatio(cap)}` : ""}`
               : base > 0
                 ? cap != null
                   ? `상한 ${fmtRatio(cap)}`
@@ -350,10 +381,11 @@ export function useSaveJournal(api: JournalFormApi, onSaved: (s: Saved) => void)
       const res = await addJournal(api.body());
       await refreshJournal();
       api.resetAfterSave();
-      toast(res.check.violations.length ? `일지를 저장했어요. 규칙 위반 ${res.check.violations.length}건도 함께 남겼어요` : "일지를 저장했어요", res.check.violations.length ? "warn" : "ok");
+      const n = breaches(res.entry).length;
+      toast(n ? `일지를 저장했어요. 규칙 위반 ${n}건도 함께 남겼어요` : "일지를 저장했어요", n ? "warn" : "ok");
       onSaved(res);
     } catch (e) {
-      setErr(`일지를 저장하지 못했어요. ${e instanceof Error ? e.message : String(e)}`);
+      setErr(`일지를 저장하지 못했어요. ${failText(e, "입력한 내용은 그대로 있어요. 고친 뒤 다시 저장해 주세요.")}`);
     } finally {
       setBusy(false);
     }

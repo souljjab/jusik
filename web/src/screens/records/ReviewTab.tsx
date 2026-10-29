@@ -1,6 +1,6 @@
-import { ChevronLeft, ChevronRight, NotebookPen } from "lucide-react";
-import { useMemo, useState } from "react";
-import { expectancy, regionOfCode, summarizeJournal, type Currency, type JournalEntry } from "@jusik/shared";
+import { AlertTriangle, ChevronLeft, ChevronRight, NotebookPen } from "lucide-react";
+import { Fragment, useMemo, useState } from "react";
+import { expectancy, josa, regionOfCode, summarizeJournal, type Currency, type JournalEntry } from "@jusik/shared";
 import { useApp } from "../../app/AppContext";
 import { navigate } from "../../app/router";
 import { Button, EmptyState, Notice, fmtDate, fmtInt, fmtPrice, IconButton, kstDate, Section, Segmented, Skeleton, SkeletonRows, Sparkline, Stat, Stats, useBreakpoint } from "../../ui";
@@ -42,7 +42,7 @@ export function ReviewTab({ loaded }: { loaded: boolean }) {
   const st = useMemo(() => periodStats(inPeriod, results), [inPeriod, results]);
   const rows = useMemo(() => tradeRows(inPeriod, journal, results), [inPeriod, journal, results]);
   const emo = useMemo(() => emotionStats(rows), [rows]);
-  const viol = useMemo(() => violationItems(inPeriod), [inPeriod]);
+  const viol = useMemo(() => violationItems(inPeriod, results), [inPeriod, results]);
   const curs: Currency[] = (["KRW", "USD"] as Currency[]).filter((c) => rows.some((r) => r.result?.currency === c && r.result.pnl != null));
   const wide = bp === "large" || bp === "expanded";
   const busy = !loaded && !journal.length;
@@ -70,7 +70,7 @@ export function ReviewTab({ loaded }: { loaded: boolean }) {
         </IconButton>
         {offset < 0 && (
           <Button variant="link" className="rec-touchlink" onClick={() => setOffset(0)}>
-            {THIS[period]}로
+            {josa(THIS[period], "으로/로")} 이동
           </Button>
         )}
       </div>
@@ -86,12 +86,12 @@ export function ReviewTab({ loaded }: { loaded: boolean }) {
   ) : (
     <div className="stack-3">
       <Stats n={3}>
-        <Stat value={`${fmtInt(st.trades)}건`} label="거래" />
+        <Stat value={`${fmtInt(st.closed)}건`} label="거래" />
         <Stat value={pct0(st.winRate)} label="승률" />
         <Stat value={pct0(st.compliance)} label="규칙 준수" accent />
       </Stats>
       <p className="t-cap">
-        매수 {fmtInt(st.buys)}건 · 매도 {fmtInt(st.sells)}건. 승률은 결과를 아는 청산 {fmtInt(st.closed)}건, 규칙 준수는 판단할 수 있는 기록 {fmtInt(st.judged)}건 기준이에요.
+        거래와 승률은 결과를 아는 청산 {fmtInt(st.closed)}건 기준이에요(기록은 매수 {fmtInt(st.buys)}건 · 매도 {fmtInt(st.sells)}건). 규칙 준수는 직접 쓴 기록 중 판단할 수 있는 {fmtInt(st.judged)}건 기준이고, 모의매매 자동 기록은 빼요.
       </p>
       {curs.length > 0 && (
         <div className="rec-pnlline">
@@ -132,7 +132,7 @@ export function ReviewTab({ loaded }: { loaded: boolean }) {
       ) : emo.length === 0 ? (
         <p className="t-2">청산한 거래가 생기면 그때 감정과 결과를 함께 보여 줘요.</p>
       ) : (
-        <div className="ui-table-wrap">
+        <div className="ui-table-wrap tall">
           <table className="ui-table rec-emo-table">
             <caption className="sr-only">감정별 거래 수, 승률, 평균 수익률</caption>
             <thead>
@@ -185,9 +185,12 @@ export function ReviewTab({ loaded }: { loaded: boolean }) {
                 <Side side={v.side} />
                 <span className="t-medium">{v.name}</span>
               </div>
-              <ul className="rec-issues warn-text">
+              <ul className="rec-warnlist">
                 {v.items.map((x, i) => (
-                  <li key={i}>{x}</li>
+                  <li key={i} className="rec-warnline">
+                    <AlertTriangle size={14} strokeWidth={1.5} aria-hidden="true" />
+                    {x}
+                  </li>
                 ))}
               </ul>
             </li>
@@ -199,7 +202,7 @@ export function ReviewTab({ loaded }: { loaded: boolean }) {
 
   return (
     <div className="rec-review stack-5">
-      <section className="rec-review-top stack-4" aria-label="기간 요약">
+      <section className="stack-4" aria-label="기간 요약">
         {head}
         {stats}
       </section>
@@ -237,7 +240,7 @@ function TradeItem({ r }: { r: TradeRow }) {
   return (
     <li className="rec-trade">
       <div className="rec-trade-top">
-        <button type="button" className="rec-namebtn" onClick={() => openStock(r.code)} title={`${r.name} 종목 화면 열기`}>
+        <button type="button" className="rec-namebtn" onClick={() => openStock(r.code)} title={`${r.name}(${r.code}) 종목 분석 열기`}>
           {r.name}
         </button>
         <span className="rec-trade-res">
@@ -287,10 +290,11 @@ function OverallCur({ cur, entries }: { cur: Currency; entries: JournalEntry[] }
       winRate: closed.length ? wins.length / closed.length : null, avgWinPct: mean(wins.map((t) => t.returnPct)), avgLossPct: mean(losses.map((t) => t.returnPct)), avgR: mean(rs), rCount: rs.length,
     };
   }, [entries]);
-  const ev = sm.winRate != null && sm.avgWinPct != null && sm.avgLossPct != null ? expectancy({ winRate: sm.winRate, avgWinPct: sm.avgWinPct, avgLossPct: sm.avgLossPct }) : null;
+  // 모두 이기거나 모두 진 기간도 기대값이 있다(없는 쪽 평균은 0으로 본다: 기대값 = 평균 수익률)
+  const ev = sm.winRate != null ? expectancy({ winRate: sm.winRate, avgWinPct: sm.avgWinPct ?? 0, avgLossPct: sm.avgLossPct ?? 0 }) : null;
   const region = cur === "USD" ? "US" : "KR";
   return (
-    <div className="rec-overall-cur stack-3">
+    <div className="stack-3">
       <h3 className="rec-lbl">{cur === "KRW" ? "원화(국내)" : "달러(미국)"}</h3>
       <dl className="rec-kv rec-kv-4">
         <div>
@@ -320,7 +324,7 @@ function OverallCur({ cur, entries }: { cur: Currency; entries: JournalEntry[] }
           </dd>
         </div>
         <div>
-          <dt title="R = (청산가 − 진입가) ÷ (진입가 − 계획 손절가). 1R은 계획한 1회 손실만큼이에요">평균 R</dt>
+          <dt title="R = (청산가 - 진입가) ÷ (진입가 - 계획 손절가). 1R은 계획한 1회 손실만큼이에요">평균 R</dt>
           <dd className="num">
             {sm.avgR == null ? "-" : fmtR(sm.avgR)} <span className="t-cap">{fmtInt(sm.rCount)}건</span>
           </dd>
@@ -328,15 +332,22 @@ function OverallCur({ cur, entries }: { cur: Currency; entries: JournalEntry[] }
       </dl>
       {sm.closed.length > 0 && sm.closed.length < 20 && <p className="t-cap">표본이 {sm.closed.length}회라 승률·기대값은 참고만 하세요.</p>}
       {sm.closed.length > sm.rCount && <p className="t-cap">R은 매수 기록에 손절가가 있는 청산 거래만 계산해요(청산 {sm.closed.length}회 중 {sm.rCount}회).</p>}
-      {sm.oversold && <p className="t-2 warn-text">보유 수량보다 많이 판 기록이 있어요. 입력을 확인해 주세요.</p>}
+      {sm.oversold && (
+        <p className="t-2 rec-warnline">
+          <AlertTriangle size={14} strokeWidth={1.5} aria-hidden="true" />
+          보유 수량보다 많이 판 기록이 있어요. 매매일지에서 수량을 확인해 주세요.
+        </p>
+      )}
       {sm.open.length > 0 && (
         <p className="t-2">
           보유 중:{" "}
           {sm.open.map((o, i) => (
-            <span key={o.code} className="nowrap">
+            <Fragment key={o.code}>
               {i > 0 && ", "}
-              {o.name} <span className="num">{fmtInt(o.qty)}주(평단 {fmtPrice(o.avgPrice, region)})</span>
-            </span>
+              <span className="nowrap">
+                {o.name} <span className="num">{fmtInt(o.qty)}주(평단 {fmtPrice(o.avgPrice, region)})</span>
+              </span>
+            </Fragment>
           ))}
         </p>
       )}

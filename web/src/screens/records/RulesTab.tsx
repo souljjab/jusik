@@ -4,8 +4,9 @@ import { MIN_RELIABLE, type Evaluation, type Market, type ReplayRun, type Stats 
 import { getPaperEval, getReplay, runReplay, saveSettings } from "../../api";
 import { useApp } from "../../app/AppContext";
 import { navigate } from "../../app/router";
-import { Button, Chip, EmptyState, fmtDate, fmtInt, fmtNum, fmtPct, fmtWhen, Notice, Section, Segmented, Sheet, Skeleton, SkeletonRows, Stat, Stats as StatRow, useBreakpoint, useToast } from "../../ui";
-import { Ret, sentence } from "./parts";
+import { Button, Chip, EmptyState, fmtDate, fmtInt, fmtPct, fmtWhen, MARKET_LABEL, Notice, Section, Segmented, Sheet, Skeleton, SkeletonRows, Stat, Stats as StatRow, useBreakpoint, useToast } from "../../ui";
+import { Ret } from "./parts";
+import { failText } from "./recordsModel";
 
 /*
  * 규칙 점검: 단타 규칙(최소 점수 기준)이 실제로 통했는지 본다.
@@ -14,7 +15,6 @@ import { Ret, sentence } from "./parts";
  * 기준 제안은 앞 절반에서 고른 기준이 뒤 절반에서도 나았을 때만 나온다. 적용은 확인 시트를 거친다.
  */
 
-const MARKET_LABEL: Record<Market, string> = { KOSPI: "코스피", KOSDAQ: "코스닥", US: "미국" };
 const COUNTS = [
   { value: "250", label: "약 1년" },
   { value: "500", label: "약 2년" },
@@ -22,6 +22,8 @@ const COUNTS = [
 ];
 
 const winText = (s: Stats) => (s.winRate == null ? "-" : `${Math.round(s.winRate * 100)}%`);
+/** 손익비(PF)는 소수 첫째 자리(지도서 표기, 다른 화면의 손익비와 같다) */
+const pfText = (s: Stats) => (s.profitFactor == null ? "-" : s.profitFactor.toFixed(1));
 
 function StatCells({ s }: { s: Stats }) {
   return (
@@ -42,7 +44,7 @@ function StatCells({ s }: { s: Stats }) {
       <td className="r">
         <Ret pct={s.lowerBoundPct} />
       </td>
-      <td className="r num">{s.profitFactor == null ? "-" : fmtNum(s.profitFactor, 2)}</td>
+      <td className="r num">{pfText(s)}</td>
     </>
   );
 }
@@ -87,7 +89,7 @@ function StatRows({ items, label }: { items: { key: string; name: string; curren
           </div>
           <span className="t-cap rec-tnum">
             거래 {fmtInt(x.s.n)}
-            {!x.s.reliable && "*"} · 승률 {winText(x.s)} · 하한 {x.s.lowerBoundPct == null ? "-" : fmtPct(x.s.lowerBoundPct)} · PF {x.s.profitFactor == null ? "-" : fmtNum(x.s.profitFactor, 2)}
+            {!x.s.reliable && "*"} · 승률 {winText(x.s)} · 하한 {x.s.lowerBoundPct == null ? "-" : fmtPct(x.s.lowerBoundPct)} · PF {pfText(x.s)}
             {x.extra ? ` · ${x.extra}` : ""}
           </span>
         </li>
@@ -240,7 +242,7 @@ export function RulesTab() {
   const load = useCallback(() => {
     getPaperEval()
       .then((r) => (setPaper(r), setPaperErr("")))
-      .catch((e: Error) => setPaperErr(e.message));
+      .catch((e: unknown) => setPaperErr(failText(e, "잠시 뒤 '다시 불러오기'를 눌러 주세요.")));
     getReplay()
       .then((r) => {
         setReplay(r.run);
@@ -272,7 +274,7 @@ export function RulesTab() {
       setReplay(r.run);
       toast(`과거 재현을 마쳤어요. 거래 ${fmtInt(r.run.tradeCount)}건`, "ok");
     } catch (e) {
-      setErr(`재현하지 못했어요. ${sentence(e instanceof Error ? e.message : String(e))}`);
+      setErr(`재현하지 못했어요. ${failText(e, "잠시 뒤 다시 실행해 주세요.")}`);
     } finally {
       setRunning(false);
     }
@@ -288,7 +290,7 @@ export function RulesTab() {
       setApply(null);
       load();
     } catch (e) {
-      toast(`설정을 바꾸지 못했어요. ${e instanceof Error ? e.message : ""}`, "warn");
+      toast(`최소 점수를 바꾸지 못했어요. ${failText(e, "잠시 뒤 다시 바꿔 주세요.")}`, "warn");
     } finally {
       setApplying(false);
     }
@@ -300,7 +302,7 @@ export function RulesTab() {
         <p className="t-2 rec-lead">모의매매가 자동으로 남긴 매수·매도 기록을 짝지어, 진입 당시 점수·거래량·상승률·시장 국면별로 실제 결과를 나눠 봐요.</p>
         {paperErr ? (
           <Notice tone="warn" title="모의매매 실적을 불러오지 못했어요" action={<Button variant="secondary" size="sm" icon={<RefreshCw size={16} strokeWidth={1.5} aria-hidden="true" />} onClick={load}>다시 불러오기</Button>}>
-            {sentence(paperErr)} 서버가 켜져 있는지 확인해 주세요.
+            {paperErr}
           </Notice>
         ) : !paper ? (
           <div className="stack-3" role="status" aria-label="불러오는 중">
@@ -358,7 +360,7 @@ export function RulesTab() {
         <span className="t-cap" aria-live="polite">
           {!chosen.length ? "시장을 하나 이상 고르세요." : "종목 수에 따라 1~3분 걸려요. 그동안 다른 화면을 봐도 돼요."}
         </span>
-        {err && <Notice tone="warn">{err} 잠시 뒤 다시 실행해 보세요.</Notice>}
+        {err && <Notice tone="warn">{err}</Notice>}
         {!replayLoaded ? (
           <SkeletonRows rows={3} h={20} />
         ) : replay ? (
