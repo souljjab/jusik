@@ -31,7 +31,7 @@ function AccountSummary({ server }: { server: ServerState }) {
         const eq = paperEquity(a);
         const rate = a.closed > 0 ? (a.wins / a.closed) * 100 : null;
         return (
-          <dl key={c} className="glb-acct" aria-label={`${CUR_NAME[c]} 모의계좌`}>
+          <dl key={c} className="glb-acct">
             <div className="glb-acct-head">
               <dt className="t-medium">{CUR_NAME[c]} 모의계좌</dt>
               <dd className="num t-section">{fmtMoneyByCurrency(eq, c)}</dd>
