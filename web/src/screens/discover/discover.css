@@ -147,6 +147,8 @@ html:has(.disc-bottom-bar) { --actionbar-h: 65px; }
 .disc-st > .disc-chips { margin-bottom: var(--space-5); }
 .disc-st-main { display: flex; flex-direction: column; min-width: 0; }
 .disc-st-main > * + * { margin-top: var(--space-5); }
+/* 큰 숫자 칸의 최소 폭을 큰 숫자 글자 크기에 맞춘다('▼ -13.55%'가 약 5.5글자 폭). 글자를 키우면 칸 수가 줄어 옆 칸을 덮지 않는다 */
+.disc-st .ui-stats { --stat-min: calc(var(--font-size-title) * 5.8); }
 @media (min-width: 1200px) {
   .disc-st { display: grid; grid-template-columns: 248px minmax(0, 1fr); gap: var(--space-6); align-items: start; }
   .disc-st-list {
