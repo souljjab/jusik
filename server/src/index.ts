@@ -19,8 +19,15 @@ import { STOCKS } from "./stocks";
 import { buildTables } from "./tables";
 import { WebProvider } from "./webProvider";
 
+// 처리하지 못한 오류로 서버 전체가 꺼지지 않게 남기고 계속 동작한다(꺼지면 화면은 '서버에 연결하지 못했어요'만 보인다).
+// 여기 찍힌 내용(오류 문장과 위치)이 원인을 고치는 단서다
+process.on("unhandledRejection", (e) => console.error("[jusik] 처리하지 못한 오류(서버는 계속 동작해요):", e));
+process.on("uncaughtException", (e) => console.error("[jusik] 처리하지 못한 오류(서버는 계속 동작해요):", e));
+
 const env = process.env;
-const dataDir = resolve(env.DATA_DIR ?? resolve(process.cwd(), "../data"));
+/** .env에 'DATA_DIR='처럼 비워 둔 값은 없는 것으로 본다(.env.example을 그대로 복사해도 기본값을 쓰게) */
+const envOr = (name: string, fallback: string) => env[name]?.trim() || fallback;
+const dataDir = resolve(envOr("DATA_DIR", resolve(process.cwd(), "../data")));
 
 interface Sources {
   provider: MarketDataProvider;
@@ -46,7 +53,7 @@ function makeSources(): Sources {
     };
   }
   // 모든 사이트 요청이 같은 직렬 큐를 지나가게 HTTP 클라이언트 하나를 같이 쓴다
-  const http = createHttp({ minIntervalMs: Number(env.HTTP_MIN_INTERVAL_MS ?? 500), userAgent: env.HTTP_USER_AGENT || undefined });
+  const http = createHttp({ minIntervalMs: Number(envOr("HTTP_MIN_INTERVAL_MS", "500")), userAgent: env.HTTP_USER_AGENT || undefined });
   const optional: string[] = [];
   const dart = env.DART_API_KEY ? new DartClient(http, env.DART_API_KEY, { cacheFile: resolve(dataDir, "dart-corpcode.json") }) : null;
   if (dart) optional.push("DART");
@@ -79,7 +86,7 @@ const exporter = new Exporter({
 const scheduler = new Scheduler({ provider, store, macro, extras, breadth, minute }, () => exporter.request());
 const app = buildApp({ provider, store, exporter, scheduler, macro, extras, breadth, minute });
 
-const port = Number(env.PORT ?? 8787);
+const port = Number(envOr("PORT", "8787"));
 await app.listen({ port, host: "127.0.0.1" });
 if ((env.SCHEDULER ?? "on") !== "off") scheduler.start();
 console.log(`[jusik] API 서버 http://localhost:${port}  (provider=${provider.name}${provider.sample ? ", 샘플 데이터" : ""})`);
