@@ -91,14 +91,39 @@ describe("WebProvider", () => {
     const http = fakeHttp([["query1.finance.yahoo.com/v8", [chartUS]]]);
     expect(await new WebProvider(http).getInfo("FOO")).toEqual({ code: "FOO", name: "Foo Corp", market: "US" });
   });
-  it("builds the universe from both ranking pages, deduping, and errors clearly when both fail", async () => {
-    const row = (code: string, v: number) => `<tr><td>1</td><td><a href="/item/main.naver?code=${code}">N${code}</a></td><td>10,000</td><td>1</td><td>+3.00%</td><td>${v}</td></tr>`;
-    const page = (rows: string) => `<table class="type_2"><tr><th>N</th><th>종목명</th><th>현재가</th><th>전일비</th><th>등락률</th><th>거래량</th></tr>${rows}</table>`;
-    const http = fakeHttp([["sise_quant", [page(row("000001", 5) + row("000002", 6))]], ["sise_rise", [page(row("000002", 6) + row("000003", 7))]]]);
+  /** 네이버 종목 목록 응답(stocks/quantTop·up). etf 개수만큼 ETF 줄을 앞에 끼운다 */
+  const list = (codes: string[], etf = 0) =>
+    JSON.stringify({
+      stocks: [
+        ...Array.from({ length: etf }, (_, k) => ({ stockEndType: "etf", itemCode: String(900000 + k), stockName: `KODEX ${k}`, closePrice: "10,000", fluctuationsRatio: "1.00", accumulatedTradingVolume: "1" })),
+        ...codes.map((c) => ({ stockEndType: "stock", itemCode: c, stockName: `N${c}`, closePrice: "10,000", fluctuationsRatio: "3.00", accumulatedTradingVolume: "5", accumulatedTradingValue: "50" })),
+      ],
+    });
+  it("builds the universe from the volume and rise lists, stocks only, deduping, and errors clearly when both fail", async () => {
+    const http = fakeHttp([["stocks/quantTop/KOSPI", [list(["000001", "000002"], 2)]], ["stocks/up/KOSPI", [list(["000002", "000003"])]]]);
     const u = await new WebProvider(http).getUniverse("KOSPI");
     expect(u.map((r) => r.code).sort()).toEqual(["000001", "000002", "000003"]);
-    const dead = fakeHttp([["sise_", [{ status: 403, text: "" }]]]);
+    expect(u[0]).toMatchObject({ market: "KOSPI", price: 10_000, changePct: 3, volume: 5, tradeValue: 50_000_000 });
+    // 마지막 쪽(100줄 미만)이면 다음 쪽을 부르지 않는다
+    expect(http.calls).toEqual([
+      "https://m.stock.naver.com/api/stocks/quantTop/KOSPI?page=1&pageSize=100",
+      "https://m.stock.naver.com/api/stocks/up/KOSPI?page=1&pageSize=100",
+    ]);
+    const dead = fakeHttp([["m.stock.naver.com", [{ status: 403, text: "" }]]]);
     await expect(new WebProvider(dead).getUniverse("KOSPI")).rejects.toThrow(/순위표를 읽지 못했어요/);
+  });
+  it("reads further pages while a list is mostly ETFs, up to three pages", async () => {
+    const codes = (from: number, n: number) => Array.from({ length: n }, (_, k) => String(from + k).padStart(6, "0"));
+    const http = fakeHttp([
+      ["quantTop/KOSDAQ?page=1", [list(codes(1, 30), 70)]],
+      ["quantTop/KOSDAQ?page=2", [list(codes(100, 40), 60)]],
+      ["quantTop/KOSDAQ?page=3", [list(codes(200, 40), 60)]],
+      ["up/KOSDAQ?page=1", [list(codes(300, 100))]],
+    ]);
+    const u = await new WebProvider(http).getUniverse("KOSDAQ");
+    expect(u).toHaveLength(30 + 40 + 40 + 100);
+    expect(http.calls.filter((c) => c.includes("quantTop"))).toHaveLength(3);
+    expect(http.calls.filter((c) => c.includes("/up/"))).toHaveLength(1);
   });
   it("gets a Yahoo crumb once when the screener returns 401, then retries", async () => {
     const screener = JSON.stringify({ finance: { result: [{ quotes: [{ symbol: "NVDA", quoteType: "EQUITY", regularMarketPrice: 900, regularMarketChangePercent: 4, regularMarketVolume: 1e7 }] }] } });
@@ -113,7 +138,7 @@ describe("WebProvider", () => {
     expect(http.calls.filter((c: string) => c.includes("getcrumb")).length).toBe(1);
   });
   it("returns empty fundamentals instead of failing the analysis", async () => {
-    const p = new WebProvider(fakeHttp([["naver", [{ status: 500, text: "" }]]]));
+    const p = new WebProvider(fakeHttp([["m.stock.naver.com", [{ status: 500, text: "" }]]]));
     expect(await p.getFundamentals("005930")).toEqual({});
   });
 });

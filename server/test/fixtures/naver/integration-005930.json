@@ -1,0 +1,159 @@
+{
+ "stockEndType": "stock",
+ "itemCode": "005930",
+ "stockName": "삼성전자",
+ "totalInfos": [
+  {
+   "code": "lastClosePrice",
+   "key": "전일",
+   "value": "232,000"
+  },
+  {
+   "code": "openPrice",
+   "key": "시가",
+   "value": "223,000",
+   "compareToPreviousPrice": {
+    "code": "5",
+    "text": "하락",
+    "name": "FALLING"
+   }
+  },
+  {
+   "code": "highPrice",
+   "key": "고가",
+   "value": "229,500",
+   "compareToPreviousPrice": {
+    "code": "5",
+    "text": "하락",
+    "name": "FALLING"
+   }
+  },
+  {
+   "code": "lowPrice",
+   "key": "저가",
+   "value": "216,500",
+   "compareToPreviousPrice": {
+    "code": "5",
+    "text": "하락",
+    "name": "FALLING"
+   }
+  },
+  {
+   "code": "accumulatedTradingVolume",
+   "key": "거래량",
+   "value": "30,703,210"
+  },
+  {
+   "code": "accumulatedTradingValue",
+   "key": "대금",
+   "value": "6조 8,196억"
+  },
+  {
+   "code": "marketValue",
+   "key": "시총",
+   "value": "1,289조 1,044억"
+  },
+  {
+   "code": "foreignRate",
+   "key": "외인소진율",
+   "value": "46.17%"
+  },
+  {
+   "code": "highPriceOf52Weeks",
+   "key": "52주 최고",
+   "value": "380,000"
+  },
+  {
+   "code": "lowPriceOf52Weeks",
+   "key": "52주 최저",
+   "value": "93,500"
+  },
+  {
+   "code": "per",
+   "key": "PER",
+   "value": "9.89배",
+   "valueDesc": "2026.06."
+  },
+  {
+   "code": "eps",
+   "key": "EPS",
+   "value": "22,292원",
+   "valueDesc": "2026.06."
+  },
+  {
+   "code": "cnsPer",
+   "key": "추정PER",
+   "value": "4.84배"
+  },
+  {
+   "code": "cnsEps",
+   "key": "추정EPS",
+   "value": "45,531원"
+  },
+  {
+   "code": "pbr",
+   "key": "PBR",
+   "value": "2.56배",
+   "valueDesc": "2026.06."
+  },
+  {
+   "code": "bps",
+   "key": "BPS",
+   "value": "86,052원",
+   "valueDesc": "2026.06."
+  },
+  {
+   "code": "dividendYieldRatio",
+   "key": "배당수익률",
+   "value": "0.76%",
+   "valueDesc": "2025.12."
+  },
+  {
+   "code": "dividend",
+   "key": "주당배당금",
+   "value": "1,668원",
+   "valueDesc": "2025.12."
+  }
+ ],
+ "industryCode": "278",
+ "dealTrendInfos": [
+  {
+   "itemCode": "005930",
+   "bizdate": "20261030",
+   "foreignerPureBuyQuant": "-1,072,820",
+   "foreignerHoldRatio": "46.15%",
+   "organPureBuyQuant": "+1,742,739",
+   "individualPureBuyQuant": "-85,248",
+   "closePrice": "220,500",
+   "compareToPreviousClosePrice": "-11,500",
+   "compareToPreviousPrice": {
+    "code": "5",
+    "text": "하락",
+    "name": "FALLING"
+   },
+   "accumulatedTradingVolume": "19,485,781"
+  },
+  {
+   "itemCode": "005930",
+   "bizdate": "20261029",
+   "foreignerPureBuyQuant": "-518,762",
+   "foreignerHoldRatio": "46.17%",
+   "organPureBuyQuant": "+245,680",
+   "individualPureBuyQuant": "+614,637",
+   "closePrice": "230,500",
+   "compareToPreviousClosePrice": "-11,500",
+   "compareToPreviousPrice": {
+    "code": "5",
+    "text": "하락",
+    "name": "FALLING"
+   },
+   "accumulatedTradingVolume": "24,975,596"
+  }
+ ],
+ "consensusInfo": {
+  "itemCode": "005930",
+  "createDate": "2026-10-29",
+  "recommMean": "4.00",
+  "priceTargetMean": "495,227"
+ }
+}

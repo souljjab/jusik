@@ -1,26 +1,15 @@
-import * as cheerio from "cheerio";
 import type { Candle, Market, StockInfo } from "@jusik/shared";
 import { analyzeBreadth, breadthFromCandles, type BreadthAnalysis, type BreadthDay } from "@jusik/shared";
-import type { GetOptions, Http } from "./http";
+import type { Http } from "./http";
+import { NAVER_API, NAVER_API_OPTS, parseNaverMarketValue, parseNaverUpDown } from "./naverApi";
 
 /*
  * 시장 폭(2.2 시장 내부 지표) 수집: 표본 종목 일봉으로 등락·신고저 종목 수를 근사한다.
  * - 국내 표본: 네이버 시가총액 순위(보통주만) 상위 N종목. 순위를 못 읽거나 샘플 모드면 fallbackCodes
  * - 미국 표본: US_BREADTH_BASKET(S&P 100 구성 종목 중 대형주)
- * - 국내 오늘 거래소 전체 등락 종목 수(상한·상승·보합·하락·하한)는 지수 페이지에서 참고용으로 읽는다
- *
- * ⚠ 실제 응답과 대조하지 못함(미검증): 아래 두 파서는 네이버 금융 페이지 구조를 기억에 기대어 짰다.
- * 이 개발 환경은 외부 접속이 막혀 있어 테스트 샘플도 형식을 흉내 낸 것일 뿐이다.
- * 그래서 머리글 이름·링크 주소·라벨로 값을 찾고, 알아보지 못하면 틀린 값 대신 빈 배열·null을 돌려준다.
- * 운영 전에 실제 페이지로 한 번 확인하세요.
+ * - 국내 오늘 거래소 전체 등락 종목 수(상한·상승·보합·하락·하한)는 지수 요약에서 참고용으로 읽는다
+ * 네이버 자료는 모바일 JSON API(naverApi.ts)로 받는다.
  */
-
-export const NAVER_BREADTH = {
-  /** 시가총액 순위(한 페이지 50종목, 시가총액 내림차순). sosok 0 = 코스피, 1 = 코스닥 */
-  marketSum: (market: Market, page = 1) => `https://finance.naver.com/sise/sise_market_sum.naver?sosok=${market === "KOSDAQ" ? 1 : 0}&page=${page}`,
-  /** 지수 페이지(오늘 상승·하락 종목 수가 함께 나온다) */
-  index: (market: Market) => `https://finance.naver.com/sise/sise_index.naver?code=${market === "KOSDAQ" ? "KOSDAQ" : "KOSPI"}`,
-};
 
 /** 시장 폭 수집 기본값(모두 앱 기본값) */
 export const BREADTH_SOURCE_DEFAULTS = {
@@ -33,41 +22,6 @@ export const BREADTH_SOURCE_DEFAULTS = {
   /** 네이버 시가총액 순위 한 페이지 종목 수 */
   pageSize: 50,
 } as const;
-
-const naverOpts: GetOptions = { encoding: "auto", headers: { referer: "https://finance.naver.com/sise/" } };
-
-const squash = (s: string) => s.replace(/\s+/g, "");
-
-/** 이 표에 직접 속한 요소만(안쪽에 끼인 다른 표 제외) */
-function own($: cheerio.CheerioAPI, table: ReturnType<cheerio.CheerioAPI>, sel: string) {
-  const el = table.get(0);
-  return table.find(sel).toArray().filter((e) => $(e).closest("table").get(0) === el);
-}
-
-/**
- * 네이버 시가총액 순위 페이지 → 순위대로 {code, name}. 실제 응답과 대조하지 못함(미검증).
- * 머리글에 '종목명'과 '시가총액'이 함께 있는 표를 찾고, 행의 code=XXXXXX 링크에서 종목코드를 읽는다. 못 찾으면 [].
- */
-export function parseNaverMarketSum(html: string): { code: string; name: string }[] {
-  const $ = cheerio.load(html);
-  for (const t of $("table").toArray()) {
-    const table = $(t);
-    const heads = own($, table, "th").map((e) => squash($(e).text()));
-    if (!heads.includes("종목명") || !heads.some((h) => h.startsWith("시가총액"))) continue;
-    const out: { code: string; name: string }[] = [];
-    const seen = new Set<string>();
-    for (const tr of own($, table, "tr")) {
-      const a = $(tr).find('a[href*="code="]').first();
-      const code = /code=(\d{6})(?!\d)/.exec(a.attr("href") ?? "")?.[1];
-      const name = a.text().trim();
-      if (!code || !name || seen.has(code)) continue;
-      seen.add(code);
-      out.push({ code, name });
-    }
-    if (out.length) return out;
-  }
-  return [];
-}
 
 // 이름으로 거르는 ETF·ETN 브랜드(시가총액 순위에 섞일 수 있음). 'KODEX 200'처럼 브랜드 뒤가 띄어쓰기일 때만 본다
 // (그래야 'BNK금융지주' 같은 보통주를 거르지 않는다)
@@ -103,61 +57,6 @@ export interface BreadthToday {
   unchanged: number;
   down: number;
   lowerLimit: number;
-}
-
-const TODAY_KEYS = [
-  ["upperLimit", "sise_upper", "상한"],
-  ["up", "sise_rise", "상승"],
-  ["unchanged", "sise_steady", "보합"],
-  ["down", "sise_fall", "하락"],
-  ["lowerLimit", "sise_lower", "하한"],
-] as const;
-
-/** 숫자만 있는 글자("1,234")면 정수, 아니면 null */
-const pureInt = (s: string): number | null => (/^\s*\d[\d,]*\s*$/.test(s) ? Number(s.replace(/[,\s]/g, "")) : null);
-
-/**
- * 네이버 지수 페이지 → 오늘 상한·상승·보합·하락·하한 종목 수(거래소 전체). 실제 응답과 대조하지 못함(미검증).
- * 1) sise_upper/rise/steady/fall/lower 링크 글자가 숫자인 것, 2) 다섯 라벨이 모두 든 가장 작은 요소의 '라벨 숫자'.
- * 다섯 값을 모두 못 읽으면 null(빠진 값을 0으로 채우지 않는다). up에 상한이 포함되는지는 확인하지 못했다.
- * market을 주면 sosok가 붙은 링크 중 그 시장 것만 본다(라벨 방식은 시장을 가리지 못하므로 한 시장 페이지에만 쓴다).
- */
-export function parseNaverBreadthToday(html: string, market?: Market): BreadthToday | null {
-  const $ = cheerio.load(html);
-  const sosok = market === "KOSDAQ" ? "1" : market ? "0" : null;
-  const byLink: Partial<BreadthToday> = {};
-  for (const [key, href] of TODAY_KEYS) {
-    for (const a of $(`a[href*="${href}"]`).toArray()) {
-      const h = $(a).attr("href") ?? "";
-      const s = /sosok=(\d)/.exec(h)?.[1];
-      if (sosok && s && s !== sosok) continue;
-      const v = pureInt($(a).text());
-      if (v != null) {
-        byLink[key] = v;
-        break;
-      }
-    }
-  }
-  const done = (o: Partial<BreadthToday>): o is BreadthToday => TODAY_KEYS.every(([k]) => o[k] != null) && TODAY_KEYS.some(([k]) => o[k]! > 0);
-  if (done(byLink)) return byLink;
-
-  // 라벨 방식: 짧은 후보부터 '라벨(가)(종목)(수)(:)숫자'를 모두 읽을 수 있는 첫 요소.
-  // 기사 제목 같은 엉뚱한 글자에서 숫자를 줍지 않도록 다섯 라벨이 모인 짧은 요소(공백 빼고 100자 이하)만 본다
-  const labels = TODAY_KEYS.map(([, , l]) => l);
-  const candidates = $("body *")
-    .toArray()
-    .map((e) => squash($(e).text()))
-    .filter((t) => t.length <= 100 && labels.every((l) => t.includes(l)))
-    .sort((a, b) => a.length - b.length);
-  for (const text of candidates) {
-    const o: Partial<BreadthToday> = {};
-    for (const [key, , label] of TODAY_KEYS) {
-      const m = new RegExp(`${label}가?(?:종목)?수?[:：]?(\\d[\\d,]*)`).exec(text);
-      if (m) o[key] = Number(m[1]!.replace(/,/g, ""));
-    }
-    if (done(o)) return o;
-  }
-  return null;
 }
 
 /** 시장 폭 표본(미국): S&P 100 구성 종목 중 대형주(야후 티커 형식). 2.2의 '보통주 기준'에 맞춰 같은 회사 중복 클래스(GOOG)는 뺐다 */
@@ -300,7 +199,7 @@ export class BreadthSource {
       for (let p = 1; p <= pages && codes.length < size; p++) {
         let rows: { code: string; name: string }[];
         try {
-          rows = parseNaverMarketSum(await this.http.get(NAVER_BREADTH.marketSum(market, p), naverOpts));
+          rows = parseNaverMarketValue(await this.http.get(NAVER_API.stockList("marketValue", market, p, BREADTH_SOURCE_DEFAULTS.pageSize), NAVER_API_OPTS));
         } catch (e) {
           errors.push(`시가총액 순위 ${p}쪽: ${msg(e)}`);
           break;
@@ -329,8 +228,8 @@ export class BreadthSource {
     if (market === "US") return null; // 미국은 거래소 전체 등락 수 출처를 두지 않았다
     if (!this.http) return sampleBreadthToday(market, day);
     try {
-      const t = parseNaverBreadthToday(await this.http.get(NAVER_BREADTH.index(market), naverOpts), market);
-      if (!t) errors.push("오늘 등락 종목 수를 지수 페이지에서 찾지 못했어요(형식이 바뀌었을 수 있어요)");
+      const t = parseNaverUpDown(await this.http.get(NAVER_API.index(market), NAVER_API_OPTS));
+      if (!t) errors.push("오늘 등락 종목 수를 지수 요약에서 찾지 못했어요(형식이 바뀌었을 수 있어요)");
       return t;
     } catch (e) {
       errors.push(`오늘 등락 종목 수: ${msg(e)}`);

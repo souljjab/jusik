@@ -3,7 +3,8 @@ import type { Disclosure, UsHolders } from "@jusik/shared";
 import { attachFiledDates, periodicReports, type DartSource, type PeriodicReport } from "./dart";
 import type { Http } from "./http";
 import { HttpError } from "./http";
-import { NAVER, parseFchart, parseNaverFundamentals, parseRankingTable, parseRealtime, realtimeToQuote } from "./naver";
+import { NAVER, parseFchart, parseRealtime, realtimeToQuote } from "./naver";
+import { NAVER_API, NAVER_API_OPTS, NAVER_UNIVERSE, naverFundamentals, parseNaverStockListPage } from "./naverApi";
 import type { MarketDataProvider, UniverseRow } from "./provider";
 import type { SecFinancials, SecSource } from "./sec";
 import { findStock, searchStocks } from "./stocks";
@@ -102,7 +103,10 @@ export class WebProvider implements MarketDataProvider {
   async getFundamentals(code: string): Promise<Fundamentals> {
     if (regionOfCode(code) === "KR") {
       // 재무는 없어도 분석은 계속한다(스크리닝에서 '데이터 없음')
-      const naver = await this.http.get(NAVER.main(code), AUTO).then(parseNaverFundamentals, (): Fundamentals => ({}));
+      // 요약·연간·분기 중 실패한 것은 빼고 나머지로 만든다
+      const get = (url: string) => this.http.get(url, NAVER_API_OPTS).catch((): null => null);
+      const [integ, annualText, quarterText] = await Promise.all([get(NAVER_API.integration(code)), get(NAVER_API.finance(code, "annual")), get(NAVER_API.finance(code, "quarter"))]);
+      const naver = naverFundamentals(integ, annualText, quarterText);
       if (!this.dart) return naver;
       // DART 키가 있으면 연간 실적의 실제 제출일(과거 시점 판단용)과 네이버에 없는 이전 연도를 채운다
       const [annual, list] = await Promise.all([this.dart.annual(code).catch((): PeriodFinancials[] => []), this.dart.disclosures(code, 400).catch((): Disclosure[] => [])]);
@@ -133,11 +137,19 @@ export class WebProvider implements MarketDataProvider {
         }
       }
     } else {
-      for (const kind of ["quant", "rise"] as const) {
-        try {
-          rows.push(...parseRankingTable(await this.http.get(NAVER.ranking(kind, market), AUTO), market));
-        } catch {
-          /* 한쪽 목록이 실패해도 다른 목록으로 계속 */
+      // 거래량 상위·상승률 상위에서 주식(ETF·ETN 제외)을 목록마다 wantStocks개까지, 필요하면 다음 쪽까지 모은다
+      const { pageSize, wantStocks, maxPages } = NAVER_UNIVERSE;
+      for (const kind of ["quantTop", "up"] as const) {
+        let got = 0;
+        for (let page = 1; page <= maxPages && got < wantStocks; page++) {
+          try {
+            const r = parseNaverStockListPage(await this.http.get(NAVER_API.stockList(kind, market, page, pageSize), NAVER_API_OPTS), market);
+            rows.push(...r.rows);
+            got += r.rows.length;
+            if (r.raw < pageSize) break; // 마지막 쪽
+          } catch {
+            break; /* 한쪽 목록이 실패해도 다른 목록으로 계속 */
+          }
         }
       }
     }

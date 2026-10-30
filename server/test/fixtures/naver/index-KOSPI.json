@@ -1,0 +1,18 @@
+{
+ "stockEndType": "index",
+ "itemCode": "KOSPI",
+ "stockName": "코스피",
+ "upDownStockInfo": {
+  "upperCount": "2",
+  "riseCount": "234",
+  "lowerCount": "0",
+  "fallCount": "656",
+  "steadyCount": "22"
+ },
+ "dealTrendInfo": {
+  "bizdate": "20261030",
+  "personalValue": "+6,028",
+  "foreignValue": "-16,149",
+  "institutionalValue": "+7,540"
+ }
+}

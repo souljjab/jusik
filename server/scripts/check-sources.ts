@@ -4,7 +4,8 @@
  * 사이트 구조가 바뀌었거나 접속이 차단됐을 때 어떤 항목이 깨졌는지 바로 알 수 있다.
  */
 import { MACRO_SERIES_IDS } from "@jusik/shared";
-import { BreadthSource, NAVER_BREADTH, parseNaverBreadthToday, parseNaverMarketSum } from "../src/breadthSource";
+import { BreadthSource } from "../src/breadthSource";
+import { NAVER_API, NAVER_API_OPTS, parseNaverMarketValue, parseNaverUpDown } from "../src/naverApi";
 import { DartClient } from "../src/dart";
 import { MacroProvider } from "../src/fred";
 import { IsmSource } from "../src/ism";
@@ -59,7 +60,7 @@ await check("재무 연간·분기 실적(삼성전자)", async () => {
   const f = await p.getFundamentals("005930");
   const a = f.annual ?? [], q = f.quarterly ?? [];
   if (!a.length && !q.length) throw new Error("연간·분기 실적 표를 읽지 못했어요(3년 연속 증가·분기 EPS 점검이 빠져요)");
-  return `연간 ${a.length}개(${a.map((x) => x.period).join(", ")}), 분기 ${q.length}개, 업종 PER ${f.sectorPer ?? "-"}`;
+  return `연간 ${a.length}개(${a.map((x) => `${x.period}${x.estimate ? "(E)" : ""}`).join(", ")}), 분기 ${q.length}개, 시가총액 ${f.marketCap?.toLocaleString() ?? "-"}억 원`;
 });
 await check("외국인·기관 순매매(삼성전자)", async () => {
   const f = need(await fetchInvestorFlows(http, "005930", 1), "수급 표");
@@ -72,7 +73,7 @@ await check("공시 목록(삼성전자)", async () => {
 });
 await check("종목 업종(삼성전자)", async () => {
   const s = await fetchItemSector(http, "005930");
-  if (!s) throw new Error("종목 페이지에서 업종 링크를 찾지 못했어요");
+  if (!s) throw new Error("종목 요약에서 업종을 찾지 못했어요");
   return `${s.name}(no=${s.no})`;
 });
 await check("업종별 시세", async () => {
@@ -116,11 +117,11 @@ await check("ISM 제조업지수(ismworld.org)", async () => {
 
 console.log("[시장 폭 — 네이버 금융]");
 await check("시가총액 순위(코스피)", async () => {
-  const rows = need(parseNaverMarketSum(await http.get(NAVER_BREADTH.marketSum("KOSPI", 1), { encoding: "auto" })), "시가총액 순위");
+  const rows = need(parseNaverMarketValue(await http.get(NAVER_API.stockList("marketValue", "KOSPI", 1, 50), NAVER_API_OPTS)), "시가총액 순위");
   return `${rows.length}종목, 예: ${rows.slice(0, 3).map((r) => r.name).join(", ")}`;
 });
 await check("거래소 전체 상승·하락 종목 수(코스피)", async () => {
-  const t = parseNaverBreadthToday(await http.get(NAVER_BREADTH.index("KOSPI"), { encoding: "auto" }), "KOSPI");
+  const t = parseNaverUpDown(await http.get(NAVER_API.index("KOSPI"), NAVER_API_OPTS));
   if (!t) throw new Error("상승·보합·하락 종목 수를 찾지 못했어요");
   return `상한 ${t.upperLimit} · 상승 ${t.up} · 보합 ${t.unchanged} · 하락 ${t.down} · 하한 ${t.lowerLimit}`;
 });
@@ -168,5 +169,5 @@ if (process.env.DART_API_KEY) {
   });
 } else console.log("  - DART: DART_API_KEY가 없어 건너뛰었어요(server/.env.example 참고)");
 
-console.log(failed ? `\n${failed}개 항목 실패 — 해당 사이트의 접속 가능 여부와 파서(server/src/naver.ts, naverExtra.ts, yahoo.ts, fred.ts, ism.ts, breadthSource.ts, minute.ts, sec.ts, dart.ts)를 확인하세요.` : "\n모든 항목이 정상이에요.");
+console.log(failed ? `\n${failed}개 항목 실패 — 해당 사이트의 접속 가능 여부와 파서(server/src/naver.ts, naverApi.ts, naverExtra.ts, yahoo.ts, fred.ts, ism.ts, breadthSource.ts, minute.ts, sec.ts, dart.ts)를 확인하세요.` : "\n모든 항목이 정상이에요.");
 process.exit(failed ? 1 : 0);

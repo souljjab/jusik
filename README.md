@@ -72,16 +72,17 @@ npm test                 # 단위 테스트
 | 용도 | 국내 | 미국 |
 |---|---|---|
 | 일봉·지수 | 네이버 `fchart.stock.naver.com` | 야후 `query1.finance.yahoo.com/v8/finance/chart` |
-| 후보 풀 | 네이버 거래량·상승률 상위 표 | 야후 스크리너(day_gainers, most_actives) |
+| 후보 풀 | 네이버 모바일 API(`m.stock.naver.com/api`) 거래량·상승률 상위(주식만, ETF·ETN 제외) | 야후 스크리너(day_gainers, most_actives) |
 | 현재가 | 네이버 `polling.finance.naver.com` | 야후 chart meta |
-| 재무 | 네이버 종목 메인 '기업실적분석'(연간·분기 실적, 동일업종 PER 포함) | 야후 quoteSummary(crumb 필요) |
-| 수급·공시·업종 | 네이버 `item/frgn.naver`(외국인·기관 순매매), 공시는 `DART_API_KEY`가 있으면 DART 오픈API(`opendart.fss.or.kr`, 공시 목록·정기보고서·연간 주요 계정), 없으면 네이버 `item/news_notice.naver`, `sise/sise_group.naver?type=upjong`(업종 등락률) | 야후 quoteSummary(기관·내부자·공매도), SEC EDGAR(`data.sec.gov` 공시·XBRL 실적, `SEC_USER_AGENT` 필요) |
+| 재무 | 네이버 모바일 API 종목 요약(현재가 기준 PER·PBR, 시가총액)과 연간·분기 실적(동일업종 PER은 없음) | 야후 quoteSummary(crumb 필요) |
+| 수급·공시·업종 | 네이버 모바일 API(외국인·기관 순매매, 업종 등락률), 공시는 `DART_API_KEY`가 있으면 DART 오픈API(`opendart.fss.or.kr`, 공시 목록·정기보고서·연간 주요 계정), 없으면 네이버 모바일 API 공시 목록 | 야후 quoteSummary(기관·내부자·공매도), SEC EDGAR(`data.sec.gov` 공시·XBRL 실적, `SEC_USER_AGENT` 필요) |
 | 매크로 | 미국 FRED 그래프 CSV(`fred.stlouisfed.org/graph/fredgraph.csv`, API 키 불필요): 10년-2년 금리차, VIX, 10년물, M2, GDP, 원/달러, 필라델피아·뉴욕 연준 제조업 지수(ISM 대용). ISM 제조업지수는 `ismworld.org` 발표 페이지(못 읽으면 설정에서 직접 입력) | (같은 자료) |
-| 시장 폭 | 네이버 시가총액 순위 상위 60종목의 일봉으로 A/D선·MI를 근사, 네이버 지수 페이지의 거래소 전체 상승·하락 종목 수를 날마다 쌓음 | S&P 100 종목 일봉으로 근사 |
+| 시장 폭 | 네이버 시가총액 순위 상위 60종목의 일봉으로 A/D선·MI를 근사, 네이버 지수 요약의 거래소 전체 상승·하락 종목 수를 날마다 쌓음 | S&P 100 종목 일봉으로 근사 |
 | 분봉 | 네이버 `fchart` 분봉 | 야후 chart 1분봉 |
 
 **꼭 알아둘 것**
-- **이 코드는 실제 사이트에 접속해 검증하지 못했습니다.** 개발 환경의 네트워크가 해당 사이트(네이버·야후·FRED)를 막고 있어서, 응답 형식은 제가 아는 형태를 흉내 낸 샘플로만 테스트했습니다. 처음 쓸 때 **`npm run check:sources -w server`를 실행**해 항목별 성공/실패를 확인하세요. 실패하면 `server/src/naver.ts`·`naverExtra.ts`·`yahoo.ts`·`fred.ts`의 파서를 사이트 응답에 맞게 고쳐야 합니다(파서마다 테스트가 있어 고치기 쉽게 해 두었습니다). 파서는 형식을 못 알아보면 틀린 값 대신 빈 값을 돌려주게 만들었습니다.
+- **2026-10-30에 실제 사이트로 확인했습니다.** 네이버 PC 페이지(`finance.naver.com`의 종목 메인·순위표·시가총액·업종·외국인·공시)는 새 사이트(`stock.naver.com`)로 넘어가 더 이상 표를 주지 않아서, 순위표·재무·수급·공시·업종·시장 폭은 네이버 모바일 JSON API로 옮겼습니다(실제 응답은 `server/test/fixtures/naver`). FRED도 확인했습니다. 야후는 확인한 환경(해외 클라우드)이 요청 제한(429)에 걸려 다시 확인하지 못했고, ISM 사이트는 발표 페이지 주소가 바뀌어 아직 못 읽습니다(설정에서 직접 입력하세요).
+- 사이트는 또 바뀔 수 있으니 가끔 **`npm run check:sources -w server`를 실행**해 항목별 성공/실패를 확인하세요. 파서는 형식을 못 알아보면 틀린 값 대신 빈 값을 돌려줍니다.
 - 이 사이트들은 공식 API가 아니라 웹페이지/비공식 주소를 읽는 방식이라 **예고 없이 바뀌거나 막힐 수 있고, 이용약관이 자동 수집을 제한할 수 있습니다.** robots.txt와 약관은 확인하지 못했으니 직접 확인하세요. 코드는 개인 용도·낮은 빈도(요청 직렬 처리, 기본 0.5초 간격, 429/5xx 시 백오프)로만 읽도록 만들었고, 간격을 줄이지 않는 것을 권장합니다.
 - 야후 지수·S&P500은 `^GSPC`를, 네이버 지수는 `KOSPI`/`KOSDAQ` 심볼을 가정했습니다(지수 값의 배율은 분석에 영향이 없습니다).
 - 증권사 API(KIS) 연동 코드는 이번에 제거했습니다(git 기록에 남아 있음).

@@ -1,0 +1,73 @@
+{
+ "stockListSortType": "INDUSTRY",
+ "stocks": [
+  {
+   "stockType": "domestic",
+   "stockEndType": "stock",
+   "itemCode": "232680",
+   "reutersCode": "232680",
+   "stockName": "라온로보틱스",
+   "sosok": "1",
+   "closePrice": "11,670",
+   "compareToPreviousClosePrice": "2,370",
+   "compareToPreviousPrice": {
+    "code": "2",
+    "text": "상승",
+    "name": "RISING"
+   },
+   "fluctuationsRatio": "25.48",
+   "accumulatedTradingVolume": "6,260,202",
+   "accumulatedTradingValue": "67,123",
+   "localTradedAt": "2026-10-30T20:20:23+09:00",
+   "marketValue": "1,547",
+   "nav": "N/A",
+   "threeMonthEarningRate": "N/A",
+   "marketStatus": "CLOSE",
+   "tradeStopType": {
+    "code": "1",
+    "text": "운영.Trading",
+    "name": "TRADING"
+   },
+   "tradableStatus": "tradable",
+   "tradableStatusCode": "ok",
+   "tradableStatusUpdatedAt": "2026-10-30T08:02:40.979+09:00",
+   "stockExchangeType": {
+    "code": "KQ",
+    "zoneId": "Asia/Seoul",
+    "nationType": "KOR",
+    "delayTime": 0,
+    "startTime": "0900",
+    "endTime": "1530",
+    "closePriceSendTime": "1630",
+    "nameKor": "코스닥",
+    "nameEng": "KOSDAQ",
+    "stockType": "domestic",
+    "nationCode": "KOR",
+    "nationName": "대한민국",
+    "name": "KOSDAQ"
+   },
+   "endUrl": "https://m.stock.naver.com/domestic/stock/232680",
+   "newPcUrl": "https://stock.naver.com/domestic/stock/232680",
+   "stockMiniImageChart": "https://financial-vn.pstatic.net/chart/mobile/mini/krx/232680_interest.png",
+   "closePriceRaw": "11670",
+   "compareToPreviousClosePriceRaw": "2370",
+   "accumulatedTradingVolumeRaw": "6260202",
+   "accumulatedTradingValueRaw": "67123000000",
+   "marketValueRaw": "154715025000"
+  }
+ ],
+ "groupInfo": {
+  "no": 278,
+  "name": "반도체와반도체장비",
+  "totalCount": 173,
+  "changeRate": "-6.83",
+  "riseCount": 7,
+  "fallCount": 162,
+  "steadyCount": 4
+ },
+ "totalCount": 173,
+ "page": 1,
+ "pageSize": 100,
+ "localOpenTimeDesc": "",
+ "marketStatus": "CLOSE"
+}
