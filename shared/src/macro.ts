@@ -17,12 +17,12 @@ export interface MacroSeriesPoint {
  * T10Y2Y 미 10년물-2년물 금리차(%p, 일간) · VIXCLS VIX 종가(일간) · DGS10 미 10년물 금리(%, 일간)
  * M2SL M2 통화량(월간, 계절조정) · GDP 미국 명목 GDP(분기, 연율) · DEXKOUS 원/달러 환율(일간)
  * GACDFSA066MSFRBPHI 필라델피아 연준 제조업 현재 활동 확산지수(월간, 계절조정, 0 위면 확장)
- * GACDINA066MSFRBNY 뉴욕 연준 엠파이어스테이트 제조업 현재 경기 확산지수(월간, 계절조정, 0 위면 확장)
+ * GACDISA066MSFRBNY 뉴욕 연준 엠파이어스테이트 제조업 현재 경기 확산지수(월간, 계절조정, 0 위면 확장)
  * 마지막 두 개는 ISM을 모를 때만 판단에 쓰는 대용 지표다.
  */
-export type MacroSeriesId = "T10Y2Y" | "VIXCLS" | "DGS10" | "M2SL" | "GDP" | "DEXKOUS" | "GACDFSA066MSFRBPHI" | "GACDINA066MSFRBNY";
+export type MacroSeriesId = "T10Y2Y" | "VIXCLS" | "DGS10" | "M2SL" | "GDP" | "DEXKOUS" | "GACDFSA066MSFRBPHI" | "GACDISA066MSFRBNY";
 
-export const MACRO_SERIES_IDS: MacroSeriesId[] = ["T10Y2Y", "VIXCLS", "DGS10", "M2SL", "GDP", "DEXKOUS", "GACDFSA066MSFRBPHI", "GACDINA066MSFRBNY"];
+export const MACRO_SERIES_IDS: MacroSeriesId[] = ["T10Y2Y", "VIXCLS", "DGS10", "M2SL", "GDP", "DEXKOUS", "GACDFSA066MSFRBPHI", "GACDISA066MSFRBNY"];
 
 export const MACRO_SERIES_LABEL: Record<MacroSeriesId, string> = {
   T10Y2Y: "미 장단기 금리차(10년-2년)",
@@ -32,7 +32,7 @@ export const MACRO_SERIES_LABEL: Record<MacroSeriesId, string> = {
   GDP: "미 명목 GDP",
   DEXKOUS: "원/달러 환율",
   GACDFSA066MSFRBPHI: "필라델피아 연준 제조업 지수(ISM 대용)",
-  GACDINA066MSFRBNY: "뉴욕 연준 엠파이어스테이트 제조업 지수(ISM 대용)",
+  GACDISA066MSFRBNY: "뉴욕 연준 엠파이어스테이트 제조업 지수(ISM 대용)",
 };
 
 export interface MacroValue {
@@ -132,7 +132,7 @@ export const MACRO_RELEASE_LAG_DAYS: Record<MacroSeriesId, number> = {
   // 필라델피아 연준 조사는 그 달 셋째 목요일(늦어도 21일) 공표(관측일은 그 달 1일)
   GACDFSA066MSFRBPHI: 21,
   // 엠파이어스테이트 조사는 그 달 15일 전후 공표(관측일은 그 달 1일)
-  GACDINA066MSFRBNY: 20,
+  GACDISA066MSFRBNY: 20,
 };
 
 export interface MacroBuildOptions {
@@ -243,7 +243,7 @@ export function buildMacroSnapshot(series: Partial<Record<MacroSeriesId, MacroSe
   }
 
   const philly = latest(get("GACDFSA066MSFRBPHI"));
-  const empire = latest(get("GACDINA066MSFRBNY"));
+  const empire = latest(get("GACDISA066MSFRBNY"));
   if (philly || empire) s.ismProxy = { ...(philly && { philly }), ...(empire && { empire }) };
 
   const dates = [s.yieldSpread, s.vix, s.us10y, s.m2YoY, s.gdpYoY, s.krwPerUsd, philly, empire].filter((v): v is MacroValue => !!v).map((v) => v.date).sort();

@@ -67,7 +67,7 @@ const ALL: Record<string, string> = {
   DEXKOUS: csv("DEXKOUS", Array.from({ length: 21 }, (_, k): [string, number | "."] => [new Date(Date.UTC(2024, 1, 1 + k)).toISOString().slice(0, 10), k === 20 ? 1340 : k === 5 ? "." : 1300])),
   // 지역 연준 제조업 지수(ISM 대용): 2월분까지 둘 다 0 아래
   GACDFSA066MSFRBPHI: csv("GACDFSA066MSFRBPHI", [["2024-01-01", -10.6], ["2024-02-01", -5.2]]),
-  GACDINA066MSFRBNY: csv("GACDINA066MSFRBNY", [["2024-01-01", -43.7], ["2024-02-01", -2.4]]),
+  GACDISA066MSFRBNY: csv("GACDISA066MSFRBNY", [["2024-01-01", -43.7], ["2024-02-01", -2.4]]),
 };
 
 describe("MacroProvider", () => {
@@ -78,7 +78,7 @@ describe("MacroProvider", () => {
     const { snapshot, errors, fetchedAt } = await p.getSnapshot();
     expect(errors).toEqual([]);
     expect(fetchedAt).toBe("2024-03-18T00:00:00.000Z");
-    expect(http.calls.map((u) => new URL(u).searchParams.get("id"))).toEqual(["T10Y2Y", "VIXCLS", "DGS10", "M2SL", "GDP", "DEXKOUS", "GACDFSA066MSFRBPHI", "GACDINA066MSFRBNY"]);
+    expect(http.calls.map((u) => new URL(u).searchParams.get("id"))).toEqual(["T10Y2Y", "VIXCLS", "DGS10", "M2SL", "GDP", "DEXKOUS", "GACDFSA066MSFRBPHI", "GACDISA066MSFRBNY"]);
     expect(http.calls[0]).toContain("cosd=2021-");
     expect(snapshot.yieldSpread).toEqual({ value: -0.2, date: "2024-03-15" });
     expect(snapshot.us10y?.value).toBe(4.3);
@@ -155,7 +155,7 @@ describe("MacroProvider", () => {
   it("exposes raw series for point-in-time rebuilds", async () => {
     const p = new MacroProvider(fakeHttp(ALL));
     const { series } = await p.getSeries();
-    expect(Object.keys(series).sort()).toEqual(["DEXKOUS", "DGS10", "GACDFSA066MSFRBPHI", "GACDINA066MSFRBNY", "GDP", "M2SL", "T10Y2Y", "VIXCLS"]);
+    expect(Object.keys(series).sort()).toEqual(["DEXKOUS", "DGS10", "GACDFSA066MSFRBPHI", "GACDISA066MSFRBNY", "GDP", "M2SL", "T10Y2Y", "VIXCLS"]);
     expect(series.DEXKOUS).toHaveLength(20);
   });
 });

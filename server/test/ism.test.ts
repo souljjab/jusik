@@ -279,12 +279,12 @@ describe("sample mode (PROVIDER=mock)", () => {
     const now = at("2024-10-10T00:00:00Z");
     const s = sampleIsmProxySeries(now);
     expect(sampleIsmProxySeries(now)).toEqual(s);
-    const philly = s.GACDFSA066MSFRBPHI!, empire = s.GACDINA066MSFRBNY!;
+    const philly = s.GACDFSA066MSFRBPHI!, empire = s.GACDISA066MSFRBNY!;
     expect(philly.length).toBeGreaterThan(20);
     // 10/10 기준: 필라델피아(지연 21일) 10월분은 아직, 9월분까지. 엠파이어(지연 20일)도 같다
     expect(philly.at(-1)?.date).toBe("2024-09-01");
     expect(empire.at(-1)?.date).toBe("2024-09-01");
-    for (const id of ["GACDFSA066MSFRBPHI", "GACDINA066MSFRBNY"] as const)
+    for (const id of ["GACDFSA066MSFRBPHI", "GACDISA066MSFRBNY"] as const)
       for (const p of s[id]!) {
         expect(Number.isFinite(p.value)).toBe(true);
         expect(Date.parse(p.date) + MACRO_RELEASE_LAG_DAYS[id] * 86_400_000).toBeLessThanOrEqual(now);

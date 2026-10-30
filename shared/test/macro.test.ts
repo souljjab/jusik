@@ -149,7 +149,7 @@ describe("series list", () => {
   it("includes the two regional Fed ISM proxies with labels and release lags", () => {
     expect(MACRO_SERIES_IDS).toHaveLength(8);
     expect(MACRO_SERIES_IDS).toContain("GACDFSA066MSFRBPHI");
-    expect(MACRO_SERIES_IDS).toContain("GACDINA066MSFRBNY");
+    expect(MACRO_SERIES_IDS).toContain("GACDISA066MSFRBNY");
     for (const id of MACRO_SERIES_IDS) {
       expect(MACRO_SERIES_LABEL[id]).toBeTruthy();
       expect(MACRO_RELEASE_LAG_DAYS[id]).toBeGreaterThanOrEqual(1);
@@ -213,7 +213,7 @@ describe("10-year rate trend (us10yChange6m / rateRising)", () => {
 const ism = (value: number, month: string, date: string, source: IsmReading["source"] = "ISM"): IsmReading => ({ value, month, date, source });
 const proxies = (philly: number | null, empire: number | null) => ({
   ...(philly != null && { GACDFSA066MSFRBPHI: monthly(2023, 1, [5, philly]) }),
-  ...(empire != null && { GACDINA066MSFRBNY: monthly(2023, 1, [5, empire]) }),
+  ...(empire != null && { GACDISA066MSFRBNY: monthly(2023, 1, [5, empire]) }),
 });
 
 describe("ISM in the snapshot", () => {
@@ -242,7 +242,7 @@ describe("ISM in the snapshot", () => {
   });
 
   it("asOf: proxies follow their release lag (no look-ahead)", () => {
-    const series = { GACDFSA066MSFRBPHI: monthly(2023, 1, [-5, -10, -20]), GACDINA066MSFRBNY: monthly(2023, 1, [3, 4, 5]) };
+    const series = { GACDFSA066MSFRBPHI: monthly(2023, 1, [-5, -10, -20]), GACDISA066MSFRBNY: monthly(2023, 1, [3, 4, 5]) };
     // 3/15: 3월분은 아직(필라 21일·엠파이어 20일 지연) → 2월분
     const s = buildMacroSnapshot(series, { asOf: "2023-03-15" });
     expect(s.ismProxy).toEqual({ philly: { value: -10, date: "2023-02-01" }, empire: { value: 4, date: "2023-02-01" } });

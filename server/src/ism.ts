@@ -299,7 +299,7 @@ export class MockIsmSource {
   }
 }
 
-const PROXY_IDS = ["GACDFSA066MSFRBPHI", "GACDINA066MSFRBNY"] as const satisfies readonly MacroSeriesId[];
+const PROXY_IDS = ["GACDFSA066MSFRBPHI", "GACDISA066MSFRBNY"] as const satisfies readonly MacroSeriesId[];
 
 /**
  * 샘플 모드용 가짜 지역 연준 제조업 지수 두 개(진짜 지표 아님). MockMacro의 시계열에 합쳐 쓰라고 둔 것.
